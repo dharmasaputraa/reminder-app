@@ -1,4 +1,5 @@
 import { Link, createRootRoute, Outlet } from '@tanstack/react-router'
+import { Toaster } from '@/components/ui/sonner'
 
 export const Route = createRootRoute({
   component: () => (
@@ -12,6 +13,7 @@ export const Route = createRootRoute({
           <Link to="/settings" activeProps={{ className: 'font-bold text-indigo-700' }}>Pengaturan</Link>
         </nav>
       </header>
+      <Toaster />
       <Outlet />
     </div>
   ),
