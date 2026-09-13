@@ -1,3 +1,6 @@
 - `init` memakai shadcn@3.8.5 (CLI 4.x menolak `-b neutral` — flag `-b` kini berarti library komponen).
 - Registry `@reui` dikonfigurasi manual di `components.json` → `https://reui.io/r/{style}/{name}.json`.
 - Resolve `add @reui/...` diuji: `npx shadcn@3.8.5 view @reui/c-event-calendar-3` sukses (tanpa install).
+- Event calendar (Task 3): `npx shadcn@3.8.5 add @reui/c-event-calendar-3 --yes`. Komponen reUI memakai API Base UI (`render` prop), jadi `style` di `components.json` diganti `new-york` → `base-nova` supaya primitif `src/components/ui/*` ikut Base UI (`@base-ui/react`); dengan style lama `tsc -b` gagal (19 error `render`/`asChild`).
+- Hasil install: `src/components/reui/event-calendar/**` (primitif), `src/components/examples/c-event-calendar-3.tsx` (demo, tidak dipakai — tree-shaken dari bundle), `src/components/ui/*` (base-nova).
+- Adaptasi minimal pasca-generate (agar `tsc -b` hijau): `process.env.NODE_ENV` → `import.meta.env.DEV` (event-calendar.tsx); hapus tipe/import/destructuring yang tidak terpakai (lib, month-view, resource-view, time-grid, ui/scroll-area).
