@@ -17,12 +17,12 @@ type NotificationEntry struct {
 	Error          string
 }
 
-// HasNotification: true bila sudah ada baris dengan dedupe key yang sama —
+// HasNotification: true if a row with the same dedupe key already exists —
 // (occasion XOR holiday key) + occurrence_date + offset_days + channel_id,
-// cermin dari kedua partial unique index yang membuat RecordNotification
-// idempotent. Binding NULL sama persis (pointer *int64/string → NULL), dan
-// guard both-nil sama: dipakai scheduler untuk cek dedupe SEBELUM kirim
-// (anti push dobel), bukan pengganti INSERT OR IGNORE.
+// mirroring the two partial unique indexes that make RecordNotification
+// idempotent. NULL binding matches exactly (pointer *int64/string → NULL), and
+// the both-nil guard is the same: used by the scheduler to check dedupe
+// BEFORE sending (prevents double pushes), not as a replacement for INSERT OR IGNORE.
 func (s *Store) HasNotification(ctx context.Context, e NotificationEntry) (bool, error) {
 	if e.OccasionID == nil && e.HolidayKey == nil {
 		return false, fmt.Errorf("notification entry harus punya OccasionID atau HolidayKey")
@@ -39,10 +39,10 @@ func (s *Store) HasNotification(ctx context.Context, e NotificationEntry) (bool,
 	return n > 0, nil
 }
 
-// RecordNotification: INSERT OR IGNORE — dedupe anti kirim dobel.
-// Return inserted=true hanya bila baris benar-benar baru.
-// Salah satu dari OccasionID/HolidayKey wajib: keduanya nil akan lolos dari
-// kedua partial unique index (WHERE ... IS NOT NULL) dan merusak jaminan dedupe.
+// RecordNotification: INSERT OR IGNORE — dedupe against double sends.
+// Returns inserted=true only when the row is really new.
+// One of OccasionID/HolidayKey is required: both nil would slip past both
+// partial unique indexes (WHERE ... IS NOT NULL) and break the dedupe guarantee.
 func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (bool, error) {
 	if e.OccasionID == nil && e.HolidayKey == nil {
 		return false, fmt.Errorf("notification entry harus punya OccasionID atau HolidayKey")

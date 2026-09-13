@@ -48,8 +48,8 @@ func makeJWKS(t *testing.T, key *rsa.PrivateKey) (jwt.Keyfunc, *httptest.Server)
 	b, _ := json.Marshal(jwks)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(b) }))
 	t.Cleanup(srv.Close)
-	// keyfunc v3.8.2: NewRemote/NewRemoteConfig sudah dihapus — padanannya
-	// NewDefaultOverrideCtx (URL tunggal) + KeyfuncCtx untuk jwt.Keyfunc.
+	// keyfunc v3.8.2: NewRemote/NewRemoteConfig was removed — the equivalents are
+	// NewDefaultOverrideCtx (single URL) + KeyfuncCtx for jwt.Keyfunc.
 	kfi, err := keyfunc.NewDefaultOverrideCtx(context.Background(), []string{srv.URL}, keyfunc.Override{Client: srv.Client()})
 	if err != nil {
 		t.Fatal(err)
@@ -82,14 +82,14 @@ func TestCFAccessMiddleware(t *testing.T) {
 		c.JSON(200, gin.H{"email": u.Email, "role": u.Role})
 	})
 
-	// tanpa header → 401
+	// no header → 401
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/who", nil))
 	if w.Code != 401 {
 		t.Errorf("tanpa jwt: %d", w.Code)
 	}
 
-	// token valid → provision admin
+	// valid token → provisions admin
 	tok := signToken(t, key, "aud-1", "admin@x.id", time.Now().Add(time.Hour))
 	req := httptest.NewRequest("GET", "/who", nil)
 	req.Header.Set("Cf-Access-Jwt-Assertion", tok)
@@ -99,7 +99,7 @@ func TestCFAccessMiddleware(t *testing.T) {
 		t.Errorf("valid jwt: %d %s", w.Code, w.Body.String())
 	}
 
-	// aud salah → 401
+	// wrong aud → 401
 	tokBad := signToken(t, key, "aud-2", "admin@x.id", time.Now().Add(time.Hour))
 	req = httptest.NewRequest("GET", "/who", nil)
 	req.Header.Set("Cf-Access-Jwt-Assertion", tokBad)

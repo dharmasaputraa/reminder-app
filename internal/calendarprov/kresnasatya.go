@@ -11,8 +11,8 @@ import (
 	"otorem/internal/domain"
 )
 
-// Kresna: hari libur nasional + daerah Bali (Galungan, Kuningan, Saraswati, dll.).
-// Sumber: github.com/kresnasatya/api-harilibur.
+// Kresna: national + Bali regional holidays (Galungan, Kuningan, Saraswati, etc.).
+// Source: github.com/kresnasatya/api-harilibur.
 type Kresna struct {
 	BaseURL string
 	hc      *http.Client
@@ -48,7 +48,7 @@ func (k *Kresna) fetchYear(ctx context.Context, year int) ([]domain.Holiday, err
 		return nil, fmt.Errorf("kresna status %d", resp.StatusCode)
 	}
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	// bentuk respons sumber bisa array langsung atau dibungkus {"data":[...]}
+	// the source response may be a bare array or wrapped in {"data":[...]}
 	var items []kresnaItem
 	if err := json.Unmarshal(raw, &items); err != nil {
 		var wrapped struct {

@@ -38,9 +38,9 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 	now := time.Now().In(loc)
 	today := domain.DateFromTime(now)
 
-	// Rentang: mode `days` (1..90 dari hari ini, default 30) atau mode
-	// `from`/`to` eksplisit (maks 400 hari) untuk kalender yang men-scan
-	// antar tahun. `to` kosong berarti setahun dari `from`.
+	// Range: `days` mode (1..90 from today, default 30) or explicit
+	// `from`/`to` mode (max 400 days) for calendars that scan across
+	// years. An empty `to` means one year from `from`.
 	rangeStart, horizon := today, today
 	if fromQ := c.Query("from"); fromQ != "" {
 		from, err := domain.ParseDate(fromQ)

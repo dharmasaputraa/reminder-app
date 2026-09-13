@@ -34,7 +34,7 @@ func TestHolidayCacheRoundTrip(t *testing.T) {
 		t.Errorf("dst = %v, want %v", dst, want)
 	}
 
-	// upsert: source sama menimpa payload, tidak duplikat
+	// upsert: the same source overwrites the payload, no duplicates
 	newer := map[string]any{"fetched_at": "2026-06-01T00:00:00Z"}
 	if err := st.PutHolidayCache(ctx, 2026, "dayoffapi", newer); err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestHolidayCacheRoundTrip(t *testing.T) {
 		t.Errorf("upsert gagal: dst = %v", dst)
 	}
 
-	// key (year, source) beda tidak saling mengganggu
+	// different (year, source) keys do not interfere with each other
 	if err := st.GetHolidayCache(ctx, 2026, "kresnasatya", &dst); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("source lain: err = %v, want ErrNotFound", err)
 	}

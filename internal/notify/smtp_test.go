@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// fakeSMTP: server SMTP minimal untuk test — cukup protokol dasar
-// (220/250/354/221) dan menangkap isi DATA.
+// fakeSMTP: a minimal SMTP server for tests — just enough of the basic
+// protocol (220/250/354/221) and it captures the DATA contents.
 type fakeSMTP struct {
 	addr     string
 	data     string
@@ -89,10 +89,10 @@ func startFakeSMTP(t *testing.T) *fakeSMTP {
 	return f
 }
 
-// startSilentSMTP: listener yang menerima koneksi tapi tidak pernah
-// membalas — koneksi dipegang sampai cleanup, sehingga smtp.SendMail
-// macet menunggu salam 220; satu-satunya jalan keluar Send adalah
-// cabang ctx.Done. Mengembalikan port listener.
+// startSilentSMTP: a listener that accepts connections but never replies —
+// the connection is held until cleanup, so smtp.SendMail hangs waiting for
+// the 220 greeting; the only way Send can exit is the ctx.Done branch.
+// Returns the listener port.
 func startSilentSMTP(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -124,14 +124,14 @@ func TestSMTPSend(t *testing.T) {
 	f := startFakeSMTP(t)
 	port, _ := strconv.Atoi(strings.Split(f.addr, ":")[1])
 	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: port, From: "otorem@x.id",
-		To: []string{"budi@x.id"}}) // tanpa auth — fake menerima apa pun
+		To: []string{"budi@x.id"}}) // no auth — the fake accepts anything
 	if err := s.Send(context.Background(), Message{Title: "🎂 ultah", Body: "isi pesan"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(f.data, "Subject: =?utf-8?") {
 		t.Errorf("subject harus ter-encode RFC 2047: %q", f.data)
 	}
-	// body tetap UTF-8 mentah: emoji hanya di-encode pada header.
+	// body stays raw UTF-8: the emoji is only encoded in the header.
 	if !strings.Contains(f.data, "🎂 ultah") {
 		t.Errorf("emoji harus tetap mentah di body HTML: %q", f.data)
 	}
@@ -147,7 +147,7 @@ func TestSMTPSend(t *testing.T) {
 }
 
 func TestSMTPContextTimeout(t *testing.T) {
-	// port yang pasti tidak melayang: koneksi akan gagal/timeout
+	// a port that is guaranteed dead: the connection will fail/time out
 	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: 1, From: "a@b.c", To: []string{"d@e.f"}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -157,9 +157,9 @@ func TestSMTPContextTimeout(t *testing.T) {
 }
 
 func TestSMTPContextCancel(t *testing.T) {
-	// server menerima koneksi tapi tak pernah membalas: koneksi TCP
-	// berhasil, jadi Send hanya bisa keluar lewat ctx.Done — memvalidasi
-	// cabang <-ctx.Done() pada select.
+	// the server accepts the connection but never replies: the TCP connection
+	// succeeds, so Send can only exit through ctx.Done — validating the
+	// <-ctx.Done() branch in the select.
 	port := startSilentSMTP(t)
 	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: port, From: "a@b.c", To: []string{"d@e.f"}})
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)

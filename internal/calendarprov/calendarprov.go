@@ -1,5 +1,5 @@
-// Package calendarprov: sumber hari raya. Computed dihitung lokal dari engine
-// Pawukon; provider remote (Plan 3) menambah sumber API dengan cache.
+// Package calendarprov provides holiday sources. Computed holidays are calculated
+// locally from the Pawukon engine; remote providers (Plan 3) add API sources with caching.
 package calendarprov
 
 import (
@@ -23,7 +23,7 @@ func (computedPawukon) HolidaysBetween(_ context.Context, from, to domain.Date) 
 	return domain.PawukonHolidaysBetween(from, to), nil
 }
 
-// MultiProvider menggabungkan provider dan memfilter per kategori settings.
+// MultiProvider combines providers and filters them by the settings categories.
 type MultiProvider struct{ Providers []Provider }
 
 func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date, enabled map[string]bool) ([]domain.Holiday, error) {

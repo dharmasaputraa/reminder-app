@@ -10,8 +10,8 @@ import (
 	"otorem/internal/domain"
 )
 
-// DayOffAPI: libur nasional & cuti bersama Indonesia (termasuk Nyepi).
-// Sumber: github.com/gerinsp/dayoff-API (data SKB 3 Menteri).
+// DayOffAPI: Indonesian national holidays & joint leave (including Nyepi).
+// Source: github.com/gerinsp/dayoff-API (SKB 3 Menteri / joint-decree data).
 type DayOffAPI struct {
 	BaseURL string
 	hc      *http.Client

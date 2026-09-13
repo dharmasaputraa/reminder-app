@@ -35,9 +35,9 @@ function useUpcoming(days = 30) {
   })
 }
 
-/** Satu query per tahun kalender (±1 tahun di sekitar tahun terlihat).
- *  Payload setahun kecil (puluhan–ratusan item), jadi fetch per tahun lebih
- *  hemat daripada per bulan dan membuat navigasi antar tahun instan. */
+/** One query per calendar year (±1 year around the visible year).
+ *  A year's payload is small (tens–hundreds of items), so fetching per year is
+ *  cheaper than per month and makes year-to-year navigation instant. */
 function useUpcomingYears(years: number[]) {
   return useQueries({
     queries: years.map((y) => ({
@@ -112,8 +112,8 @@ const CALENDAR_I18N = {
   },
 }
 
-/** Tombol lompat ±1 tahun — harus dirender di dalam <EventCalendar> agar
- *  bisa memakai context navigasinya. */
+/** ±1 year jump button — must be rendered inside <EventCalendar> so it can
+ *  use its navigation context. */
 function YearJumpButton({ dir }: { dir: -1 | 1 }) {
   const { date, goTo } = useEventCalendarNavigation()
   const label = dir === -1 ? 'Tahun sebelumnya' : 'Tahun berikutnya'
@@ -135,11 +135,11 @@ function Dashboard() {
 
   const items = up.data?.items ?? []
   const todayYear = up.data?.today ? Number(up.data.today.slice(0, 4)) : new Date().getFullYear()
-  // Tahun terlihat di kalender (dari navigasi); null = belum pernah navigasi.
+  // Visible year in the calendar (from navigation); null = never navigated.
   const [visibleYear, setVisibleYear] = useState<number | null>(null)
   const yearAnchor = visibleYear ?? todayYear
-  // ±1 tahun di sekitar anchor di-fetch sekaligus → lompat tahun sudah terisi
-  // sebelum diklik (prefetch), dan tiap tahun ter-cache terpisah di react-query.
+  // ±1 year around the anchor is fetched at once → year jumps are already filled
+  // before being clicked (prefetch), and each year is cached separately in react-query.
   const yearList = useMemo(
     () => [yearAnchor - 1, yearAnchor, yearAnchor + 1],
     [yearAnchor]

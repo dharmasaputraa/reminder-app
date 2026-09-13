@@ -12,7 +12,7 @@ type User struct {
 	Role  string `json:"role"`
 }
 
-// GetOrCreateUser: auto-provision dari klaim email. Role hanya diset saat create.
+// GetOrCreateUser auto-provisions from the email claim. Role is only set on create.
 func (s *Store) GetOrCreateUser(ctx context.Context, email, name string, adminEmails map[string]bool) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	role := "member"

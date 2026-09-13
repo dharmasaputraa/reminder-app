@@ -25,7 +25,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     let msg = res.statusText
-    try { msg = (await res.json()).error ?? msg } catch { /* biarkan statusText */ }
+    try { msg = (await res.json()).error ?? msg } catch { /* keep statusText */ }
     throw new ApiError(res.status, msg)
   }
   return res.json()

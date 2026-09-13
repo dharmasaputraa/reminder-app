@@ -8,7 +8,7 @@ import (
 	"otorem/internal/store"
 )
 
-// NewFromChannel: decrypt config channel → Notifier konkret.
+// NewFromChannel decrypts the channel config and returns a concrete Notifier.
 func NewFromChannel(ch store.Channel, key []byte) (Notifier, error) {
 	plain, err := secret.Decrypt(key, ch.ConfigEnc)
 	if err != nil {

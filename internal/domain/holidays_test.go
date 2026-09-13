@@ -16,8 +16,8 @@ func TestGalunganKuningan2026(t *testing.T) {
 	}
 }
 
-// Satu siklus penuh (210 hari mulai hari-1 siklus = 2026-04-05) memuat tepat
-// sekali: Galungan (hari-74), Kuningan (hari-84), Pagerwesi (hari-4), Saraswati (hari-210).
+// One full cycle (210 days starting at cycle day 1 = 2026-04-05) contains exactly
+// once: Galungan (day 74), Kuningan (day 84), Pagerwesi (day 4), Saraswati (day 210).
 func TestOneCycleExactHolidays(t *testing.T) {
 	hs := PawukonHolidaysBetween(NewDate(2026, 4, 5), NewDate(2026, 4, 5).AddDays(209))
 	if len(hs) != 4 {

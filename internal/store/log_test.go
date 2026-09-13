@@ -10,7 +10,7 @@ import (
 func TestRecordNotificationDedupe(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}
@@ -69,14 +69,14 @@ func TestHasNotification(t *testing.T) {
 		t.Error("setelah record harus true")
 	}
 
-	// channel beda → bukan duplikat
+	// different channel → not a duplicate
 	e2 := e
 	e2.ChannelID = ch.ID + 999
 	if got, err := s.HasNotification(ctx, e2); err != nil || got {
 		t.Errorf("channel lain harus false: got=%v err=%v", got, err)
 	}
 
-	// varian holiday key: false sebelum record, true sesudah
+	// holiday key variant: false before record, true after
 	hk := "pawukon:galungan"
 	he := NotificationEntry{HolidayKey: &hk, OccurrenceDate: domain.NewDate(2026, 6, 17),
 		OffsetDays: 0, ChannelID: ch.ID, Status: "sent"}
@@ -90,7 +90,7 @@ func TestHasNotification(t *testing.T) {
 		t.Errorf("holiday setelah record harus true: got=%v err=%v", got, err)
 	}
 
-	// kedua key nil → error, konsisten dengan RecordNotification
+	// both keys nil → error, consistent with RecordNotification
 	if _, err := s.HasNotification(ctx, NotificationEntry{
 		OccurrenceDate: domain.NewDate(2026, 6, 17), OffsetDays: 1, ChannelID: ch.ID}); err == nil {
 		t.Error("kedua key nil harus error")
@@ -100,7 +100,7 @@ func TestHasNotification(t *testing.T) {
 func TestHolidayDedupeIndependent(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestHolidayDedupeIndependent(t *testing.T) {
 func TestRecordNotificationRequiresKey(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +128,8 @@ func TestRecordNotificationRequiresKey(t *testing.T) {
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
 	ch, _ := s.CreateChannel(ctx, u.ID, "email", "cadangan", []byte("enc"))
 
-	// OccasionID dan HolidayKey keduanya nil: tidak dicakup kedua partial unique
-	// index (WHERE ... IS NOT NULL) — wajib ditolak agar dedupe tidak bocor.
+	// OccasionID and HolidayKey are both nil: not covered by either partial unique
+	// index (WHERE ... IS NOT NULL) — must be rejected so dedupe does not leak.
 	inserted, err := s.RecordNotification(ctx, NotificationEntry{
 		OccurrenceDate: domain.NewDate(2026, 6, 17), OffsetDays: 7, ChannelID: ch.ID, Status: "sent"})
 	if err == nil {
@@ -150,7 +150,7 @@ func TestRecordNotificationRequiresKey(t *testing.T) {
 func TestSettingsRoundTrip(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}

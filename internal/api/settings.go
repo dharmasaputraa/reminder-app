@@ -31,12 +31,12 @@ func DefaultSettings() Settings {
 
 var sendTimeRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 
-// LoadSettings: default ← override JSON dari DB (key "settings").
+// LoadSettings: defaults ← JSON override from the DB (key "settings").
 func (s *Server) LoadSettings(ctx context.Context) Settings {
 	out := DefaultSettings()
 	var stored Settings
 	if err := s.st.GetSettingJSON(ctx, "settings", &stored); err != nil {
-		return out // ErrNotFound atau decode lama → default
+		return out // ErrNotFound or an old decode → defaults
 	}
 	if stored.Timezone != "" {
 		out.Timezone = stored.Timezone

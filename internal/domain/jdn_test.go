@@ -8,8 +8,8 @@ func TestJDNKnownValues(t *testing.T) {
 		jdn int
 	}{
 		{NewDate(1970, 1, 1), 2440588},
-		{NewDate(2000, 1, 1), 2451545},  // Sabtu
-		{NewDate(2026, 6, 17), 2461209}, // Rabu (Galungan)
+		{NewDate(2000, 1, 1), 2451545},  // Saturday
+		{NewDate(2026, 6, 17), 2461209}, // Wednesday (Galungan)
 	}
 	for _, c := range cases {
 		if got := c.d.JDN(); got != c.jdn {
@@ -38,7 +38,7 @@ func TestWeekday(t *testing.T) {
 
 func TestAddDaysRoundTrip(t *testing.T) {
 	d := NewDate(2026, 2, 28)
-	if got := d.AddDays(1); got != NewDate(2026, 3, 1) { // 2026 bukan kabisat
+	if got := d.AddDays(1); got != NewDate(2026, 3, 1) { // 2026 is not a leap year
 		t.Errorf("AddDays(1) dari 2026-02-28 = %s, want 2026-03-01", got)
 	}
 	if got := d.AddDays(2).AddDays(-2); got != d {

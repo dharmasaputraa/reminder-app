@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// ParseDate parses "YYYY-MM-DD" (civil), strict: menolak input sisa (junk),
-// tanpa zero-padding, dan tanggal kalender tidak valid (mis. 2026-02-30).
+// ParseDate parses "YYYY-MM-DD" (civil), strict: rejects trailing junk,
+// missing zero-padding, and invalid calendar dates (e.g. 2026-02-30).
 func ParseDate(s string) (Date, error) {
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {

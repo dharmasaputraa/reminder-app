@@ -106,7 +106,7 @@ func (s *Store) fill(ctx context.Context, c *ContactWithOccasions) error {
 		return err
 	}
 	defer rows.Close()
-	// Kontrak SPA: occasions selalu array (bukan null) meski kosong.
+	// SPA contract: occasions is always an array (not null) even when empty.
 	c.Occasions = []Occasion{}
 	for rows.Next() {
 		var o Occasion
@@ -184,7 +184,7 @@ func (s *Store) AddOccasion(ctx context.Context, contactID int64, typ domain.Occ
 	return Occasion{ID: id, ContactID: contactID, Type: typ, BaseDate: base, Label: label}, nil
 }
 
-// DeleteOccasion: owner-scoped — ownerID 0 = admin (semua contact).
+// DeleteOccasion is owner-scoped — ownerID 0 = admin (all contacts).
 func (s *Store) DeleteOccasion(ctx context.Context, ownerID, id int64) error {
 	r, err := s.db.ExecContext(ctx,
 		fmt.Sprintf(`DELETE FROM occasions WHERE id = ? AND contact_id IN

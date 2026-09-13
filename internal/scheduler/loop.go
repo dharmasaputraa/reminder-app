@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// Loop: ticker per menit; snapshot settings diambil tiap iterasi supaya
-// perubahan Settings (timezone/jam kirim/catch-up) berlaku tanpa restart.
+// Loop runs a per-minute ticker; the settings snapshot is taken on every
+// iteration so Settings changes (timezone/send time/catch-up) apply without a restart.
 func (s *Service) Loop(ctx context.Context, every time.Duration,
 	snapshot func(context.Context) (Snapshot, error)) {
 	t := time.NewTicker(every)

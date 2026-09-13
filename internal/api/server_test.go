@@ -59,10 +59,10 @@ func TestContactFlow(t *testing.T) {
 		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
 	}
 
-	// Otonan base = today − 210 → occurrence ke-1 jatuh TEPAT hari ini; deterministik
-	// untuk window 30 hari (tanggal acak sering jatuh di luar window → flaky).
-	// Pin ke TZ server (Asia/Makassar, sesuai DefaultSettings) — bukan TZ mesin —
-	// agar deterministik di semua zona waktu.
+	// Otonan base = today − 210 → the 1st occurrence falls EXACTLY today; deterministic
+	// for the 30-day window (random dates often fall outside the window → flaky).
+	// Pin to the server TZ (Asia/Makassar, matching DefaultSettings) — not the machine TZ —
+	// so it is deterministic in all time zones.
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	base := today.AddDays(-domain.PawukonCycleDays)
@@ -135,7 +135,7 @@ func TestUpcomingEmpty(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	// boleh kosong atau berisi holiday pawukon; tidak boleh error
+	// may be empty or contain pawukon holidays; must not error
 	_ = out
 }
 
@@ -181,8 +181,8 @@ func TestSettingsValidate(t *testing.T) {
 
 func TestSettingsMissingCategories(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
-	// PUT tanpa holiday_categories → 200 (tidak panic), ketiga kategori terisi
-	// sesuai semantik brief: kategori yang tidak dikirim → false.
+	// PUT without holiday_categories → 200 (no panic), all three categories filled
+	// per the brief's semantics: a category that is not sent → false.
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
 		`{"timezone":"Asia/Jakarta","send_time":"08:00","catch_up_hours":24,"default_offsets":[7,4,2,1,0]}`))
@@ -242,11 +242,11 @@ func TestSchedulerRunWithoutRunner(t *testing.T) {
 	_ = context.Background()
 }
 
-// offsets:[] adalah sinyal RESET ke default global (bukan "biarkan nilai lama"):
-// handleSetPrefs mengganti p.Offsets dengan slice kosong dan ValidateOffsets([]) lolos,
-// jadi [] harus TERSIMPAN (bukan null/di-drop). Konsumen — internal/api/upcoming.go dan
-// internal/scheduler/scheduler.go — memperlakukan len(Offsets)==0 sebagai
-// "pakai DefaultOffsets"; test ini mengunci kedua sisi kontrak tersebut.
+// offsets:[] is a RESET signal to the global default (not "keep the old value"):
+// handleSetPrefs replaces p.Offsets with an empty slice and ValidateOffsets([]) passes,
+// so [] must be PERSISTED (not null/dropped). Consumers — internal/api/upcoming.go and
+// internal/scheduler/scheduler.go — treat len(Offsets)==0 as
+// "use DefaultOffsets"; this test locks down both sides of that contract.
 func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
@@ -285,8 +285,8 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 		t.Errorf(`prefs harus memuat "offsets":[] (bukan null/hilang): %s`, body)
 	}
 
-	// Sisi konsumen: occurrence otonan tepat hari ini (base = today − 210) harus
-	// memakai reminders default global karena prefs.offsets kosong.
+	// Consumer side: an otonan occurrence exactly today (base = today − 210) must
+	// use the global default reminders because prefs.offsets is empty.
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
@@ -357,24 +357,24 @@ func TestUpcomingDateRange(t *testing.T) {
 		return false
 	}
 
-	// Satu tahun penuh: ulang tahun 3 Juni 2027 harus muncul walau jatuh
-	// jauh di luar window 30 hari dari hari ini.
+	// Full year: the June 3, 2027 birthday must appear even though it falls
+	// far outside the 30-day window from today.
 	if w := get("?from=2027-01-01&to=2027-12-31"); !hasBirthday(w) {
 		t.Errorf("ulang tahun 2027-06-03 hilang dari range setahun: %s", w.Body.String())
 	}
-	// `to` opsional: default setahun dari `from`.
+	// `to` is optional: defaults to one year from `from`.
 	if w := get("?from=2027-06-01"); !hasBirthday(w) {
 		t.Errorf("ulang tahun 2027-06-03 hilang dari from tanpa to: %s", w.Body.String())
 	}
-	// Range terbalik → 400.
+	// Reversed range → 400.
 	if w := get("?from=2027-12-31&to=2027-01-01"); w.Code != 400 {
 		t.Errorf("range terbalik harus 400, dapat %d", w.Code)
 	}
-	// Range > 400 hari → 400.
+	// Range > 400 days → 400.
 	if w := get("?from=2027-01-01&to=2028-03-01"); w.Code != 400 {
 		t.Errorf("range >400 hari harus 400, dapat %d", w.Code)
 	}
-	// from bukan tanggal → 400.
+	// from is not a date → 400.
 	if w := get("?from=bukan-tanggal"); w.Code != 400 {
 		t.Errorf("from invalid harus 400, dapat %d", w.Code)
 	}

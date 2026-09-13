@@ -28,7 +28,7 @@ func (s *Store) Migrate() error {
 		return err
 	}
 	for _, e := range entries {
-		// nama file "001_init.sql" — ambil prefix numerik sebelum "_" (juga cocok "001.sql").
+		// file name "001_init.sql" — take the numeric prefix before "_" (also matches "001.sql").
 		base := strings.SplitN(strings.TrimSuffix(path.Base(e), ".sql"), "_", 2)[0]
 		v, err := strconv.Atoi(base)
 		if err != nil {

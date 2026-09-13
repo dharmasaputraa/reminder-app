@@ -57,7 +57,7 @@ function ContactDetail() {
   const [offsets, setOffsets] = useState('')
   const [enabled, setEnabled] = useState(true)
 
-  // Hidrasi form saat data kontak termuat/berubah (termasuk refetch setelah invalidate).
+  // Hydrate the form when contact data loads/changes (including refetch after invalidate).
   useEffect(() => {
     if (!contact.data) return
     const form = hydratePrefsForm(contact.data.prefs)
@@ -68,7 +68,7 @@ function ContactDetail() {
   async function previewPawukon(d: string) {
     setPawukon('')
     if (!d || type !== 'otongan') return
-    try { setPawukon((await api<{ label: string }>(`/pawukon?date=${d}`)).label) } catch { /* diam */ }
+    try { setPawukon((await api<{ label: string }>(`/pawukon?date=${d}`)).label) } catch { /* stay silent */ }
   }
 
   const invalidate = () => {

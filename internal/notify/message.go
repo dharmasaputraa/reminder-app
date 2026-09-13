@@ -9,12 +9,12 @@ import (
 var bulanIndo = [12]string{"Januari", "Februari", "Maret", "April", "Mei", "Juni",
 	"Juli", "Agustus", "September", "Oktober", "November", "Desember"}
 
-// hariIndo: padanan Indonesia dari saptawara (indeks = Date.Weekday(),
-// 0=Minggu): Redite=Minggu, Soma=Senin, Anggara=Selasa, Buda=Rabu, dst.
+// hariIndo: Indonesian day names (index = Date.Weekday(),
+// 0=Sunday): saptawara Redite=Sunday, Soma=Monday, Anggara=Tuesday, Buda=Wednesday, etc.
 var hariIndo = [7]string{"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"}
 
-// TanggalIndo: "Rabu, 17 Juni 2026" — nama hari Indonesia: Minggu..Sabtu,
-// nama bulan Indonesia.
+// TanggalIndo formats "Rabu, 17 Juni 2026" — Indonesian day names: Minggu..Sabtu,
+// and Indonesian month names.
 func TanggalIndo(d domain.Date) string {
 	return fmt.Sprintf("%s, %d %s %d", hariIndo[d.Weekday()], d.Day, bulanIndo[d.Month-1], d.Year)
 }

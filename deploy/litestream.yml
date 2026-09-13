@@ -1,4 +1,4 @@
-# Replikasi SQLite ke object storage — isi sesuai penyedia (S3/R2).
+# Replicate SQLite to object storage — fill in per provider (S3/R2).
 dbs:
   - path: /data/otorem.db
     replicas:

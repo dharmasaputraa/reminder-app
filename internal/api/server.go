@@ -80,13 +80,13 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 	apiG.GET("/settings", s.handleGetSettings)
 	apiG.PUT("/settings", s.handlePutSettings)
 	apiG.GET("/users", s.handleListUsers)             // admin
-	apiG.POST("/scheduler/run", s.handleSchedulerRun) // admin; runner dari Plan 3
+	apiG.POST("/scheduler/run", s.handleSchedulerRun) // admin; runner from Plan 3
 
 	s.engine = r
 	return s
 }
 
-// SetRunner dipanggil main setelah scheduler dibangun (Plan 3).
+// SetRunner is called by main after the scheduler is built (Plan 3).
 func (s *Server) SetRunner(r SchedulerRunner) { s.runner = r }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) { s.engine.ServeHTTP(w, req) }

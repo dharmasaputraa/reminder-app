@@ -41,8 +41,8 @@ func snapUTC() Snapshot {
 		HolidayCategories: map[string]bool{"pawukon": true, "saka": true, "national": true}}
 }
 
-// seed: user@1, contact, otonan base = today-210 (occurrence TEPAT di `today`),
-// 1 channel gotify.
+// seed: user@1, contact, otonan base = today-210 (occurrence EXACTLY on `today`),
+// 1 gotify channel.
 func seed(t *testing.T, st *store.Store, today domain.Date) {
 	t.Helper()
 	ctx := context.Background()
@@ -88,7 +88,7 @@ func newHarness(t *testing.T, now time.Time) *harness {
 	return &harness{st: st, fc: fc, notif: n, svc: svc}
 }
 
-// hari ini pukul 08:02 UTC → offset H dikirim; H-1..H-7 (4 offset lain) → missed.
+// today at 08:02 UTC → the D offset is sent; D-1..D-7 (the 4 other offsets) → missed.
 func TestRunOnceOnTime(t *testing.T) {
 	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
 	h := newHarness(t, now)
@@ -106,20 +106,20 @@ func TestRunOnceOnTime(t *testing.T) {
 		t.Error("tidak boleh late")
 	}
 
-	// run ke-2 → semua ter-dedupe
+	// 2nd run → everything is deduped
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Sent != 0 || res.Missed != 0 {
 		t.Errorf("dedupe gagal: %+v", res)
 	}
-	// dedupe PRE-SEND: stub tidak boleh terpanggil ulang — scanner tiap
-	// menit tidak boleh meng-push reminder yang sama berulang kali.
+	// PRE-SEND dedupe: the stub must not be called again — the per-minute
+	// scanner must not re-push the same reminder over and over.
 	if len(h.notif.sent) != 1 {
 		t.Errorf("stub terpanggil %d kali setelah run ke-2, harus tetap 1 (spam dobel)", len(h.notif.sent))
 	}
 }
 
-// pukul 07:00 → offset H-1 (kemarin 08:00) masih dalam window → kirim late;
-// H-2..H-7 → missed; H belum due.
+// at 07:00 → the D-1 offset (yesterday 08:00) is still in the window → sent late;
+// D-2..D-7 → missed; D is not due yet.
 func TestRunOnceCatchUpLate(t *testing.T) {
 	now := time.Date(2026, 6, 17, 7, 0, 0, 0, time.UTC)
 	h := newHarness(t, now)
@@ -135,7 +135,7 @@ func TestRunOnceCatchUpLate(t *testing.T) {
 	}
 }
 
-// send gagal → tidak recorded → retry setelah backoff 15 menit lewat.
+// send fails → not recorded → retried after the 15-minute backoff passes.
 func TestRunOnceRetryAfterFailure(t *testing.T) {
 	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
 	h := newHarness(t, now)
@@ -145,14 +145,14 @@ func TestRunOnceRetryAfterFailure(t *testing.T) {
 		t.Fatalf("failed = %d", res.Failed)
 	}
 
-	// 1 menit kemudian: masih dalam backoff → tidak ada attempt
+	// 1 minute later: still in backoff → no attempt
 	h.fc.Add(time.Minute)
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Failed != 0 || res.Sent != 0 {
 		t.Errorf("backoff bocor: %+v", res)
 	}
 
-	// 16 menit kemudian + sudah sukses → sent
+	// 16 minutes later + now successful → sent
 	h.fc.Add(16 * time.Minute)
 	h.notif.err = nil
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
@@ -187,16 +187,16 @@ func TestHolidayReminder(t *testing.T) {
 	if res.Sent != 0 {
 		t.Errorf("holiday dedupe gagal: %+v", res)
 	}
-	// dedupe PRE-SEND: total panggilan stub tetap 2 (otonan + galungan).
+	// PRE-SEND dedupe: total stub calls stay 2 (otonan + galungan).
 	if len(h.notif.sent) != 2 {
 		t.Errorf("stub terpanggil %d kali setelah run ke-2, harus tetap 2 (spam dobel)", len(h.notif.sent))
 	}
 }
 
-// Service dibangun persis seperti main.go (Plan 3 Task 9): struct literal
-// dari luar package — field unexported failUntil tidak bisa diinisialisasi,
-// jadi wajib lazy-init di RunOnce; send gagal pertama tidak boleh panic
-// nil-map dan mematikan scan loop.
+// Service is built exactly like in main.go (Plan 3 Task 9): struct literal
+// from outside the package — the unexported failUntil field cannot be initialized,
+// so lazy-init in RunOnce is mandatory; the first failed send must not panic
+// on the nil map and kill the scan loop.
 func TestRunOnceExternalLiteralNoPanicOnFail(t *testing.T) {
 	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
 	st, err := store.OpenInMemory()
@@ -209,7 +209,7 @@ func TestRunOnceExternalLiteralNoPanicOnFail(t *testing.T) {
 	}
 	seed(t, st, domain.DateFromTime(now))
 	n := &stubNotifier{err: context.DeadlineExceeded}
-	svc := &Service{St: st, Clock: &FakeClock{T: now}, // TANPA failUntil — nol map
+	svc := &Service{St: st, Clock: &FakeClock{T: now}, // NO failUntil — nil map
 		Providers: []calendarprov.Provider{&stubProvider{}},
 		Resolve:   func(_ context.Context, ch store.Channel) (notify.Notifier, error) { return n, nil }}
 
@@ -221,14 +221,14 @@ func TestRunOnceExternalLiteralNoPanicOnFail(t *testing.T) {
 		t.Fatalf("failed = %d", res.Failed)
 	}
 
-	// 1 menit kemudian: masih dalam backoff → tidak ada attempt
+	// 1 minute later: still in backoff → no attempt
 	svc.Clock.(*FakeClock).Add(time.Minute)
 	res, _ = svc.RunOnce(context.Background(), snapUTC())
 	if res.Failed != 0 || res.Sent != 0 {
 		t.Errorf("backoff bocor: %+v", res)
 	}
 
-	// 16 menit kemudian + sukses → sent
+	// 16 minutes later + success → sent
 	svc.Clock.(*FakeClock).Add(16 * time.Minute)
 	n.err = nil
 	res, _ = svc.RunOnce(context.Background(), snapUTC())

@@ -232,7 +232,7 @@ func (s *Server) handlePawukon(c *gin.Context) {
 		"pancawara": domain.Pancawara[p.Pancawara], "wuku": domain.Wuku[p.Wuku], "label": p.Label()})
 }
 
-// ---- channels: config disimpan terenkripsi; tidak pernah dikirim balik ----
+// ---- channels: config is stored encrypted; never sent back ----
 
 type channelIn struct {
 	Type   string          `json:"type"`
@@ -305,8 +305,8 @@ func (s *Server) handleDeleteChannel(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-// validateChannelConfig memastikan config JSON punya field minimum per tipe
-// sebelum dienkripsi. (Implementasi notifier-nya di Plan 3.)
+// validateChannelConfig ensures the JSON config has the minimum fields per type
+// before it is encrypted. (The notifier implementation is in Plan 3.)
 func (s *Server) validateChannelConfig(typ string, raw json.RawMessage) error {
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {

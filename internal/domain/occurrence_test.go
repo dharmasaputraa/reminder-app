@@ -4,7 +4,7 @@ import "testing"
 
 func TestNextOccurrenceOtonan(t *testing.T) {
 	base := NewDate(2026, 1, 10)
-	// Otonan pertama = lahir + 210 hari; inclusive terhadap `from`.
+	// First otonan = birth + 210 days; inclusive of `from`.
 	if occ, _ := NextOccurrence(base, Otonan, base); occ.Date != base.AddDays(210) {
 		t.Errorf("otoman pertama = %s, want %s", occ.Date, base.AddDays(210))
 	}
@@ -17,7 +17,7 @@ func TestNextOccurrenceOtonan(t *testing.T) {
 	}) {
 		t.Errorf("otoman kedua salah: %+v", occ)
 	}
-	// konsistensi pawukon: label pawukon tanggal lahir == tanggal otonan
+	// pawukon consistency: the pawukon label of the birth date == that of the otonan date
 	b, _ := NextOccurrence(base, Otonan, base)
 	if Pawukon(base).Label() != Pawukon(b.Date).Label() {
 		t.Errorf("pawukon beda: %s vs %s", Pawukon(base).Label(), Pawukon(b.Date).Label())
@@ -27,7 +27,7 @@ func TestNextOccurrenceOtonan(t *testing.T) {
 func TestNextOccurrenceBirthday(t *testing.T) {
 	leap := NewDate(2000, 2, 29)
 	occ, _ := NextOccurrence(leap, Birthday, NewDate(2025, 1, 1))
-	if occ.Date != NewDate(2025, 3, 1) || occ.Number != 25 { // 29 Feb → 1 Mar non-kabisat (spec §5.2)
+	if occ.Date != NewDate(2025, 3, 1) || occ.Number != 25 { // Feb 29 → Mar 1 in non-leap years (spec §5.2)
 		t.Errorf("29Feb non-kabisat: %+v, want 2025-03-01 umur 25", occ)
 	}
 	occ, _ = NextOccurrence(leap, Birthday, NewDate(2024, 1, 1))
@@ -43,7 +43,7 @@ func TestNextOccurrenceBirthday(t *testing.T) {
 func TestOccurrencesBetween(t *testing.T) {
 	base := NewDate(2026, 1, 10)
 	occs, _ := OccurrencesBetween(base, Otonan, base, base.AddDays(1000))
-	if len(occs) != 4 { // hari ke-210,420,630,840,1000? → 210,420,630,840 = 4 saja (1000 < 1050)
+	if len(occs) != 4 { // days 210,420,630,840,1000? → 210,420,630,840 = only 4 (1000 < 1050)
 		t.Fatalf("dapat %d occurrence, want 4", len(occs))
 	}
 	if occs[3].Number != 4 {
@@ -64,8 +64,8 @@ func TestAge(t *testing.T) {
 	}
 }
 
-// Kontrak NextOccurrence: "next occurrence on or after from" — berlaku juga
-// saat base > from+1 tahun (kemunculan berikutnya = base sendiri).
+// NextOccurrence contract: "next occurrence on or after from" — also applies
+// when base > from+1 year (the next occurrence = base itself).
 func TestNextOccurrenceBaseAfterFrom(t *testing.T) {
 	tests := []struct {
 		name string

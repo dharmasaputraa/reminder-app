@@ -1,12 +1,12 @@
 package domain
 
-// Pawukon: kalender Bali 210 hari, 10 minggu paralel. v1 hanya butuh
-// saptawara (7), pancawara (5), dan wuku (30×7 hari) — lihat spec §5.1.
+// Pawukon: the Balinese 210-day calendar with 10 parallel weeks. v1 only needs
+// saptawara (7), pancawara (5), and wuku (30×7 days) — see spec §5.1.
 //
-// ANCHOR (satu-satunya konstanta kalender di codebase): 2026-06-17 adalah
-// Galungan = Buda Kliwon, Wuku Dunggulan = hari ke-74 siklus. Diverifikasi
-// oleh TestPawukonAnchorDates (3 tanggal Galungan terpublikasi) dan fixture
-// harian kalenderbali.org (Task 3). Jika test merah, perbaiki HANYA di sini.
+// ANCHOR (the only calendar constant in the codebase): 2026-06-17 is
+// Galungan = Buda Kliwon, Wuku Dunggulan = day 74 of the cycle. Verified
+// by TestPawukonAnchorDates (3 published Galungan dates) and the daily
+// kalenderbali.org fixture (Task 3). If the test goes red, fix it ONLY here.
 var (
 	pawukonAnchorJDN      = NewDate(2026, 6, 17).JDN()
 	pawukonAnchorCycleDay = 74
@@ -16,8 +16,8 @@ const PawukonCycleDays = 210
 
 var Saptawara = [7]string{"Redite", "Soma", "Anggara", "Buda", "Wraspati", "Sukra", "Saniscara"}
 
-// Urutan siklus pancawara: hari ke-1 siklus = Paing (diverifikasi anchor:
-// hari-74 = Kliwon → (74-1) mod 5 = 3 → indeks 3 = Kliwon).
+// Pancawara cycle order: day 1 of the cycle = Paing (verified by the anchor:
+// day 74 = Kliwon → (74-1) mod 5 = 3 → index 3 = Kliwon).
 var Pancawara = [5]string{"Paing", "Pon", "Wage", "Kliwon", "Umanis"}
 
 var Wuku = [30]string{
@@ -46,7 +46,7 @@ func CycleDay(d Date) int {
 func Pawukon(d Date) PawukonDate {
 	c := CycleDay(d)
 	return PawukonDate{
-		Saptawara: d.Weekday(), // saptawara identik hari Gregorian, Redite=Minggu
+		Saptawara: d.Weekday(), // saptawara is identical to the Gregorian weekday, Redite=Sunday
 		Pancawara: (c - 1) % 5,
 		Wuku:      (c - 1) / 7,
 	}

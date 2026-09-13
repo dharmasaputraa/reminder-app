@@ -8,7 +8,7 @@ import (
 func TestGetOrCreateUser(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}

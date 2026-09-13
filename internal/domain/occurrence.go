@@ -11,8 +11,8 @@ const (
 )
 
 // Occurrence is one concrete happening of a recurring occasion.
-// Number semantics: Otonan → siklus ke-N (N≥1); Birthday → umur;
-// Anniversary → tahun ke- sejak base.
+// Number semantics: Otonan → cycle number N (N≥1); Birthday → age;
+// Anniversary → year number since base.
 type Occurrence struct {
 	Date   Date
 	Type   OccurrenceType
@@ -39,9 +39,9 @@ func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error
 		return Occurrence{Date: occ, Type: Otonan, Number: n,
 			Label: fmt.Sprintf("Otonan ke-%d — %s", n, Pawukon(occ).Label())}, nil
 	case Birthday, Anniversary:
-		// Kontrak: "next occurrence on or after from". Jika base > from+1 tahun,
-		// kemunculan berikutnya adalah base sendiri — periksa tahun batas bawah
-		// dan satu tahun setelahnya (konvensi sama dengan OccurrencesBetween).
+		// Contract: "next occurrence on or after from". If base > from+1 year,
+		// the next occurrence is base itself — check the lower bound year
+		// and the year after it (same convention as OccurrencesBetween).
 		L := max(from.Year, base.Year)
 		U := max(from.Year+1, L)
 		for y := L; y <= U; y++ {
@@ -58,7 +58,7 @@ func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error
 	}
 }
 
-// yearlyDate: ulang tahun base di tahun y; 29 Feb → 1 Mar pada tahun non-kabisat.
+// yearlyDate: the base anniversary in year y; Feb 29 → Mar 1 in non-leap years.
 func yearlyDate(base Date, y int) Date {
 	if base.Month == 2 && base.Day == 29 && !isLeap(y) {
 		return NewDate(y, 3, 1)
@@ -113,7 +113,7 @@ func OccurrencesBetween(base Date, typ OccurrenceType, from, to Date) ([]Occurre
 	return out, nil
 }
 
-// Age: umur penuh pada tanggal `on` (aman untuk 29 Feb → hitung berdasar tahun).
+// Age: full age on date `on` (safe for Feb 29 → computed from the year).
 func Age(base, on Date) int {
 	age := on.Year - base.Year
 	if yearlyDate(base, on.Year).After(on) {

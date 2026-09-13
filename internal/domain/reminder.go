@@ -5,11 +5,11 @@ import (
 	"sort"
 )
 
-// DefaultOffsets: H-7, H-4, H-2, H-1, H (spec §2, configurable di Settings).
-// DefaultOffsets: JANGAN dimutasi; pemanggil harus menyalin dulu bila ingin mengubah (package-global).
+// DefaultOffsets: D-7, D-4, D-2, D-1, D (spec §2, configurable in Settings).
+// DefaultOffsets: DO NOT mutate; callers must copy before modifying (package-global).
 var DefaultOffsets = []int{7, 4, 2, 1, 0}
 
-// ValidateOffsets: non-negatif, tanpa duplikat, ≤ 60 hari (paling jauh 2 bulan).
+// ValidateOffsets: non-negative, no duplicates, ≤ 60 days (at most 2 months).
 func ValidateOffsets(offsets []int) error {
 	seen := map[int]bool{}
 	for _, o := range offsets {
@@ -24,9 +24,9 @@ func ValidateOffsets(offsets []int) error {
 	return nil
 }
 
-// ReminderDates: tanggal-tanggal reminder untuk satu occurrence —
-// occurrenceDate − offset, terurut naik, dedupe. Duplikat didedupe sebelum
-// validasi sehingga input seperti []int{2, 7, 2, 0} valid.
+// ReminderDates: the reminder dates for one occurrence —
+// occurrenceDate − offset, sorted ascending, deduped. Duplicates are deduped
+// before validation, so input like []int{2, 7, 2, 0} is valid.
 func ReminderDates(occurrenceDate Date, offsets []int) ([]Date, error) {
 	seen := map[int]bool{}
 	uniq := make([]int, 0, len(offsets))

@@ -10,8 +10,8 @@ import (
 	"otorem/internal/domain"
 )
 
-// Kontrak SPA: GET kontak selalu membawa array occasions; `null` membuat
-// `c.occasions.map/length` di halaman kontak melempar TypeError.
+// SPA contract: GET contact always carries an occasions array; `null` makes
+// `c.occasions.map/length` on the contact page throw a TypeError.
 func TestContactJSONOccasionsEmpty(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
@@ -25,7 +25,7 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Detail kontak tanpa occasion.
+	// Contact detail without occasions.
 	gw, err := s.GetContact(ctx, u.ID, c.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 		t.Errorf("detail kontak tanpa occasion harus \"occasions\":[], dapat %s", got)
 	}
 
-	// List memuat kontak yang sama (lewat fill()).
+	// List contains the same contact (via fill()).
 	list, err := s.ListContacts(ctx, u.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 		t.Errorf("list kontak tanpa occasion harus \"occasions\":[], dapat %s", got)
 	}
 
-	// User tanpa kontak: daftar tetap array kosong, bukan null.
+	// User with no contacts: the list is still an empty array, not null.
 	v, _ := s.GetOrCreateUser(ctx, "kosong@x.id", "Kosong", nil)
 	empty, err := s.ListContacts(ctx, v.ID)
 	if err != nil {
@@ -60,7 +60,7 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 func seedContact(t *testing.T, s *Store) (User, ContactWithOccasions) {
 	t.Helper()
 	ctx := context.Background()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}
@@ -107,12 +107,12 @@ func TestContactCRUD(t *testing.T) {
 		t.Errorf("update gagal: %q", ls[0].Name)
 	}
 
-	// owner lain tidak bisa lihat
+	// another owner cannot see it
 	v, _ := s.GetOrCreateUser(context.Background(), "lain@x.id", "Lain", nil)
 	if _, err := s.GetContact(context.Background(), v.ID, cw.ID); err == nil {
 		t.Error("akses kontak user lain harus error")
 	}
-	// admin (ownerID 0) bisa
+	// admin (ownerID 0) can
 	if _, err := s.GetContact(context.Background(), 0, cw.ID); err != nil {
 		t.Errorf("admin harus bisa akses: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestContactCRUD(t *testing.T) {
 func TestAddOccasionValidatesType(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
-	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
 	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}
@@ -160,25 +160,25 @@ func TestDeleteOccasionOwnerScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// owner A tidak bisa hapus occasion milik B (IDOR)
+	// owner A cannot delete B's occasion (IDOR)
 	if err := s.DeleteOccasion(ctx, a.ID, ob.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("owner A hapus occasion B harus ErrNotFound, dapat %v", err)
 	}
-	// occasion B masih ada
+	// B's occasion is still there
 	if _, err := s.GetContact(ctx, b.ID, cb.ID); err != nil {
 		t.Fatalf("occasion B hilang: %v", err)
 	}
 
-	// owner B hapus occasion miliknya sendiri: boleh
+	// owner B deletes their own occasion: allowed
 	if err := s.DeleteOccasion(ctx, b.ID, ob.ID); err != nil {
 		t.Fatalf("owner B hapus occasion sendiri gagal: %v", err)
 	}
-	// hapus dua kali → ErrNotFound
+	// deleting twice → ErrNotFound
 	if err := s.DeleteOccasion(ctx, b.ID, ob.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("hapus occasion yang sudah terhapus harus ErrNotFound, dapat %v", err)
 	}
 
-	// admin (ownerID 0) bisa hapus occasion milik siapa pun
+	// admin (ownerID 0) can delete anyone's occasion
 	if err := s.DeleteOccasion(ctx, 0, oa.ID); err != nil {
 		t.Errorf("admin hapus occasion gagal: %v", err)
 	}

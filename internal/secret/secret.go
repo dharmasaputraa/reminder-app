@@ -10,7 +10,7 @@ import (
 	"io"
 )
 
-// DeriveKey: APP_SECRET string env → kunci 32 byte untuk AES-256-GCM.
+// DeriveKey turns the APP_SECRET env string into a 32-byte key for AES-256-GCM.
 func DeriveKey(appSecret string) []byte {
 	k := sha256.Sum256([]byte(appSecret))
 	return k[:]

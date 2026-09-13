@@ -26,15 +26,15 @@ const KATEGORI = [
   { key: 'national', label: 'Libur nasional (API)' },
 ]
 
-/** Zona waktu Indonesia — label WIB/WITA/WIT ditampilkan di option. */
+/** Indonesian time zones — WIB/WITA/WIT labels are shown in the option. */
 const TZ_INDONESIA = [
   { value: 'Asia/Jakarta', name: 'WIB' },
   { value: 'Asia/Makassar', name: 'WITA' },
   { value: 'Asia/Jayapura', name: 'WIT' },
 ]
 
-/** Zona umum lainnya (diaspora/travel); bisa ditambah — backend menerima
- *  semua nama IANA yang valid via time.LoadLocation. */
+/** Other common zones (diaspora/travel); more can be added — the backend accepts
+ *  any valid IANA name via time.LoadLocation. */
 const TZ_LAINNYA = [
   'UTC',
   'Asia/Singapore',
@@ -52,8 +52,8 @@ const TZ_LAINNYA = [
   'America/Los_Angeles',
 ]
 
-/** "GMT+8" untuk sebuah zona — dihitung dari tanggal saat ini sehingga ikut
- *  DST (mis. Sydney bergeser GMT+11 di musim panas). '' bila tak didukung. */
+/** "GMT+8" for a zone — computed from the current date so it follows
+ *  DST (e.g. Sydney shifts to GMT+11 in summer). '' when unsupported. */
 function gmtOffset(tz: string): string {
   try {
     const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
@@ -129,7 +129,7 @@ function SettingsPage() {
                 <SelectValue placeholder="Pilih zona waktu" />
               </SelectTrigger>
               <SelectContent>
-                {/* nilai tersimpan yang tidak ada di list tetap tampil */}
+                {/* a stored value not in the list is still shown */}
                 {!TZ_INDONESIA.some((t) => t.value === form.timezone) &&
                   !TZ_LAINNYA.includes(form.timezone) && (
                   <SelectItem value={form.timezone}>{tzOptionText(form.timezone)} — nilai tersimpan</SelectItem>

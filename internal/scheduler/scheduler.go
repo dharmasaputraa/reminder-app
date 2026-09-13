@@ -1,6 +1,6 @@
-// Package scheduler: scan-based reminder engine. Stateless terhadap DB —
-// keputusan kirim/missed dihitung tiap scan dari (now, settings, contacts,
-// notification_log). Idempotent: aman crash/restart.
+// Package scheduler implements the scan-based reminder engine. Stateless with
+// respect to the DB — send/missed decisions are computed on every scan from
+// (now, settings, contacts, notification_log). Idempotent: crash/restart safe.
 package scheduler
 
 import (
@@ -82,7 +82,7 @@ func maxOffset(offsets []int) int {
 	return m
 }
 
-// targetChannels: channel tujuan satu kontak.
+// targetChannels lists the destination channels for one contact.
 func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions) []store.Channel {
 	all, err := s.St.ListChannels(ctx, cw.OwnerID)
 	if err != nil {
@@ -113,9 +113,9 @@ func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasi
 func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Lazy-init: Service biasanya dibangun via struct literal dari luar
-	// package (main.go) yang tidak bisa mengisi field unexported failUntil —
-	// tanpa ini, send gagal pertama = panic nil-map di dalam mutex → scan mati.
+	// Lazy-init: Service is usually built via a struct literal from outside
+	// the package (main.go), which cannot fill the unexported failUntil field —
+	// without this, the first failed send = nil-map panic inside the mutex → scan dies.
 	if s.failUntil == nil {
 		s.failUntil = make(map[int64]time.Time)
 	}
@@ -130,11 +130,11 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	if err != nil {
 		return res, err
 	}
-	// Window catch-up dihitung dari now: reminder yang jatuhnya ≤ CatchUpHours
-	// lalu masih boleh dikirim (catch-up); lebih tua dari itu → missed. Dasar
-	// waktu `now` (bukan today@SendTime) dibutuhkan konsistensi test anchor:
-	// di 08:02 dengan CatchUp 24 jam, H-1 (kemarin 08:00 = 24j2m lalu) sudah
-	// di luar window → missed; di 07:00 (23 jam lalu) masih masuk → kirim late.
+	// The catch-up window is computed from now: reminders due within the last
+	// CatchUpHours may still be sent (catch-up); older than that → missed. The
+	// `now` time base (not today@SendTime) is needed for test anchor consistency:
+	// at 08:02 with CatchUp 24 hours, H-1 (yesterday 08:00 = 24h2m ago) is already
+	// outside the window → missed; at 07:00 (23 hours ago) it still fits → sent late.
 	dueStart := now.Add(-time.Duration(snap.CatchUpHours) * time.Hour)
 	today := domain.DateFromTime(now)
 
@@ -145,7 +145,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	to := today.AddDays(maxOff + 2)
 
 	// ---- occasions ----
-	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: semua kontak
+	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: all contacts
 	if err != nil {
 		return res, err
 	}
@@ -198,7 +198,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		}
 		hs, err := p.HolidaysBetween(ctx, from, to)
 		if err != nil {
-			// provider remote gagal → lewati; pawukon computed tetap jalan
+			// remote provider failed → skip; computed pawukon keeps working
 			continue
 		}
 		for _, h := range hs {
@@ -212,7 +212,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 				entry := store.NotificationEntry{HolidayKey: &hkey,
 					OccurrenceDate: h.Date, OffsetDays: off}
 				if sendAt.Before(dueStart) {
-					// holiday → semua channel milik SEMUA user (broadcast)
+					// holiday → all channels of ALL users (broadcast)
 					users, err := s.St.ListUsers(ctx)
 					if err != nil {
 						continue
@@ -253,8 +253,8 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 func (s *Service) record(ctx context.Context, e store.NotificationEntry, res *Result, kind string) {
 	inserted, err := s.St.RecordNotification(ctx, e)
 	if err != nil {
-		// jangan diam-diam buang: reminder tetap terkirim, tapi jejak log
-		// hilang dari dedupe — warning agar terlihat di observability.
+		// don't silently drop it: the reminder is still sent, but the log trail
+		// is missing from dedupe — warn so it shows up in observability.
 		slog.Warn("record_notification gagal", "kind", kind, "channel_id", e.ChannelID, "err", err)
 		return
 	}
@@ -273,16 +273,16 @@ func (s *Service) deliver(ctx context.Context, channels []store.Channel,
 			continue // backoff
 		}
 		e.ChannelID = ch.ID
-		// Dedupe PRE-SEND: baris dengan dedupe key sama sudah ada → jangan
-		// kirim ulang. Tanpa ini scanner per-menit meng-push ulang reminder
-		// yang sama sepanjang hari — INSERT OR IGNORE hanya menahan counter,
-		// bukan push (log dedupe terjadi SETELAH n.Send).
+		// PRE-SEND dedupe: a row with the same dedupe key already exists → do not
+		// send again. Without this, the per-minute scanner re-pushes the same
+		// reminder all day — INSERT OR IGNORE only holds back the counter,
+		// not the push (dedupe logging happens AFTER n.Send).
 		exists, err := s.St.HasNotification(ctx, e)
 		if err != nil {
-			// Fail open (disengaja): cek dedupe yang gagal tidak boleh
-			// membungkam reminder — lebih baik berisiko dobel push daripada
-			// reminder hilang. INSERT OR IGNORE di log tetap mencegah dobel
-			// catatan/counter.
+			// Fail open (intentional): a failed dedupe check must not
+			// silence the reminder — a double push is better than a lost
+			// reminder. INSERT OR IGNORE in the log still prevents duplicate
+			// records/counters.
 			slog.Warn("has_notification gagal, kirim saja (fail open)",
 				"channel_id", ch.ID, "err", err)
 		} else if exists {
@@ -295,7 +295,7 @@ func (s *Service) deliver(ctx context.Context, channels []store.Channel,
 			continue
 		}
 		if err := n.Send(ctx, msg); err != nil {
-			res.Failed++ // TIDAK di-record → retry scan berikutnya
+			res.Failed++ // NOT recorded → retried on the next scan
 			s.failUntil[ch.ID] = now.Add(failBackoff)
 			notifCounter.WithLabelValues("failed", kind).Inc()
 			continue

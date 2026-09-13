@@ -14,7 +14,7 @@ func TestChannelTestSend(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// catatan: newTestServer juga mengembalikan *store.Store; tidak dipakai di sini.
+	// note: newTestServer also returns *store.Store; not used here.
 	s, _ := newTestServer(t, "admin@x.id")
 	body := `{"type":"gotify","name":"rumah","config":{"base_url":"` + srv.URL + `","token":"t"}}`
 	w := httptest.NewRecorder()
@@ -29,7 +29,7 @@ func TestChannelTestSend(t *testing.T) {
 		t.Errorf("test send: %d %s", w.Code, w.Body.String())
 	}
 
-	// channel tidak ada → 404
+	// channel does not exist → 404
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels/999/test", "admin@x.id", ""))
 	if w.Code != 404 {

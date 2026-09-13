@@ -51,7 +51,7 @@ func TestPawukonAgainstFixtures(t *testing.T) {
 }
 
 func TestFixtureSpellingKnown(t *testing.T) {
-	// ejaan fixture harus persis konstanta engine (normalisasi terjadi di scraper)
+	// fixture spelling must exactly match the engine constants (normalization happens in the scraper)
 	for _, n := range strings.Split("Kliwon,Umanis,Dunggulan,Watugunung", ",") {
 		if indexOf(Wuku[:], n) < 0 && indexOf(Pancawara[:], n) < 0 {
 			t.Errorf("nama %q tidak dikenal engine", n)

@@ -24,16 +24,16 @@ func TestLoopRunsAndStops(t *testing.T) {
 		t.Fatal("loop tidak pernah menjalankan scan")
 	}
 	cancel()
-	// tidak ada cara sinkron menunggu exit tanpa instrumentasi — cukup pastikan
-	// tidak panic dan test selesai; race detector yang menjaga.
+	// there is no synchronous way to wait for exit without instrumentation — just make
+	// sure there is no panic and the test finishes; the race detector keeps watch.
 }
 
-// TestLoopStopsOnCancel: bukti sinkron bahwa Loop benar-benar berhenti —
-// snapshot ke-1 ditahan (loop beku di dalam iterasi), ctx di-cancel sebelum
-// tick ke-2, lalu snapshot dilepas. Saat iterasi selesai, hanya ctx.Done yang
-// siap di select (tick berikutnya masih ~1 interval jauh) → Loop wajib keluar
-// tanpa memanggil snapshot lagi. Jika select tidak menengok ctx.Done, tick
-// 500ms terus memicu scan dan hitungan naik jelas di atas 1.
+// TestLoopStopsOnCancel: synchronous proof that Loop really stops —
+// the 1st snapshot is held (the loop is frozen inside the iteration), ctx is canceled
+// before the 2nd tick, then the snapshot is released. When the iteration finishes, only
+// ctx.Done is ready in the select (the next tick is still ~1 interval away) → Loop must
+// exit without calling snapshot again. If the select does not look at ctx.Done, the
+// 500ms tick keeps triggering scans and the count clearly rises above 1.
 func TestLoopStopsOnCancel(t *testing.T) {
 	h := newHarness(t, time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -48,7 +48,7 @@ func TestLoopStopsOnCancel(t *testing.T) {
 		mu.Unlock()
 		if n == 1 {
 			close(first)
-			<-release // tahan iterasi ke-1 sampai cancel terpasang
+			<-release // hold the 1st iteration until cancel is in place
 		}
 		return snapUTC(), nil
 	})
@@ -59,8 +59,8 @@ func TestLoopStopsOnCancel(t *testing.T) {
 	}
 	cancel()
 	close(release)
-	// Tunggu 3 interval tick: loop yang benar tidak memanggil snapshot lagi;
-	// loop yang salah terus scan tiap 500ms (≥3 panggilan tambahan).
+	// Wait 3 tick intervals: a correct loop does not call snapshot again;
+	// a wrong loop keeps scanning every 500ms (≥3 extra calls).
 	time.Sleep(1500 * time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()

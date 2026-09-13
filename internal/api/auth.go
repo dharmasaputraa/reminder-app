@@ -19,8 +19,8 @@ type UserProvisioner interface {
 	GetOrCreateUser(ctx context.Context, email, name string, adminEmails map[string]bool) (store.User, error)
 }
 
-// NewCFAccessFromKeyfunc: verifikasi Cf-Access-Jwt-Assertion → provision user.
-// Keyfunc di-inject agar bisa diuji dengan JWKS lokal.
+// NewCFAccessFromKeyfunc verifies the Cf-Access-Jwt-Assertion header and provisions the user.
+// The keyfunc is injected so it can be tested with a local JWKS.
 func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisioner, adminEmails map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := strings.TrimSpace(c.GetHeader("Cf-Access-Jwt-Assertion"))
@@ -58,12 +58,12 @@ func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisione
 	}
 }
 
-// NewCFAccess: keyfunc JWKS production dari team domain Access.
+// NewCFAccess builds the production JWKS keyfunc from the Access team domain.
 func NewCFAccess(ctx context.Context, cfg config.Config, provision UserProvisioner) (gin.HandlerFunc, error) {
 	jwksURL := fmt.Sprintf("https://%s/cdn-cgi/access/certs", cfg.CFTeamDomain)
-	// keyfunc v3.8.2: NewRemote/NewRemoteConfig sudah dihapus — padanannya
-	// NewDefaultOverrideCtx (URL tunggal) + KeyfuncCtx untuk jwt.Keyfunc.
-	noErrFirst := false // fetch awal JWKS gagal = error (fail fast saat init)
+	// keyfunc v3.8.2: NewRemote/NewRemoteConfig was removed — the equivalents are
+	// NewDefaultOverrideCtx (single URL) + KeyfuncCtx for jwt.Keyfunc.
+	noErrFirst := false // initial JWKS fetch failure = error (fail fast at init)
 	kfi, err := keyfunc.NewDefaultOverrideCtx(ctx, []string{jwksURL}, keyfunc.Override{
 		Client:                    &http.Client{Timeout: 10 * time.Second},
 		RefreshInterval:           time.Hour,
@@ -75,7 +75,7 @@ func NewCFAccess(ctx context.Context, cfg config.Config, provision UserProvision
 	return NewCFAccessFromKeyfunc(kfi.KeyfuncCtx(ctx), cfg.CFAud, provision, cfg.AdminEmails), nil
 }
 
-// devAuthMiddleware: HANYA untuk AUTH_MODE=dev.
+// devAuthMiddleware is ONLY for AUTH_MODE=dev.
 func devAuthMiddleware(provision UserProvisioner, adminEmails map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Dev-Email")))

@@ -6,7 +6,7 @@ import (
 	"otorem/internal/notify"
 )
 
-// handleChannelTest: kirim pesan tes ke channel — validasi config end-to-end.
+// handleChannelTest sends a test message to the channel — end-to-end config validation.
 func (s *Server) handleChannelTest(c *gin.Context) {
 	id, ok := pathID(c)
 	if !ok {

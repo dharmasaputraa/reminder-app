@@ -50,7 +50,7 @@ func TestTelegramAPIError(t *testing.T) {
 }
 
 func TestTelegramJSONShape(t *testing.T) {
-	// pastikan payload valid: parse kembali
+	// ensure the payload is valid: parse it back
 	var m map[string]any
 	_ = json.Unmarshal([]byte(`{"chat_id":"1","text":"x","parse_mode":"HTML"}`), &m)
 	if m["parse_mode"] != "HTML" {

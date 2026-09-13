@@ -2,7 +2,7 @@ package domain
 
 import "fmt"
 
-// HolidayDef: satu hari raya Pawukon = kombinasi (saptawara, pancawara, wuku).
+// HolidayDef: one Pawukon holiday = a combination of (saptawara, pancawara, wuku).
 type HolidayDef struct {
 	Name      string
 	Saptawara int
@@ -10,10 +10,10 @@ type HolidayDef struct {
 	Wuku      int
 }
 
-// HANYA definisi yang sudah baku dan diverifikasi (spec §5.3). Menambah
-// definisi (deret Tumpek, Sugihan, dsb.) WAJIB: tambahkan baris di fixture
-// scraper terlebih dahulu, buktikan tanggalnya cocok, baru masuk sini.
-// PawukonHolidayDefs: JANGAN dimutasi; pemanggil harus menyalin dulu bila ingin mengubah (package-global).
+// ONLY definitions that are standard and verified (spec §5.3). To add a
+// definition (the Tumpek series, Sugihan, etc.) you MUST: first add a row to
+// the scraper fixture, prove the dates match, and only then add it here.
+// PawukonHolidayDefs: DO NOT mutate; callers must copy before modifying (package-global).
 var PawukonHolidayDefs = []HolidayDef{
 	{Name: "Galungan", Saptawara: 3, Pancawara: 3, Wuku: 10},  // Buda Kliwon Dunggulan
 	{Name: "Kuningan", Saptawara: 6, Pancawara: 3, Wuku: 11},  // Saniscara Kliwon Kuningan
@@ -27,7 +27,7 @@ type Holiday struct {
 }
 
 // PawukonHolidaysBetween returns Pawukon-based holidays in [from, to].
-// O( jumlah hari × jumlah definisi ) — trivial untuk rentang horizon app.
+// O( number of days × number of definitions ) — trivial for the app's horizon range.
 func PawukonHolidaysBetween(from, to Date) []Holiday {
 	var out []Holiday
 	for d := from; !d.After(to); d = d.AddDays(1) {

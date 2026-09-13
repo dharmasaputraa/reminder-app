@@ -1,25 +1,25 @@
-// Scraper fixture: ambil peta tanggal Gregorian → (saptawara, pancawara, wuku)
-// dari kalenderbali.org untuk setahun, tulis ke testdata/pawukon_<year>.csv.
-// Pemakaian data: fixture pengujian pribadi (spec §6) — data © kalenderbali.org
-// (I Wayan Nuarsa, Universitas Udayana), dikreditkan, TIDAK dire distribusikan.
+// Fixture scraper: fetches the Gregorian date → (saptawara, pancawara, wuku) map
+// from kalenderbali.org for one year, writes it to testdata/pawukon_<year>.csv.
+// Data usage: private test fixtures (spec §6) — data © kalenderbali.org
+// (I Wayan Nuarsa, Udayana University), credited, NOT redistributed.
 //
-// Pemakaian: go run . -year 2026 -out ../../testdata
+// Usage: go run . -year 2026 -out ../../testdata
 //
-// CATATAN PENYESUAIAN PARSER (kontingensi brief langkah 3): format dayRe
-// "dd-mm-yyyy. Sap Pan Wuk" tidak ada di rerainan.php (halaman itu hanya
-// berisi daftar hari upacara). Data harian penuh ada di kalender bulanan
-// index.php?bulan=N&tanggal=1&tahun=Y: setiap sel <td class="bodikalender|
-// libur|liburaktif"> memuat <a title="..."> dengan pawukon hari itu, dalam
-// salah satu bentuk:
+// PARSER ADJUSTMENT NOTES (brief step 3 contingency): the dayRe format
+// "dd-mm-yyyy. Sap Pan Wuk" does not exist in rerainan.php (that page only
+// lists ceremony days). The full daily data lives in the monthly calendar
+// index.php?bulan=N&tanggal=1&tahun=Y: every <td class="bodikalender|
+// libur|liburaktif"> cell contains <a title="..."> with that day's pawukon,
+// in one of these forms:
 //
-//	title="Sukra Paing Dunggulan"                            (hari polos)
-//	title="Penyajaan Galungan (Soma Pon Dunggulan)"          (ada acara)
-//	title="Purnama Kasa, Soma Paing Langkir"                 (acara + koma)
+//	title="Sukra Paing Dunggulan"                            (plain day)
+//	title="Penyajaan Galungan (Soma Pon Dunggulan)"          (has an event)
+//	title="Purnama Kasa, Soma Paing Langkir"                 (event + comma)
 //
-// Sel <td class="takaktif"> adalah sisa bulan tetangga — dilewati. Ejaan
-// sumber: "Keliwon" (bukan "Kliwon") dan "Kasih" pada "Anggara Kasih" (= hari
-// Kliwon: posisi situs antara Wage & Umanis di wuku yang sama) — keduanya
-// dinormalisasi lewat peta normalize di bawah.
+// Cells <td class="takaktif"> are leftover days from neighboring months — skipped.
+// Source spelling: "Keliwon" (not "Kliwon") and "Kasih" in "Anggara Kasih" (= a
+// Kliwon day: the site's position between Wage & Umanis in the same wuku) — both
+// are normalized through the normalize map below.
 package main
 
 import (
@@ -36,8 +36,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Konstanta nama engine (disalin untuk validasi fail-loud di scraper; engine
-// tidak diimpor agar modul scraper tetap terpisah).
+// Engine name constants (copied for fail-loud validation in the scraper; the
+// engine is not imported so the scraper module stays separate).
 var (
 	saptawara = map[string]bool{"Redite": true, "Soma": true, "Anggara": true, "Buda": true, "Wraspati": true, "Sukra": true, "Saniscara": true}
 	pancawara = map[string]bool{"Paing": true, "Pon": true, "Wage": true, "Kliwon": true, "Umanis": true}
@@ -53,18 +53,18 @@ var (
 	}
 )
 
-// ejaan sumber bervariasi; normalisasi ke konstanta engine. Nama yang tidak
-// ada di sini DAN tidak cocok konstanta engine = error keras (jangan diam).
+// source spelling varies; normalize to the engine constants. A name that is
+// not here AND does not match the engine constants = hard error (don't stay silent).
 var normalize = map[string]string{
 	"Keliwon":    "Kliwon",
-	"Kasih":      "Kliwon", // "Anggara Kasih" = Anggara Kliwon (terverifikasi posisi situs)
+	"Kasih":      "Kliwon", // "Anggara Kasih" = Anggara Kliwon (site position verified)
 	"Tolu":       "Taulu",
 	"Wugu":       "Ugu",
 	"Kaulu":      "Kelawu",
-	"Kulawu":     "Kelawu",      // varian ejaan wuku-28 di kalenderbali.org
-	"Prangbakat": "Parangbakat", // varian ejaan wuku-24 di kalenderbali.org
-	"Warigadean": "Warigadian",  // varian ejaan wuku-8 di kalenderbali.org
-	"Luang":      "Luang",       // dipertahankan; test akan gagal jika muncul sebagai wuku
+	"Kulawu":     "Kelawu",      // spelling variant of wuku 28 on kalenderbali.org
+	"Prangbakat": "Parangbakat", // spelling variant of wuku 24 on kalenderbali.org
+	"Warigadean": "Warigadian",  // spelling variant of wuku 8 on kalenderbali.org
+	"Luang":      "Luang",       // kept; the test will fail if it shows up as a wuku
 }
 
 func norm(s string) string {
@@ -77,11 +77,11 @@ func norm(s string) string {
 var dayNumRe = regexp.MustCompile(`(\d{1,2})`)
 var parenRe = regexp.MustCompile(`\(([A-Za-z]+) ([A-Za-z]+) ([A-Za-z]+)\)`)
 
-// extractPawukon mengambil tripel (saptawara, pancawara, wuku) dari title sel.
-// Prioritas: bentuk kurung "Acara (Sap Pan Wuk)", lalu segmen koma yang
-// validasi sebagai tripel pawukon — title bisa memuat nama acara 3 kata
-// sebelum pawukon ("Hari Siwa Ratri, Saniscara Wage Tambir"). Gagal total =
-// error keras.
+// extractPawukon extracts the (saptawara, pancawara, wuku) triple from a cell title.
+// Priority: the parenthesized form "Event (Sap Pan Wuk)", then comma segments that
+// validate as a pawukon triple — the title may contain a 3-word event name
+// before the pawukon ("Hari Siwa Ratri, Saniscara Wage Tambir"). Total failure =
+// hard error.
 func extractPawukon(title string) (string, string, string, error) {
 	valid := func(sap, pan, wuk string) bool {
 		sap, pan, wuk = norm(sap), norm(pan), norm(wuk)
@@ -124,7 +124,7 @@ func main() {
 	var rows []row
 	seenByDate := map[string]bool{}
 	for bulan := 1; bulan <= 12; bulan++ {
-		// kalender bulanan: setiap sel harian memuat pawukon di title
+		// monthly calendar: every daily cell carries the pawukon in its title
 		url := fmt.Sprintf("https://kalenderbali.org/index.php?bulan=%d&tanggal=1&tahun=%d", bulan, *year)
 		resp, err := client.Get(url)
 		if err != nil {
@@ -142,10 +142,10 @@ func main() {
 
 		bulanRows := 0
 		doc.Find("td").Each(func(_ int, td *goquery.Selection) {
-			// whitelist sel harian: bodikalender (polos), libur (hari besar),
-			// aktif (tanggal yang diminta di URL), liburaktif (keduanya).
-			// Kelas lain (takaktif = sisa bulan tetangga, wewaran = legenda
-			// samping, wuku/judul*/hari = header) bukan sel harian.
+			// whitelist of daily cells: bodikalender (plain), libur (public holiday),
+			// aktif (the date requested in the URL), liburaktif (both).
+			// Other classes (takaktif = leftover from neighboring months, wewaran = side
+			// legend, wuku/judul*/hari = header) are not daily cells.
 			cls, _ := td.Attr("class")
 			if cls != "bodikalender" && cls != "libur" && cls != "aktif" && cls != "liburaktif" {
 				return
@@ -153,7 +153,7 @@ func main() {
 			a := td.Find(`a[href="javascript:void(0)"]`)
 			title, ok := a.Attr("title")
 			if !ok || strings.TrimSpace(title) == "" {
-				return // bukan sel harian (header, navigasi)
+				return // not a daily cell (header, navigation)
 			}
 			dayM := dayNumRe.FindStringSubmatch(strings.TrimSpace(td.Text()))
 			if dayM == nil {
@@ -166,30 +166,30 @@ func main() {
 			sap, pan, wuk = norm(sap), norm(pan), norm(wuk)
 
 			date := fmt.Sprintf("%04d-%02d-%02s", *year, bulan, dayM[1])
-			// validasi keras: nama harus konstanta engine setelah normalisasi
+			// hard validation: names must be engine constants after normalization
 			if !saptawara[sap] || !pancawara[pan] || !wuku[wuk] {
 				log.Fatalf("%s: nama tak dikenal dari title %q → %s %s %s", date, title, sap, pan, wuk)
 			}
-			// saptawara == hari Gregorian (definisi); cek silang anti salah petak
+			// saptawara == Gregorian weekday (by definition); cross-check against misaligned cells
 			wd := time.Date(*year, time.Month(bulan), atoi(dayM[1]), 0, 0, 0, 0, time.UTC).Weekday()
 			if sap != []string{"Redite", "Soma", "Anggara", "Buda", "Wraspati", "Sukra", "Saniscara"}[int(wd)] {
 				log.Fatalf("%s: saptawara situs %s ≠ hari Gregorian %v (title %q)", date, sap, wd, title)
 			}
 			if seenByDate[date] {
-				return // duplikat defensif
+				return // defensive duplicate
 			}
 			seenByDate[date] = true
 			rows = append(rows, row{date, sap, pan, wuk})
 			bulanRows++
 		})
-		// jumlah sel harian HARIS sama dengan jumlah hari kalender bulan itu —
-		// kurang berarti ada sel yang terlewat diam-diam (struktur berubah?)
+		// the number of daily cells MUST equal the number of calendar days in that month —
+		// fewer means a cell was silently missed (did the structure change?)
 		want := time.Date(*year, time.Month(bulan+1), 0, 0, 0, 0, 0, time.UTC).Day()
 		if bulanRows != want {
 			log.Fatalf("bulan %02d: %d hari terparse, seharusnya %d — sel hilang, jangan lanjut", bulan, bulanRows, want)
 		}
 		log.Printf("bulan %02d: %d hari", bulan, bulanRows)
-		time.Sleep(1500 * time.Millisecond) // sopan: jangan menembak server
+		time.Sleep(1500 * time.Millisecond) // polite: don't hammer the server
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].date < rows[j].date })
 	for _, r := range rows {

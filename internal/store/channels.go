@@ -78,7 +78,7 @@ func (s *Store) GetChannel(ctx context.Context, ownerID, id int64) (*Channel, er
 func (s *Store) SetChannelEnabled(ctx context.Context, ownerID, id int64, enabled bool) error {
 	q := `UPDATE channels SET enabled = ? WHERE id = ?`
 	args := []any{boolInt(enabled), id}
-	if ownerID != 0 { // 0 = admin: lihat semua, konsisten dengan GetChannel
+	if ownerID != 0 { // 0 = admin: see everything, consistent with GetChannel
 		q += ` AND owner_id = ?`
 		args = append(args, ownerID)
 	}
@@ -95,7 +95,7 @@ func (s *Store) SetChannelEnabled(ctx context.Context, ownerID, id int64, enable
 func (s *Store) DeleteChannel(ctx context.Context, ownerID, id int64) error {
 	q := `DELETE FROM channels WHERE id = ?`
 	args := []any{id}
-	if ownerID != 0 { // 0 = admin: lihat semua, konsisten dengan GetChannel
+	if ownerID != 0 { // 0 = admin: see everything, consistent with GetChannel
 		q += ` AND owner_id = ?`
 		args = append(args, ownerID)
 	}

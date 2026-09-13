@@ -26,9 +26,9 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// OpenInMemory: dipakai test — satu DB bersama via cache=shared.
-// Pragma via DSN (_pragma=...) agar berlaku di SETIAP koneksi pool;
-// PRAGMA foreign_keys scopenya per-koneksi.
+// OpenInMemory is used by tests — one shared DB via cache=shared.
+// Pragmas go through the DSN (_pragma=...) so they apply to EVERY pool
+// connection; PRAGMA foreign_keys is scoped per connection.
 func OpenInMemory() (*Store, error) {
 	db, err := sql.Open("sqlite", "file:otoremtest?mode=memory&cache=shared&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {

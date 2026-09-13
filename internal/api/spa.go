@@ -9,13 +9,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// spaFS adalah sumber file SPA. Default-nya webRoot (hasil `make web` yang
-// di-embed); test menukarnya dengan FS kosong/palsu agar hasilnya tidak
-// bergantung pada ada/tidaknya build di internal/api/webroot.
+// spaFS is the source of SPA files. It defaults to webRoot (the embedded
+// output of `make web`); tests swap it with an empty/fake FS so results do
+// not depend on whether a build exists in internal/api/webroot.
 var spaFS fs.FS = webRoot
 
-// spaHandler: layani file statis hasil `make web` (di-embed). Path tak dikenal
-// → index.html (client-side routing). Belum di-build → 503 dengan pesan jelas.
+// spaHandler serves the static files from `make web` (embedded). Unknown paths
+// → index.html (client-side routing). Not built yet → 503 with a clear message.
 func (s *Server) spaHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/metrics" {
@@ -28,14 +28,14 @@ func (s *Server) spaHandler() gin.HandlerFunc {
 		}
 		if info, err := fs.Stat(spaFS, "webroot/"+rel); err == nil && !info.IsDir() && rel != "index.html" {
 			if path.Ext(rel) == ".webmanifest" {
-				// mime Go tidak mengenal .webmanifest → tanpa ini tersaji text/plain.
+				// Go's mime package does not know .webmanifest → without this it is served as text/plain.
 				c.Header("Content-Type", "application/manifest+json")
 			}
 			c.FileFromFS("webroot/"+rel, http.FS(spaFS))
 			return
 		}
-		// index.html dibaca manual: http.FileServer melakukan redirect 301
-		// untuk path berakhiran /index.html sehingga merusak fallback SPA.
+		// index.html is read manually: http.FileServer issues a 301 redirect
+		// for paths ending in /index.html, which breaks the SPA fallback.
 		b, err := fs.ReadFile(spaFS, "webroot/index.html")
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SPA belum di-build — jalankan 'make web'"})

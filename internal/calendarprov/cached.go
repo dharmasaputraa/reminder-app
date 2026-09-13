@@ -15,24 +15,25 @@ type cachePayload struct {
 	Holidays  []domain.Holiday `json:"holidays"`
 }
 
-// failBackoffDefault: setelah refresh gagal, tunggu selama ini sebelum
-// mencoba remote lagi (negative cache / failure backoff) — scheduler scan
-// dan /upcoming tidak boleh menembak remote tiap request saat remote mati.
+// failBackoffDefault: after a failed refresh, wait this long before trying
+// the remote again (negative cache / failure backoff) — the scheduler scan
+// and /upcoming must not hit the remote on every request while it is down.
 const failBackoffDefault = 10 * time.Minute
 
-// CachedRemote: cache-first ke holiday_cache (SQLite). Refresh bila payload
-// > 24 jam; jika refetch gagal → pakai cache stale (degrade, jangan mati).
-// Kegagalan remote dicatat (negative cache): selama window backoff, remote
-// tidak dicoba sama sekali — dilayani cache stale bila ada, atau set kosong.
+// CachedRemote: cache-first against holiday_cache (SQLite). Refresh when the
+// payload is > 24 hours old; if refetch fails → use the stale cache (degrade,
+// don't die). Remote failures are recorded (negative cache): during the backoff
+// window the remote is not tried at all — requests are served from the stale
+// cache if present, or an empty set.
 type CachedRemote struct {
 	Inner Provider
 	St    *store.Store
-	// FailBackoff: window backoff setelah kegagalan remote. Diisi default
-	// oleh NewCachedRemote; nol/negatif berarti selalu coba lagi (untuk test).
+	// FailBackoff: backoff window after a remote failure. Filled with the default
+	// by NewCachedRemote; zero/negative means always retry (for tests).
 	FailBackoff time.Duration
 
 	mu       sync.Mutex
-	lastFail map[int]time.Time // tahun → terakhir kali refresh gagal
+	lastFail map[int]time.Time // year → last failed refresh
 }
 
 func NewCachedRemote(inner Provider, st *store.Store) *CachedRemote {
@@ -43,9 +44,9 @@ func NewCachedRemote(inner Provider, st *store.Store) *CachedRemote {
 func (c *CachedRemote) Name() string     { return c.Inner.Name() }
 func (c *CachedRemote) Category() string { return c.Inner.Category() }
 
-// inBackoff melaporkan apakah refresh untuk tahun y masih ditahan karena
-// kegagalan sebelumnya. Dipanggil dari scheduler loop dan handler API
-// secara konkuren → guard dengan mutex.
+// inBackoff reports whether the refresh for year y is still held back by a
+// previous failure. Called concurrently from the scheduler loop and API
+// handlers → guarded by a mutex.
 func (c *CachedRemote) inBackoff(y int) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -55,7 +56,7 @@ func (c *CachedRemote) inBackoff(y int) bool {
 	}
 	window := c.FailBackoff
 	if window <= 0 {
-		return false // nol/negatif: selalu coba lagi
+		return false // zero/negative: always retry
 	}
 	return time.Since(last) < window
 }
@@ -81,11 +82,11 @@ func (c *CachedRemote) loadYear(ctx context.Context, y int) ([]domain.Holiday, b
 	if err == nil && time.Since(p.FetchedAt) < 24*time.Hour {
 		return p.Holidays, true, nil
 	}
-	// miss atau stale → coba refresh, kecuali masih dalam backoff kegagalan
+	// miss or stale → try to refresh, unless still in failure backoff
 	if c.inBackoff(y) {
-		// Remote baru saja gagal: jangan retry tiap scan/request. Pakai
-		// cache stale bila ada, kalau tidak → no-op (set kosong), tanpa
-		// HTTP call dan tanpa spam log.
+		// The remote just failed: don't retry on every scan/request. Use the
+		// stale cache if present, otherwise → no-op (empty set), with no
+		// HTTP call and no log spam.
 		if err == nil {
 			return p.Holidays, true, nil
 		}
@@ -100,12 +101,12 @@ func (c *CachedRemote) loadYear(ctx context.Context, y int) ([]domain.Holiday, b
 		return fresh, true, nil
 	}
 	c.markFail(y)
-	if err == nil { // stale cache ada → pakai, jangan gagalkan scheduler
+	if err == nil { // stale cache exists → use it, don't fail the scheduler
 		return p.Holidays, true, nil
 	}
-	// Cache kosong + remote mati → no-op (set kosong), BUKAN error: sumber
-	// computed (pawukon) tetap jalan dan /upcoming tidak boleh 5xx hanya
-	// karena API pihak ketiga mati.
+	// Empty cache + remote down → no-op (empty set), NOT an error: computed
+	// sources (pawukon) keep working and /upcoming must not 5xx just because
+	// a third-party API is down.
 	slog.Warn("provider remote gagal, cache kosong → lewati",
 		"provider", c.Inner.Name(), "year", y, "err", ferr)
 	return nil, false, nil

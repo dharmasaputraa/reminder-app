@@ -78,8 +78,8 @@ func TestCachedRemoteCacheFirst(t *testing.T) {
 	}
 }
 
-// TestCachedRemoteStaleFallback: cache >24 jam + refresh gagal (server 500)
-// → tetap balikin data stale, scheduler tidak boleh mati.
+// TestCachedRemoteStaleFallback: cache >24 hours old + failed refresh (server 500)
+// → still returns stale data, the scheduler must not die.
 func TestCachedRemoteStaleFallback(t *testing.T) {
 	st, _ := store.OpenInMemory()
 	defer st.Close()
@@ -116,10 +116,10 @@ func TestCachedRemoteStaleFallback(t *testing.T) {
 	}
 }
 
-// TestCachedRemoteFailureBackoff: remote mati + cache kosong → panggilan
-// pertama mencoba remote sekali (hasil set kosong, tanpa error); panggilan
-// berikutnya harus ditahan backoff (negative cache), bukan retry tiap
-// scan/request. Setelah window lewat (FailBackoff = 0) → dicoba lagi.
+// TestCachedRemoteFailureBackoff: remote down + empty cache → the first call
+// tries the remote once (empty result set, no error); subsequent calls must be
+// held back by the backoff (negative cache), not retried on every
+// scan/request. After the window passes (FailBackoff = 0) → tried again.
 func TestCachedRemoteFailureBackoff(t *testing.T) {
 	st, _ := store.OpenInMemory()
 	defer st.Close()
@@ -139,7 +139,7 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 	ctx := context.Background()
 	ran := domain.NewDate(2026, 3, 10)
 
-	// (a) panggilan pertama: satu-satunya percobaan remote.
+	// (a) first call: the only remote attempt.
 	hs, err := c.HolidaysBetween(ctx, ran, domain.NewDate(2026, 3, 20))
 	if err != nil {
 		t.Fatalf("remote mati + cache kosong harus no-op, bukan error: %v", err)
@@ -147,7 +147,7 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 	if len(hs) != 0 {
 		t.Errorf("hs = %+v, want kosong", hs)
 	}
-	// (a) panggilan kedua langsung: backoff → tanpa HTTP call baru.
+	// (a) immediate second call: backoff → no new HTTP call.
 	if _, err := c.HolidaysBetween(ctx, ran, domain.NewDate(2026, 3, 20)); err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 		t.Fatalf("calls = %d, want 1 (backoff harus menahan retry)", calls)
 	}
 
-	// (b) window backoff lewat (FailBackoff = 0) → remote dicoba lagi.
+	// (b) backoff window passed (FailBackoff = 0) → the remote is tried again.
 	c.FailBackoff = 0
 	if _, err := c.HolidaysBetween(ctx, ran, domain.NewDate(2026, 3, 20)); err != nil {
 		t.Fatal(err)
@@ -165,8 +165,8 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 	}
 }
 
-// TestCachedRemoteBackoffClearedOnSuccess: refresh sukses harus menghapus
-// fail memory, sehingga kegagalan berikutnya backoff dari nol lagi.
+// TestCachedRemoteBackoffClearedOnSuccess: a successful refresh must clear the
+// failure memory, so the next failure backs off from zero again.
 func TestCachedRemoteBackoffClearedOnSuccess(t *testing.T) {
 	st, _ := store.OpenInMemory()
 	defer st.Close()

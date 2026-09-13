@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	_ "time/tzdata" // bare-metal tanpa zoneinfo: LoadLocation tetap jalan (Docker sudah pasang tzdata)
+	_ "time/tzdata" // bare-metal without zoneinfo: LoadLocation still works (Docker already ships tzdata)
 
 	"otorem/internal/api"
 	"otorem/internal/calendarprov"
@@ -57,7 +57,7 @@ func main() {
 		},
 		Providers: providers,
 	}
-	// Snapshot builder yang sama dipakai runner adapter dan Loop — DRY.
+	// The same snapshot builder is used by the runner adapter and the Loop — DRY.
 	buildSnapshot := func(ctx context.Context) scheduler.Snapshot {
 		set := srv.LoadSettings(ctx)
 		return scheduler.Snapshot{

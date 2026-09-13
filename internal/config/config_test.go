@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// configEnvVars adalah seluruh variabel lingkungan yang dibaca Load().
+// configEnvVars is every environment variable read by Load().
 var configEnvVars = []string{
 	"ADDR",
 	"DATA_DIR",
@@ -17,10 +17,10 @@ var configEnvVars = []string{
 	"TZ",
 }
 
-// setEnv memulai dari lingkungan bersih (semua var config dihapus),
-// menerapkan kv, lalu mengembalikan lingkungan semula (nilai lama atau
-// dihapus) saat cleanup — semantik t.Setenv. Jangan pakai t.Parallel():
-// env bersifat global terhadap proses.
+// setEnv starts from a clean environment (all config vars removed),
+// applies kv, then restores the original environment (old values or
+// removed) on cleanup — same semantics as t.Setenv. Do not use t.Parallel():
+// the env is global to the process.
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
 	clearEnv(t)

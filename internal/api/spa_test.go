@@ -7,8 +7,8 @@ import (
 	"testing/fstest"
 )
 
-// withSpaFS menukar FS embed dengan FS uji supaya hasil test tidak bergantung
-// pada ada/tidaknya hasil `make web` di internal/api/webroot (gitignored).
+// withSpaFS swaps the embedded FS for a test FS so results do not depend on
+// whether the `make web` output exists in internal/api/webroot (gitignored).
 func withSpaFS(t *testing.T, fsys fstest.MapFS) {
 	t.Helper()
 	old := spaFS
@@ -51,7 +51,7 @@ func TestSPAWithBuiltWebroot(t *testing.T) {
 		{"/assets/app.js", "console.log(1)", "text/javascript", 200},
 		{"/manifest.webmanifest", `"name":"otorem"`, "application/manifest+json", 200},
 		{"/sw.js", "addEventListener", "text/javascript", 200},
-		{"/../go.mod", `<div id="root">`, "text/html", 200}, // traversal keluar webroot → fallback
+		{"/../go.mod", `<div id="root">`, "text/html", 200}, // traversal outside webroot → fallback
 	}
 	for _, tc := range cases {
 		w := httptest.NewRecorder()
