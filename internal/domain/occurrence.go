@@ -39,7 +39,12 @@ func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error
 		return Occurrence{Date: occ, Type: Otonan, Number: n,
 			Label: fmt.Sprintf("Otonan ke-%d — %s", n, Pawukon(occ).Label())}, nil
 	case Birthday, Anniversary:
-		for y := max(from.Year, base.Year); y <= from.Year+1; y++ {
+		// Kontrak: "next occurrence on or after from". Jika base > from+1 tahun,
+		// kemunculan berikutnya adalah base sendiri — periksa tahun batas bawah
+		// dan satu tahun setelahnya (konvensi sama dengan OccurrencesBetween).
+		L := max(from.Year, base.Year)
+		U := max(from.Year+1, L)
+		for y := L; y <= U; y++ {
 			occ := yearlyDate(base, y)
 			if occ.Before(from) {
 				continue

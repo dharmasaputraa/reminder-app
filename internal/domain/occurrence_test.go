@@ -63,3 +63,32 @@ func TestAge(t *testing.T) {
 		t.Error("age sebelum ultah")
 	}
 }
+
+// Kontrak NextOccurrence: "next occurrence on or after from" — berlaku juga
+// saat base > from+1 tahun (kemunculan berikutnya = base sendiri).
+func TestNextOccurrenceBaseAfterFrom(t *testing.T) {
+	tests := []struct {
+		name string
+		base Date
+		typ  OccurrenceType
+		from Date
+		want Occurrence
+	}{
+		{"birthday base 3 tahun setelah from", NewDate(2029, 6, 1), Birthday, NewDate(2026, 6, 1),
+			Occurrence{Date: NewDate(2029, 6, 1), Type: Birthday, Number: 0, Label: "Ulang tahun ke-0"}},
+		{"otoman base 3 tahun setelah from", NewDate(2029, 1, 10), Otonan, NewDate(2026, 1, 1),
+			Occurrence{Date: NewDate(2029, 1, 10).AddDays(210), Type: Otonan, Number: 1,
+				Label: "Otonan ke-1 — " + Pawukon(NewDate(2029, 1, 10).AddDays(210)).Label()}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NextOccurrence(tc.base, tc.typ, tc.from)
+			if err != nil {
+				t.Fatalf("err tak terduga: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
