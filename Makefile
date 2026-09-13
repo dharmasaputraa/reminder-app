@@ -1,4 +1,4 @@
-.PHONY: test web build run docker
+.PHONY: test web build run container
 
 test:
 	CGO_ENABLED=0 go test ./... -count=1
@@ -15,5 +15,5 @@ build: web
 run: build
 	APP_SECRET=dev-secret-panjang-16 AUTH_MODE=dev DATA_DIR=./data ./bin/otorem
 
-docker:
-	docker compose build
+container:
+	docker compose build || podman-compose build

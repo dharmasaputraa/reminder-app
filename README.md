@@ -18,12 +18,12 @@
 
 ## Quickstart
 
-Butuh Docker + Docker Compose, dan sebuah domain yang diarahkan ke Cloudflare (untuk tunnel).
+Butuh Docker (+ Compose) **atau** Podman (+ podman-compose), dan sebuah domain yang diarahkan ke Cloudflare (untuk tunnel).
 
 ```bash
 git clone <repo-anda> otorem && cd otorem
 cp .env.example .env   # edit APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS
-docker compose --profile cloudflared up -d --build
+docker compose --profile cloudflared up -d --build   # pengguna Podman: podman-compose --profile cloudflared up -d --build
 ```
 
 Aplikasi hanya listen di network internal compose; akses publik lewat tunnel Cloudflare. Buka `https://otorem.domain-anda.com`.
@@ -120,7 +120,7 @@ make test    # CGO_ENABLED=0 go test ./... -count=1
 make web     # npm ci + build SPA → internal/api/webroot (embed)
 make build   # build SPA + binary ke bin/otorem
 make run     # build + jalankan dev mode di :8080
-make docker  # docker compose build (butuh Docker)
+make container  # docker compose build, fallback podman-compose (Makefile)
 ```
 
 Fixture pawukon di-`scrape` sekali saat dev (bukan runtime) dengan modul terpisah:
@@ -133,7 +133,9 @@ Data fixture © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Un
 
 **Catatan provider hari raya remote:** provider `dayoffapi` dan `kresnasatya` memakai cache-first dengan negative-cache 10 menit — bila layanan remote sedang mati, otorem berhenti mencoba sementara dan memakai cache yang ada. Perhitungan Pawukon/otonan lokal tetap berjalan penuh; hanya hari raya nasional yang sementara kosong.
 
-## Verifikasi Docker (manual, butuh Docker terinstall)
+## Verifikasi Container
+
+**Sudah diverifikasi dengan Podman 6.0.2 + podman-compose 1.6.0** di mesin pengembang: `podman build -t otorem:latest .` sukses (image 39,7 MB), smoke container lulus (healthz, SPA, deep-link, scheduler-run). Catatan Podman: HEALTHCHECK diabaikan pada format OCI — tambahkan `--format docker` pada `podman build` bila healthcheck diinginkan. Langkah berikut tetap relevan untuk pengguna Docker:
 
 Lingkungan pengembangan saat ini belum ada Docker, sehingga langkah berikut harus dijalankan manual di mesin yang punya Docker:
 
@@ -171,7 +173,7 @@ code/
 ├── web/                        # SPA Vite + React; hasil build → internal/api/webroot (embed)
 ├── deploy/                     # litestream.yml, contoh config deploy
 ├── testdata/                   # fixture CSV pawukon (kalenderbali.org, jangan dire distribusikan)
-├── Dockerfile                  # multi-stage: node build → go build → alpine
+├── Dockerfile                  # multi-stage: node build → go build → alpine (diverifikasi podman)
 ├── docker-compose.yml          # app + profile cloudflared/gotify/litestream
 └── docs/superpowers/specs/     # dokumen desain
 ```
