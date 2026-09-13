@@ -75,6 +75,7 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 	apiG.POST("/channels", s.handleCreateChannel)
 	apiG.PATCH("/channels/:id", s.handlePatchChannel)
 	apiG.DELETE("/channels/:id", s.handleDeleteChannel)
+	apiG.POST("/channels/:id/test", s.handleChannelTest)
 	apiG.GET("/settings", s.handleGetSettings)
 	apiG.PUT("/settings", s.handlePutSettings)
 	apiG.GET("/users", s.handleListUsers)             // admin
