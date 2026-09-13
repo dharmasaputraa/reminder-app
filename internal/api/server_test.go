@@ -60,7 +60,10 @@ func TestContactFlow(t *testing.T) {
 
 	// Otonan base = today − 210 → occurrence ke-1 jatuh TEPAT hari ini; deterministik
 	// untuk window 30 hari (tanggal acak sering jatuh di luar window → flaky).
-	today := domain.DateFromTime(time.Now())
+	// Pin ke TZ server (Asia/Jakarta, sesuai DefaultSettings) — bukan TZ mesin —
+	// agar deterministik di semua zona waktu.
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	today := domain.DateFromTime(time.Now().In(loc))
 	base := today.AddDays(-domain.PawukonCycleDays)
 	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": base.String()})
 	w = httptest.NewRecorder()
@@ -133,6 +136,30 @@ func TestSettingsValidate(t *testing.T) {
 		`{"timezone":"Tidak/Ada","send_time":"07:30","catch_up_hours":12,"default_offsets":[1],"holiday_categories":{}}`))
 	if w.Code != 400 {
 		t.Errorf("tz invalid harus 400: %d", w.Code)
+	}
+}
+
+func TestSettingsMissingCategories(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	// PUT tanpa holiday_categories → 200 (tidak panic), ketiga kategori terisi
+	// sesuai semantik brief: kategori yang tidak dikirim → false.
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
+		`{"timezone":"Asia/Jakarta","send_time":"08:00","catch_up_hours":24,"default_offsets":[7,4,2,1,0]}`))
+	if w.Code != 200 {
+		t.Fatalf("put tanpa holiday_categories: %d %s", w.Code, w.Body.String())
+	}
+	var got Settings
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, cat := range []string{"pawukon", "saka", "national"} {
+		v, ok := got.HolidayCategories[cat]
+		if !ok {
+			t.Errorf("kategori %q tidak ada di response", cat)
+		} else if v {
+			t.Errorf("kategori %q harus false (tidak dikirim), dapat %v", cat, v)
+		}
 	}
 }
 

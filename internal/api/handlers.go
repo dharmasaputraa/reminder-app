@@ -162,7 +162,7 @@ func (s *Server) handleDeleteOccasion(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := s.st.DeleteOccasion(c.Request.Context(), id); err != nil {
+	if err := s.st.DeleteOccasion(c.Request.Context(), s.scope(c), id); err != nil {
 		respondErr(c, err)
 		return
 	}

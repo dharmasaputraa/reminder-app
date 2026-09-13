@@ -69,6 +69,9 @@ func (s *Server) SaveSettings(ctx context.Context, in Settings) (Settings, error
 	if err := domain.ValidateOffsets(in.DefaultOffsets); err != nil {
 		return Settings{}, err
 	}
+	if in.HolidayCategories == nil {
+		in.HolidayCategories = map[string]bool{}
+	}
 	for _, cat := range []string{"pawukon", "saka", "national"} {
 		if _, ok := in.HolidayCategories[cat]; !ok {
 			in.HolidayCategories[cat] = false

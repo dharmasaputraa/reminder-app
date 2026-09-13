@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"otorem/internal/domain"
@@ -87,5 +88,49 @@ func TestAddOccasionValidatesType(t *testing.T) {
 	c, _ := s.CreateContact(context.Background(), u.ID, "X", "", "")
 	if _, err := s.AddOccasion(context.Background(), c.ID, "salfok", domain.NewDate(2000, 1, 1), ""); err == nil {
 		t.Error("tipe ilegal harus ditolak")
+	}
+}
+
+func TestDeleteOccasionOwnerScope(t *testing.T) {
+	s, _ := OpenInMemory()
+	defer s.Close()
+	ctx := context.Background()
+	if err := s.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := s.GetOrCreateUser(ctx, "a@x.id", "A", nil)
+	b, _ := s.GetOrCreateUser(ctx, "b@x.id", "B", nil)
+	ca, _ := s.CreateContact(ctx, a.ID, "Kontak A", "", "")
+	cb, _ := s.CreateContact(ctx, b.ID, "Kontak B", "", "")
+	oa, err := s.AddOccasion(ctx, ca.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ob, err := s.AddOccasion(ctx, cb.ID, domain.Otonan, domain.NewDate(1991, 6, 13), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// owner A tidak bisa hapus occasion milik B (IDOR)
+	if err := s.DeleteOccasion(ctx, a.ID, ob.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("owner A hapus occasion B harus ErrNotFound, dapat %v", err)
+	}
+	// occasion B masih ada
+	if _, err := s.GetContact(ctx, b.ID, cb.ID); err != nil {
+		t.Fatalf("occasion B hilang: %v", err)
+	}
+
+	// owner B hapus occasion miliknya sendiri: boleh
+	if err := s.DeleteOccasion(ctx, b.ID, ob.ID); err != nil {
+		t.Fatalf("owner B hapus occasion sendiri gagal: %v", err)
+	}
+	// hapus dua kali → ErrNotFound
+	if err := s.DeleteOccasion(ctx, b.ID, ob.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("hapus occasion yang sudah terhapus harus ErrNotFound, dapat %v", err)
+	}
+
+	// admin (ownerID 0) bisa hapus occasion milik siapa pun
+	if err := s.DeleteOccasion(ctx, 0, oa.ID); err != nil {
+		t.Errorf("admin hapus occasion gagal: %v", err)
 	}
 }

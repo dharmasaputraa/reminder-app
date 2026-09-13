@@ -182,8 +182,11 @@ func (s *Store) AddOccasion(ctx context.Context, contactID int64, typ domain.Occ
 	return Occasion{ID: id, ContactID: contactID, Type: typ, BaseDate: base, Label: label}, nil
 }
 
-func (s *Store) DeleteOccasion(ctx context.Context, id int64) error {
-	r, err := s.db.ExecContext(ctx, `DELETE FROM occasions WHERE id = ?`, id)
+// DeleteOccasion: owner-scoped — ownerID 0 = admin (semua contact).
+func (s *Store) DeleteOccasion(ctx context.Context, ownerID, id int64) error {
+	r, err := s.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM occasions WHERE id = ? AND contact_id IN
+			(SELECT id FROM contacts WHERE %s)`, ownerFilter(ownerID)), id)
 	if err != nil {
 		return err
 	}
