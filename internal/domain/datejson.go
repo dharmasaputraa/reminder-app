@@ -1,17 +1,18 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
-// ParseDate parses "YYYY-MM-DD" (civil).
+// ParseDate parses "YYYY-MM-DD" (civil), strict: menolak input sisa (junk),
+// tanpa zero-padding, dan tanggal kalender tidak valid (mis. 2026-02-30).
 func ParseDate(s string) (Date, error) {
-	var y, m, d int
-	if _, err := fmt.Sscanf(s, "%d-%d-%d", &y, &m, &d); err != nil {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
 		return Date{}, fmt.Errorf("tanggal harus format YYYY-MM-DD: %q", s)
 	}
-	if m < 1 || m > 12 || d < 1 || d > 31 {
-		return Date{}, fmt.Errorf("tanggal tidak valid: %q", s)
-	}
-	return Date{Year: y, Month: m, Day: d}, nil
+	return DateFromTime(t), nil
 }
 
 func (d Date) MarshalJSON() ([]byte, error) { return []byte(`"` + d.String() + `"`), nil }
