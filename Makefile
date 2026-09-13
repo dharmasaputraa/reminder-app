@@ -1,4 +1,4 @@
-.PHONY: test web build run container
+.PHONY: test web build run dev container
 
 test:
 	CGO_ENABLED=0 go test ./... -count=1
@@ -14,6 +14,10 @@ build: web
 
 run: build
 	APP_SECRET=dev-secret-panjang-16 AUTH_MODE=dev DATA_DIR=./data ./bin/otorem
+
+# Hot reload: rebuild + restart otomatis saat file .go berubah (SPA via npm run dev)
+dev:
+	APP_SECRET=dev-secret-panjang-16 AUTH_MODE=dev DATA_DIR=./data go tool air
 
 container:
 	docker compose build || podman-compose build

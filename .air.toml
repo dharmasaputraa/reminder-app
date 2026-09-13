@@ -1,0 +1,29 @@
+# Hot reload backend untuk dev: jalankan lewat `make dev` (go tool air).
+# Env dev (APP_SECRET, AUTH_MODE, DATA_DIR) diset di target Makefile.
+# SPA tidak di-rebuild di sini — saat ngoding frontend, jalankan `cd web && npm run dev`
+# (Vite HMR, proxy /api ke :8080); SPA embedded hanya dibekukan ulang oleh `make build`.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "./tmp/otorem-dev"
+  cmd = "go build -o ./tmp/otorem-dev ./cmd/server"
+  delay = 1000
+  # Hanya perubahan file .go yang memicu rebuild; _test.go diabaikan agar
+  # `go test` yang sedang jalan tidak menembak build berulang.
+  include_dir = ["cmd", "internal"]
+  include_ext = ["go"]
+  exclude_regex = ["_test\\.go"]
+  exclude_unchanged = true
+  kill_delay = "0s"
+  log = "build-errors.log"
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = false
+  stop_on_error = true
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

@@ -121,11 +121,14 @@ Alternative without Litestream: stop the app, copy `otorem.db` back, start the a
 
 ```bash
 make test    # CGO_ENABLED=0 go test ./... -count=1
+make dev     # backend with hot reload (air): rebuild + restart on .go changes
 make web     # npm ci + build SPA → internal/api/webroot (embed)
 make build   # build SPA + binary to bin/otorem
-make run     # build + run dev mode on :8080
+make run     # build + run dev mode on :8080 (without hot reload)
 make container  # docker compose build, podman-compose fallback (Makefile)
 ```
+
+Full-stack dev flow (two terminals): `make dev` for the backend (air, ~1s auto-rebuild) and `cd web && npm run dev` for the frontend (Vite HMR, proxying `/api` to `:8080`). Air is pinned via the `tool` directive in go.mod — no manual install needed, just `go tool air`. Configuration lives in `.air.toml` (only non-test `.go` files trigger a rebuild; the SPA still goes through Vite).
 
 Pawukon fixtures are scraped once at dev time (not at runtime) with a separate module:
 
