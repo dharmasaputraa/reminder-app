@@ -1,0 +1,54 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"testing"
+)
+
+func TestHolidayCacheRoundTrip(t *testing.T) {
+	st, err := OpenInMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// miss → ErrNotFound
+	var dst map[string]any
+	if err := st.GetHolidayCache(ctx, 2026, "dayoffapi", &dst); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("miss: err = %v, want ErrNotFound", err)
+	}
+
+	want := map[string]any{"fetched_at": "2026-01-01T00:00:00Z", "holidays": []any{map[string]any{"date": "2026-03-19", "name": "Nyepi"}}}
+	if err := st.PutHolidayCache(ctx, 2026, "dayoffapi", want); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.GetHolidayCache(ctx, 2026, "dayoffapi", &dst); err != nil {
+		t.Fatal(err)
+	}
+	if dst["fetched_at"] != want["fetched_at"] {
+		t.Errorf("dst = %v, want %v", dst, want)
+	}
+
+	// upsert: source sama menimpa payload, tidak duplikat
+	newer := map[string]any{"fetched_at": "2026-06-01T00:00:00Z"}
+	if err := st.PutHolidayCache(ctx, 2026, "dayoffapi", newer); err != nil {
+		t.Fatal(err)
+	}
+	dst = nil
+	if err := st.GetHolidayCache(ctx, 2026, "dayoffapi", &dst); err != nil {
+		t.Fatal(err)
+	}
+	if dst["fetched_at"] != newer["fetched_at"] {
+		t.Errorf("upsert gagal: dst = %v", dst)
+	}
+
+	// key (year, source) beda tidak saling mengganggu
+	if err := st.GetHolidayCache(ctx, 2026, "kresnasatya", &dst); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("source lain: err = %v, want ErrNotFound", err)
+	}
+}
