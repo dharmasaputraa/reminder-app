@@ -5,16 +5,43 @@ import (
 	"testing"
 )
 
+// configEnvVars adalah seluruh variabel lingkungan yang dibaca Load().
+var configEnvVars = []string{
+	"ADDR",
+	"DATA_DIR",
+	"APP_SECRET",
+	"AUTH_MODE",
+	"CF_ACCESS_TEAM_DOMAIN",
+	"CF_ACCESS_AUD",
+	"ADMIN_EMAILS",
+	"TZ",
+}
+
+// setEnv memulai dari lingkungan bersih (semua var config dihapus),
+// menerapkan kv, lalu mengembalikan lingkungan semula (nilai lama atau
+// dihapus) saat cleanup — semantik t.Setenv. Jangan pakai t.Parallel():
+// env bersifat global terhadap proses.
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
+	clearEnv(t)
 	for k, v := range kv {
-		os.Setenv(k, v)
+		t.Setenv(k, v)
 	}
-	t.Cleanup(func() {
-		for k := range kv {
-			os.Unsetenv(k)
-		}
-	})
+}
+
+func clearEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range configEnvVars {
+		prev, had := os.LookupEnv(k)
+		os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				os.Setenv(k, prev)
+			} else {
+				os.Unsetenv(k)
+			}
+		})
+	}
 }
 
 func validEnv() map[string]string {
