@@ -44,6 +44,9 @@ func (k *Kresna) fetchYear(ctx context.Context, year int) ([]domain.Holiday, err
 		return nil, fmt.Errorf("kresna: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("kresna status %d", resp.StatusCode)
+	}
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	// bentuk respons sumber bisa array langsung atau dibungkus {"data":[...]}
 	var items []kresnaItem
