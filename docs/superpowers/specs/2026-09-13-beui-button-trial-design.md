@@ -3,6 +3,13 @@
 Tanggal: 2026-09-13
 Status: disetujui (pengguna, percakapan)
 
+> **EPILOG (2026-09-13):** Trial ini ternyata berbasis salah paham — komponen yang
+> dimaksud pengguna adalah **reUI** (reui.io), bukan beUI. Semua file beUI telah
+> dihapus dan `motion` di-uninstall (tree diverifikasi identik dengan HEAD). Spec
+> ini disimpan sebagai catatan teknis: beUI registry tidak kompatibel shadcn CLI,
+> instalasi manualesk per `llms.txt` beUI terbukti berfungsi penuh bila suatu saat
+> diperlukan.
+
 ## Tujuan
 
 Menguji integrasi [beUI](https://beui.dev/) (komponen animasi React 19 + Tailwind v4,
