@@ -37,7 +37,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <Link to="/" className="flex items-center gap-2">
             <img src="/logo-w.svg" alt="Logo otorem" className="size-6" />
-            <b>otorem</b>
           </Link>
           <nav className="ml-4 hidden items-center gap-1 md:flex">
             {NAV_SECTIONS.map((navSection) => (
@@ -104,7 +103,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <aside className="relative z-10 flex h-full w-[calc(100%-2rem)] max-w-[300px] flex-col border-r bg-background p-4 shadow-xl">
             <div className="flex items-center gap-2">
               <img src="/logo-w.svg" alt="Logo otorem" className="size-6" />
-              <b>otorem</b>
               <button
                 type="button"
                 onClick={() => setSheetOpen(false)}
