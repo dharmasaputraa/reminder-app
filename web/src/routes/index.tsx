@@ -34,12 +34,22 @@ const KIND_COLOR: Record<UpcomingItem['kind'], string> = {
   holiday: 'var(--color-amber-500)',
 }
 
+/** API titles are emoji-free (emoji live only in the notify path), so the
+ *  calendar carries its own kind marker. */
+function calendarEmoji(it: UpcomingItem): string {
+  if (it.kind === 'holiday') return '📅'
+  if (it.type === 'otongan') return '🛕'
+  if (it.type === 'birthday') return '🎂'
+  return '🎊'
+}
+
 /** UpcomingItem → reUI CalendarEvent: date-only, so start = end (local midnight). */
 function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<{ kind: UpcomingItem['kind'] }> {
   const start = localMidnight(it.date)
+  const emoji = calendarEmoji(it)
   return {
     id: `${it.kind}-${it.occasion_id ?? it.contact_id ?? 'event'}-${it.date}-${i}`,
-    title: it.title,
+    title: it.title.startsWith(emoji) ? it.title : `${emoji} ${it.title}`,
     start,
     end: new Date(start),
     allDay: true,
