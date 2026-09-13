@@ -19,7 +19,11 @@ import {
   EventCalendarViewSwitcher,
 } from '@/components/reui/event-calendar/event-calendar-nav'
 import type { CalendarEvent } from '@/components/reui/event-calendar/event-calendar-types'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 export const Route = createFileRoute('/')({ component: Dashboard })
@@ -44,11 +48,11 @@ function useUpcomingYears(years: number[]) {
   })
 }
 
-function badgeClass(days: number): string {
-  if (days <= 0) return 'bg-red-500'
-  if (days <= 3) return 'bg-orange-500'
-  if (days <= 7) return 'bg-amber-400'
-  return 'bg-slate-400'
+function urgencyClass(days: number): string {
+  if (days <= 0) return 'bg-destructive text-destructive-foreground'
+  if (days <= 3) return 'bg-warning text-warning-foreground'
+  if (days <= 7) return 'bg-amber-400 text-amber-950'
+  return 'bg-muted text-muted-foreground'
 }
 
 /** Local midnight — avoids the UTC offset shift of `new Date("YYYY-MM-DD")`. */
@@ -148,7 +152,15 @@ function Dashboard() {
   const events = useMemo(() => calendarItems.map(toCalendarEvent), [calendarItems])
   const yearsLoading = yearQueries.some((q) => q.isLoading)
 
-  if (up.isLoading) return <p className="text-slate-500">Memuat…</p>
+  if (up.isLoading)
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-[560px] w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+      </div>
+    )
   if (up.isError) return <p className="text-red-600">{String(up.error)}</p>
 
   return (
@@ -159,9 +171,13 @@ function Dashboard() {
       </div>
 
       {channels.data && channels.data.channels.length === 0 && (
-        <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-          Belum ada channel notifikasi — <Link to="/channels" className="underline">tambah dulu</Link> supaya pengingat benar-benar terkirim.
-        </div>
+        <Alert>
+          <AlertTitle>Belum ada channel notifikasi</AlertTitle>
+          <AlertDescription>
+            Tambah dulu supaya pengingat benar-benar terkirim —{' '}
+            <Link to="/channels" className="underline">tambah channel</Link>
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -204,11 +220,11 @@ function Dashboard() {
         )}
 
         {items.map((it: UpcomingItem, i: number) => (
-          <div key={`${it.kind}-${it.occasion_id ?? it.title}-${i}`}
-            className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${badgeClass(it.days_until)}`}>
+          <Card key={`${it.kind}-${it.occasion_id ?? it.title}-${i}`}
+            className="flex-row items-center gap-3 p-3">
+            <Badge className={`h-11 w-11 rounded-full text-xs font-bold ${urgencyClass(it.days_until)}`}>
               {it.days_until <= 0 ? 'HARI H' : `H-${it.days_until}`}
-            </div>
+            </Badge>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{it.title}</p>
               <p className="truncate text-sm text-slate-500">
@@ -216,14 +232,12 @@ function Dashboard() {
                 {it.pawukon ? ` · ${it.pawukon}` : ''}
               </p>
             </div>
-            {it.reminders && (
-              <div className="hidden shrink-0 gap-1 sm:flex">
-                {it.reminders.map((r) => (
-                  <span key={r} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">H-{r}</span>
-                ))}
-              </div>
-            )}
-          </div>
+            <div className="hidden shrink-0 gap-1 sm:flex">
+              {it.reminders?.map((r) => (
+                <Badge key={r} variant="secondary">H-{r}</Badge>
+              ))}
+            </div>
+          </Card>
         ))}
       </div>
     </div>
