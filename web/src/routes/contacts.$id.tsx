@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type Channel, type Contact, type Settings } from '../lib/api'
+import { hydratePrefsForm } from '../lib/prefs'
 
 export const Route = createFileRoute('/contacts/$id')({ component: ContactDetail })
 
@@ -24,6 +25,14 @@ function ContactDetail() {
   const [pawukon, setPawukon] = useState('')
   const [offsets, setOffsets] = useState('')
   const [enabled, setEnabled] = useState(true)
+
+  // Hidrasi form saat data kontak termuat/berubah (termasuk refetch setelah invalidate).
+  useEffect(() => {
+    if (!contact.data) return
+    const form = hydratePrefsForm(contact.data.prefs)
+    setOffsets(form.offsets)
+    setEnabled(form.enabled)
+  }, [contact.data])
 
   async function previewPawukon(d: string) {
     setPawukon('')
