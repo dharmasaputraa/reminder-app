@@ -101,8 +101,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <section className="flex flex-1 overflow-y-auto p-4 lg:p-6">
-        <div className="mx-auto w-full max-w-5xl">{children}</div>
+      <section className="flex flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-4 lg:px-6">{children}</div>
       </section>
       {sheetOpen && (
         <div className="absolute inset-0 z-50 flex md:hidden">
