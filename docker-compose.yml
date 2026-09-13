@@ -3,6 +3,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "${APP_PORT:-8080}:8080"   # dipublish agar cloudflared di HOST bisa mengarah ke sini
     volumes:
       - ./data:/data
     networks: [internal]

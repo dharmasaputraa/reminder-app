@@ -23,7 +23,8 @@ Butuh Docker (+ Compose) **atau** Podman (+ podman-compose), dan sebuah domain y
 ```bash
 git clone <repo-anda> otorem && cd otorem
 cp .env.example .env   # edit APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS
-docker compose --profile cloudflared up -d --build   # pengguna Podman: podman-compose --profile cloudflared up -d --build
+podman-compose up -d                 # app saja; tanpa profile bila cloudflared sudah jalan di host
+# (pengguna Docker: docker compose up -d --build; butuh tunnel in-container: tambahkan --profile cloudflared)
 ```
 
 Aplikasi hanya listen di network internal compose; akses publik lewat tunnel Cloudflare. Buka `https://otorem.domain-anda.com`.
@@ -32,11 +33,13 @@ Profil compose (semua opsional, `app` selalu ikut):
 
 | Profile | Isi | Perintah |
 |---|---|---|
-| `cloudflared` | tunnel ke internet (butuh `TUNNEL_TOKEN`) | `docker compose --profile cloudflared up -d` |
+| `cloudflared` | tunnel in-container (butuh `TUNNEL_TOKEN`) — **skip bila cloudflared sudah jalan di host** | `docker compose --profile cloudflared up -d` |
 | `gotify` | Gotify self-hosted (`http://gotify:80`) | `docker compose --profile gotify up -d` |
 | `litestream` | replikasi SQLite ke S3/R2 | `docker compose --profile litestream up -d` |
 
 Profil bisa digabung, mis. `docker compose --profile cloudflared --profile gotify --profile litestream up -d`.
+
+**Cloudflared di host (skema umum):** app mem-publish port `APP_PORT` (default `8080`) ke host — arahkan tunnel cloudflared Anda ke `http://localhost:8080` (sesuaikan `APP_PORT` di `.env` bila port dipakai). Auth tetap dari **Cloudflare Access** di sisi Cloudflare (team domain + policy email), bukan dari container.
 
 ### Environment
 
