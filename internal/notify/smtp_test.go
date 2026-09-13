@@ -3,6 +3,7 @@ package notify
 import (
 	"bufio"
 	"context"
+	"errors"
 	"net"
 	"strconv"
 	"strings"
@@ -88,6 +89,37 @@ func startFakeSMTP(t *testing.T) *fakeSMTP {
 	return f
 }
 
+// startSilentSMTP: listener yang menerima koneksi tapi tidak pernah
+// membalas — koneksi dipegang sampai cleanup, sehingga smtp.SendMail
+// macet menunggu salam 220; satu-satunya jalan keluar Send adalah
+// cabang ctx.Done. Mengembalikan port listener.
+func startSilentSMTP(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		close(done)
+		ln.Close()
+	})
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				<-done
+				c.Close()
+			}(conn)
+		}
+	}()
+	port, _ := strconv.Atoi(strings.Split(ln.Addr().String(), ":")[1])
+	return port
+}
+
 func TestSMTPSend(t *testing.T) {
 	f := startFakeSMTP(t)
 	port, _ := strconv.Atoi(strings.Split(f.addr, ":")[1])
@@ -96,8 +128,12 @@ func TestSMTPSend(t *testing.T) {
 	if err := s.Send(context.Background(), Message{Title: "🎂 ultah", Body: "isi pesan"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(f.data, "Subject: 🎂 ultah") {
-		t.Errorf("subject: %q", f.data)
+	if !strings.Contains(f.data, "Subject: =?utf-8?") {
+		t.Errorf("subject harus ter-encode RFC 2047: %q", f.data)
+	}
+	// body tetap UTF-8 mentah: emoji hanya di-encode pada header.
+	if !strings.Contains(f.data, "🎂 ultah") {
+		t.Errorf("emoji harus tetap mentah di body HTML: %q", f.data)
 	}
 	if !strings.Contains(f.data, "isi pesan") {
 		t.Errorf("body text: %q", f.data)
@@ -117,5 +153,19 @@ func TestSMTPContextTimeout(t *testing.T) {
 	defer cancel()
 	if err := s.Send(ctx, Message{Title: "x"}); err == nil {
 		t.Error("harus gagal")
+	}
+}
+
+func TestSMTPContextCancel(t *testing.T) {
+	// server menerima koneksi tapi tak pernah membalas: koneksi TCP
+	// berhasil, jadi Send hanya bisa keluar lewat ctx.Done — memvalidasi
+	// cabang <-ctx.Done() pada select.
+	port := startSilentSMTP(t)
+	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: port, From: "a@b.c", To: []string{"d@e.f"}})
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	err := s.Send(ctx, Message{Title: "x"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("harus DeadlineExceeded, dapat: %v", err)
 	}
 }

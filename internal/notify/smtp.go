@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net/smtp"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ func (s *SMTP) build(msg Message) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", s.cfg.From)
 	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(s.cfg.To, ", "))
-	fmt.Fprintf(&b, "Subject: %s\r\n", msg.Title)
+	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", msg.Title))
 	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=%s\r\n\r\n", boundary)
 	fmt.Fprintf(&b, "--%s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n", boundary, msg.Body)
