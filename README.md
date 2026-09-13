@@ -14,7 +14,7 @@
 - **Tes kirim** — tombol tes per channel dari halaman Channels.
 - **PWA** — manifest + service worker, installable dari HP.
 - **Observability** — `/healthz`, `/readyz`, dan `/metrics` (Prometheus).
-- **Jam kirim & timezone** — default 08:00 dan `Asia/Jakarta`, bisa diubah (mis. `Asia/Makassar` untuk WITA).
+- **Jam kirim & timezone** — default 08:00 dan `Asia/Jakarta`, diubah dari UI Settings (mis. `Asia/Makassar` untuk WITA).
 
 ## Quickstart
 
@@ -47,7 +47,7 @@ Profil bisa digabung, mis. `docker compose --profile cloudflared --profile gotif
 | `CF_ACCESS_TEAM_DOMAIN` | mode cfaccess | — | `team-anda.cloudflareaccess.com` |
 | `CF_ACCESS_AUD` | mode cfaccess | — | Application Audience tag dari Access |
 | `ADMIN_EMAILS` | disarankan | — | Email admin, pisah koma; admin bisa lihat semua kontak & jalan scheduler manual |
-| `TZ` | tidak | `Asia/Jakarta` | Timezone perhitungan jadwal (`Asia/Makassar` = WITA) |
+| `TZ` | tidak | `Asia/Jakarta` | Timezone proses container (log). **Timezone jadwal & jam kirim reminder diatur di UI Settings** (default `Asia/Jakarta`, ubah ke `Asia/Makassar` untuk WITA) |
 | `DATA_DIR` | tidak | `/data` (image) | Lokasi file SQLite |
 | `ADDR` | tidak | `:8080` | Alamat listen |
 | `TUNNEL_TOKEN` | profile cloudflared | — | Token tunnel Cloudflare |

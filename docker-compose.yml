@@ -29,6 +29,7 @@ services:
     image: litestream/litestream:latest
     profiles: [litestream]
     restart: unless-stopped
+    command: replicate -config /etc/litestream.yml
     volumes:
       - ./data:/data
       - ./deploy/litestream.yml:/etc/litestream.yml:ro
