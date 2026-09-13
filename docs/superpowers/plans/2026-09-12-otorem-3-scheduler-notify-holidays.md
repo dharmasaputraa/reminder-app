@@ -1,26 +1,26 @@
-# otorem Plan 3/4: Scheduler + Notifier + Holiday Provider Remote — Implementation Plan
+# otorem Plan 3/4: Scheduler + Notifier + Remote Holiday Provider — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Mesin pengirim notifikasi yang andal: interface `Notifier` (Gotify/Telegram/SMTP) dengan retry & backoff, scheduler scan-based per menit dengan dedupe + catch-up window, dan provider hari raya remote (libur nasional + hari raya Bali) dengan cache lokal.
+**Goal:** A reliable notification delivery engine: a `Notifier` interface (Gotify/Telegram/SMTP) with retry & backoff, a scan-based scheduler running every minute with dedupe + catch-up window, and remote holiday providers (national holidays + Balinese holidays) with a local cache.
 
-**Architecture:** `internal/notify` (interface + 3 implementasi + factory dari channel terenkripsi), `internal/scheduler` (Clock interface + Service scan-based stateless), penambahan kecil di `internal/api` (endpoint test channel + runner adapter), `internal/calendarprov` (2 provider remote + CachedRemote), dan wiring final di `cmd/server/main.go`.
+**Architecture:** `internal/notify` (interface + 3 implementations + factory from encrypted channels), `internal/scheduler` (Clock interface + stateless scan-based Service), small additions to `internal/api` (channel test endpoint + runner adapter), `internal/calendarprov` (2 remote providers + CachedRemote), and final wiring in `cmd/server/main.go`.
 
-**Tech Stack:** stdlib (`net/smtp`, `net/http`), `github.com/prometheus/client_golang` (sudah ada). Tidak ada dependency baru kecuali kebutuhan tak terduga.
+**Tech Stack:** stdlib (`net/smtp`, `net/http`), `github.com/prometheus/client_golang` (already present). No new dependencies unless something unexpected comes up.
 
 ## Global Constraints
 
-- Semua tanggal/timezone dikonversi HANYA di scheduler via `Snapshot.Timezone`; domain tetap civil `Date`.
-- **Dedupe**: sukses/missed dicatat ke `notification_log` (INSERT OR IGNORE). **Gagal TIDAK dicatat** → retry otomatis di scan berikutnya (maks 1×/menit) sampai sukses atau lewat window. Anti-spam: channel gagal di-skip 15 menit (in-memory `failUntil`).
-- `RunOnce` dijaga `sync.Mutex` (aman terhadap trigger manual bersamaan dengan ticker).
-- Scheduler TIDAK PERNAH panggil internet langsung — semua via `calendarprov.Provider`; provider remote gagal → cache/stale, scheduler tetap jalan.
-- Pesan notifikasi Bahasa Indonesia; HTML di-escape sebelum dikirim ke Telegram.
-- TDD: test dulu → merah → implement → hijau → commit.
-- Kontrak dari Plan 2 (HARUS dipakai persis): `api.Server.SetRunner(api.SchedulerRunner)`, `api.RunResult{Sent,Failed,Missed int}`, `api.Server.LoadSettings(ctx) api.Settings`, `notify` belum ada, `store.RecordNotification`, `store.ListChannels(ctx, ownerID)`, `secret.DeriveKey`, `calendarprov.Provider{Name,Category,HolidaysBetween}`, `domain.OccurrencesBetween`, `domain.ReminderDates` tidak dipakai scheduler (offset dihitung langsung: `occDate.AddDays(-off)`).
+- All date/timezone conversion happens ONLY in the scheduler via `Snapshot.Timezone`; domain stays on civil `Date`.
+- **Dedupe**: success/missed are recorded in `notification_log` (INSERT OR IGNORE). **Failures are NOT recorded** → automatic retry on the next scan (at most 1×/minute) until it succeeds or the window passes. Anti-spam: a failed channel is skipped for 15 minutes (in-memory `failUntil`).
+- `RunOnce` is guarded by a `sync.Mutex` (safe against a manual trigger racing the ticker).
+- The scheduler NEVER calls the internet directly — everything goes through `calendarprov.Provider`; a failing remote provider → cache/stale, and the scheduler keeps running.
+- Notification messages are in Indonesian; HTML is escaped before being sent to Telegram.
+- TDD: test first → red → implement → green → commit.
+- Contract from Plan 2 (MUST be used exactly): `api.Server.SetRunner(api.SchedulerRunner)`, `api.RunResult{Sent,Failed,Missed int}`, `api.Server.LoadSettings(ctx) api.Settings`, `notify` does not exist yet, `store.RecordNotification`, `store.ListChannels(ctx, ownerID)`, `secret.DeriveKey`, `calendarprov.Provider{Name,Category,HolidaysBetween}`, `domain.OccurrencesBetween`, `domain.ReminderDates` is not used by the scheduler (offsets are computed directly: `occDate.AddDays(-off)`).
 
 ---
 
-### Task 1: notify core — Message, Notifier, template pesan
+### Task 1: notify core — Message, Notifier, message templates
 
 **Files:**
 - Create: `internal/notify/notify.go`
@@ -30,7 +30,7 @@
 **Interfaces:**
 - Produces:
 ```go
-type Message struct{ Title string; Body string; Priority int } // Priority 1..10 (ala Gotify)
+type Message struct{ Title string; Body string; Priority int } // Priority 1..10 (Gotify-style)
 type Notifier interface {
 	Name() string
 	Send(ctx context.Context, msg Message) error
@@ -41,7 +41,7 @@ func HolidayMessage(h domain.Holiday, daysUntil int, late bool) Message
 func TanggalIndo(d domain.Date) string // "Rabu, 17 Juni 2026"
 ```
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [ ] **Step 1: Write the failing test**
 
 `internal/notify/message_test.go`:
 
@@ -80,13 +80,13 @@ func TestOccurrenceMessageBirthdayToday(t *testing.T) {
 	if !strings.Contains(m.Title, "🎂") || !strings.Contains(m.Title, "hari ini") {
 		t.Errorf("title = %q", m.Title)
 	}
-	if m.Priority != 8 { t.Errorf("hari ini harus prioritas 8, dapat %d", m.Priority) }
+	if m.Priority != 8 { t.Errorf("today must be priority 8, got %d", m.Priority) }
 }
 
 func TestLateSuffix(t *testing.T) {
 	m := OccurrenceMessage("Budi", domain.Occurrence{Date: domain.NewDate(2026, 6, 17),
 		Type: domain.Birthday, Number: 30}, 1, true)
-	if !strings.Contains(m.Body, "terlambat") { t.Errorf("late flag tidak terlihat: %q", m.Body) }
+	if !strings.Contains(m.Body, "terlambat") { t.Errorf("late flag not visible: %q", m.Body) }
 }
 
 func TestHolidayMessage(t *testing.T) {
@@ -98,19 +98,19 @@ func TestHolidayMessage(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**
+- [ ] **Step 2: Run — FAIL**
 
 Run: `go test ./internal/notify/ -v`
 Expected: FAIL — `OccurrenceMessage undefined`
 
-- [ ] **Step 3: Implementasi**
+- [ ] **Step 3: Implementation**
 
 `internal/notify/notify.go`:
 
 ```go
-// Package notify: pengiriman notifikasi ke Gotify, Telegram, dan Email.
-// Interface Notifier diimplementasi 3 channel; factory dari channel DB ada
-// di factory.go.
+// Package notify: notification delivery to Gotify, Telegram, and Email.
+// The Notifier interface is implemented by 3 channels; the factory built from
+// DB channels lives in factory.go.
 package notify
 
 import "context"
@@ -118,7 +118,7 @@ import "context"
 type Message struct {
 	Title    string
 	Body     string
-	Priority int // 1..10, ala Gotify; SMTP mengabaikan
+	Priority int // 1..10, Gotify-style; SMTP ignores it
 }
 
 type Notifier interface {
@@ -142,8 +142,8 @@ import (
 var bulanIndo = [12]string{"Januari", "Februari", "Maret", "April", "Mei", "Juni",
 	"Juli", "Agustus", "September", "Oktober", "November", "Desember"}
 
-// TanggalIndo: "Rabu, 17 Juni 2026" — nama hari memakai saptawara
-// (Redite=Minggu, Soma=Senin, Anggara=Selasa, Buda=Rabu, dst).
+// TanggalIndo: "Rabu, 17 Juni 2026" — the day name uses saptawara
+// (Redite=Sunday, Soma=Monday, Anggara=Tuesday, Buda=Wednesday, etc.).
 func TanggalIndo(d domain.Date) string {
 	return fmt.Sprintf("%s, %d %s %d", domain.Saptawara[d.Weekday()], d.Day, bulanIndo[d.Month-1], d.Year)
 }
@@ -202,7 +202,7 @@ func HolidayMessage(h domain.Holiday, daysUntil int, late bool) Message {
 }
 ```
 
-- [ ] **Step 4: Run — PASS lalu commit**
+- [ ] **Step 4: Run — PASS, then commit**
 
 Run: `go test ./internal/notify/ -v`
 
@@ -212,7 +212,7 @@ git add internal/notify/ && git commit -m "feat(notify): message/notifier contra
 
 ---
 
-### Task 2: Notifier Gotify
+### Task 2: Gotify notifier
 
 **Files:**
 - Create: `internal/notify/gotify.go`
@@ -220,9 +220,9 @@ git add internal/notify/ && git commit -m "feat(notify): message/notifier contra
 
 **Interfaces:**
 - Consumes: `notify.Message`, `notify.Notifier`
-- Produces: `type GotifyConfig struct{ BaseURL string `json:"base_url"`; Token string `json:"token"`; Priority int `json:"priority,omitempty"` }`; `func NewGotify(cfg GotifyConfig) *Gotify` (POST `{BaseURL}/message?token=...`, JSON `{title,message,priority}`, Priority default 5, timeout 10s, error jika status non-2xx).
+- Produces: `type GotifyConfig struct{ BaseURL string `json:"base_url"`; Token string `json:"token"`; Priority int `json:"priority,omitempty"` }`; `func NewGotify(cfg GotifyConfig) *Gotify` (POST `{BaseURL}/message?token=...`, JSON `{title,message,priority}`, Priority defaults to 5, 10s timeout, error on non-2xx status).
 
-- [ ] **Step 1: Test (gagal)**
+- [ ] **Step 1: Test (failing)**
 
 `internal/notify/gotify_test.go`:
 
@@ -266,12 +266,12 @@ func TestGotifyErrorStatus(t *testing.T) {
 	defer srv.Close()
 	g := NewGotify(GotifyConfig{BaseURL: srv.URL, Token: "x"})
 	if err := g.Send(context.Background(), Message{Title: "t"}); err == nil || !strings.Contains(err.Error(), "401") {
-		t.Errorf("err = %v, harus 401", err)
+		t.Errorf("err = %v, must be 401", err)
 	}
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/notify/gotify.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/notify/gotify.go`
 
 ```go
 package notify
@@ -330,7 +330,7 @@ func (g *Gotify) Test(ctx context.Context) error {
 }
 ```
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/notify/ -v`
 
@@ -340,16 +340,16 @@ git add internal/notify/ && git commit -m "feat(notify): gotify notifier"
 
 ---
 
-### Task 3: Notifier Telegram
+### Task 3: Telegram notifier
 
 **Files:**
 - Create: `internal/notify/telegram.go`
 - Test: `internal/notify/telegram_test.go`
 
 **Interfaces:**
-- Produces: `type TelegramConfig struct{ BotToken string `json:"bot_token"`; ChatID string `json:"chat_id"` }`; `func NewTelegram(cfg TelegramConfig) *Telegram` — POST `{base}/bot{token}/sendMessage` JSON `{chat_id, text, parse_mode:"HTML"}`; HTML-escape judul+isi; error jika `"ok":false`; field unexported `baseURL` (default `https://api.telegram.org`) untuk di-override test.
+- Produces: `type TelegramConfig struct{ BotToken string `json:"bot_token"`; ChatID string `json:"chat_id"` }`; `func NewTelegram(cfg TelegramConfig) *Telegram` — POST `{base}/bot{token}/sendMessage` JSON `{chat_id, text, parse_mode:"HTML"}`; HTML-escapes title+body; errors when `"ok":false`; an unexported `baseURL` field (default `https://api.telegram.org`) for test overriding.
 
-- [ ] **Step 1: Test (gagal)**
+- [ ] **Step 1: Test (failing)**
 
 `internal/notify/telegram_test.go`:
 
@@ -383,7 +383,7 @@ func TestTelegramSend(t *testing.T) {
 	}
 	if !strings.HasSuffix(gotPath, "/botBOT123/sendMessage") { t.Errorf("path = %q", gotPath) }
 	if !strings.Contains(gotBody, `"chat_id":"-10099"`) { t.Errorf("body = %q", gotBody) }
-	if strings.Contains(gotBody, "<b>Halō</b>") { t.Errorf("HTML tidak di-escape: %q", gotBody) }
+	if strings.Contains(gotBody, "<b>Halō</b>") { t.Errorf("HTML was not escaped: %q", gotBody) }
 }
 
 func TestTelegramAPIError(t *testing.T) {
@@ -400,14 +400,14 @@ func TestTelegramAPIError(t *testing.T) {
 }
 
 func TestTelegramJSONShape(t *testing.T) {
-	// pastikan payload valid: parse kembali
+	// make sure the payload is valid: parse it back
 	var m map[string]any
 	_ = json.Unmarshal([]byte(`{"chat_id":"1","text":"x","parse_mode":"HTML"}`), &m)
-	if m["parse_mode"] != "HTML" { t.Fatal("sanity json gagal") }
+	if m["parse_mode"] != "HTML" { t.Fatal("json sanity failed") }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/notify/telegram.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/notify/telegram.go`
 
 ```go
 package notify
@@ -471,7 +471,7 @@ func (t *Telegram) Test(ctx context.Context) error {
 }
 ```
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/notify/ -v`
 
@@ -481,16 +481,16 @@ git add internal/notify/ && git commit -m "feat(notify): telegram notifier denga
 
 ---
 
-### Task 4: Notifier Email (SMTP) + fake SMTP server test
+### Task 4: Email notifier (SMTP) + fake SMTP server test
 
 **Files:**
 - Create: `internal/notify/smtp.go`
-- Test: `internal/notify/smtp_test.go` (berisi minimal fake SMTP server)
+- Test: `internal/notify/smtp_test.go` (contains a minimal fake SMTP server)
 
 **Interfaces:**
-- Produces: `type SMTPConfig struct{ Host string `json:"host"`; Port int `json:"port"`; Username, Password, From string `json:"..."`; To []string `json:"to"` }`; `func NewSMTP(cfg SMTPConfig) *SMTP` — `smtp.SendMail(host:port, PlainAuth, From, To, raw)` dengan pesan `multipart/alternative` (text + HTML), Subject = Title; Send menghormati ctx (goroutine + select).
+- Produces: `type SMTPConfig struct{ Host string `json:"host"`; Port int `json:"port"`; Username, Password, From string `json:"..."`; To []string `json:"to"` }`; `func NewSMTP(cfg SMTPConfig) *SMTP` — `smtp.SendMail(host:port, PlainAuth, From, To, raw)` with a `multipart/alternative` message (text + HTML), Subject = Title; Send honors ctx (goroutine + select).
 
-- [ ] **Step 1: Test + fake SMTP server (gagal)**
+- [ ] **Step 1: Test + fake SMTP server (failing)**
 
 `internal/notify/smtp_test.go`:
 
@@ -507,8 +507,8 @@ import (
 	"time"
 )
 
-// fakeSMTP: server SMTP minimal untuk test — cukup protokol dasar
-// (220/250/354/221) dan menangkap isi DATA.
+// fakeSMTP: a minimal SMTP server for tests — just enough of the protocol
+// (220/250/354/221) and captures the DATA payload.
 type fakeSMTP struct {
 	addr      string
 	data      string
@@ -572,26 +572,26 @@ func TestSMTPSend(t *testing.T) {
 	f := startFakeSMTP(t)
 	port, _ := strconv.Atoi(strings.Split(f.addr, ":")[1])
 	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: port, From: "otorem@x.id",
-		To: []string{"budi@x.id"}}) // tanpa auth — fake menerima apa pun
+		To: []string{"budi@x.id"}}) // no auth — the fake accepts anything
 	if err := s.Send(context.Background(), Message{Title: "🎂 ultah", Body: "isi pesan"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(f.data, "Subject: 🎂 ultah") { t.Errorf("subject: %q", f.data) }
 	if !strings.Contains(f.data, "isi pesan") { t.Errorf("body text: %q", f.data) }
-	if !strings.Contains(f.data, "multipart/alternative") { t.Errorf("harus multipart: %q", f.data) }
+	if !strings.Contains(f.data, "multipart/alternative") { t.Errorf("must be multipart: %q", f.data) }
 	if len(f.rcptTo) != 1 || !strings.Contains(f.rcptTo[0], "budi@x.id") { t.Errorf("rcpt: %v", f.rcptTo) }
 }
 
 func TestSMTPContextTimeout(t *testing.T) {
-	// port yang pasti tidak melayang: koneksi akan gagal/timeout
+	// a port that definitely has nothing listening: the connection will fail/time out
 	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: 1, From: "a@b.c", To: []string{"d@e.f"}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := s.Send(ctx, Message{Title: "x"}); err == nil { t.Error("harus gagal") }
+	if err := s.Send(ctx, Message{Title: "x"}); err == nil { t.Error("must fail") }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/notify/smtp.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/notify/smtp.go`
 
 ```go
 package notify
@@ -659,9 +659,9 @@ func (s *SMTP) Test(ctx context.Context) error {
 }
 ```
 
-Catatan implementasi untuk engineer: `net/smtp` sudah cukup; jangan tambah library email eksternal (YAGNI). PLAIN auth tanpa TLS hanya dipakai di test lokal; produksi diarahkan ke relay (README).
+Implementation note for the engineer: `net/smtp` is enough; do not add an external email library (YAGNI). PLAIN auth without TLS is only used in local tests; production points at a relay (README).
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/notify/ -v`
 
@@ -671,19 +671,19 @@ git add internal/notify/ && git commit -m "feat(notify): smtp notifier dengan mu
 
 ---
 
-### Task 5: Factory channel → Notifier + endpoint "test send"
+### Task 5: Channel → Notifier factory + "test send" endpoint
 
 **Files:**
 - Create: `internal/notify/factory.go`
 - Create: `internal/api/channeltest.go`
-- Modify: `internal/api/server.go` (tambah 1 route)
+- Modify: `internal/api/server.go` (add 1 route)
 - Test: `internal/notify/factory_test.go`, `internal/api/channeltest_test.go`
 
 **Interfaces:**
-- Consumes: `store.Channel`, `secret.Decrypt`, implementasi Task 2–4, `api.Server` (field `key`, `st`, `scope`, `pathID`, `respondErr` dari Plan 2)
+- Consumes: `store.Channel`, `secret.Decrypt`, the Task 2–4 implementations, `api.Server` (fields `key`, `st`, `scope`, `pathID`, `respondErr` from Plan 2)
 - Produces: `func NewFromChannel(ch store.Channel, key []byte) (Notifier, error)`; endpoint `POST /api/v1/channels/:id/test` (200/400/404/502).
 
-- [ ] **Step 1: Test factory (gagal)**
+- [ ] **Step 1: Factory test (failing)**
 
 `internal/notify/factory_test.go`:
 
@@ -723,12 +723,12 @@ func TestNewFromChannel(t *testing.T) {
 
 	if _, err := NewFromChannel(store.Channel{Type: " fax",
 		ConfigEnc: enc(`{}`)}, key); err == nil {
-		t.Error("tipe asing harus error")
+		t.Error("an unknown type must error")
 	}
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/notify/factory.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/notify/factory.go`
 
 ```go
 package notify
@@ -741,7 +741,7 @@ import (
 	"otorem/internal/store"
 )
 
-// NewFromChannel: decrypt config channel → Notifier konkret.
+// NewFromChannel: decrypt the channel config → a concrete Notifier.
 func NewFromChannel(ch store.Channel, key []byte) (Notifier, error) {
 	plain, err := secret.Decrypt(key, ch.ConfigEnc)
 	if err != nil {
@@ -766,9 +766,9 @@ func NewFromChannel(ch store.Channel, key []byte) (Notifier, error) {
 }
 ```
 
-- [ ] **Step 3: Route + handler test-send (dengan test)**
+- [ ] **Step 3: Test-send route + handler (with tests)**
 
-Tambahkan di `internal/api/server.go` — tepat setelah baris `apiG.DELETE("/channels/:id", ...)`:
+Add to `internal/api/server.go` — right after the `apiG.DELETE("/channels/:id", ...)` line:
 
 ```go
 	apiG.POST("/channels/:id/test", s.handleChannelTest)
@@ -785,7 +785,7 @@ import (
 	"otorem/internal/notify"
 )
 
-// handleChannelTest: kirim pesan tes ke channel — validasi config end-to-end.
+// handleChannelTest: send a test message to the channel — validates the config end-to-end.
 func (s *Server) handleChannelTest(c *gin.Context) {
 	id, ok := pathID(c)
 	if !ok { return }
@@ -831,14 +831,14 @@ func TestChannelTestSend(t *testing.T) {
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels/1/test", "admin@x.id", ""))
 	if w.Code != 200 || !gotPost { t.Errorf("test send: %d %s", w.Code, w.Body.String()) }
 
-	// channel tidak ada → 404
+	// a missing channel → 404
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels/999/test", "admin@x.id", ""))
-	if w.Code != 404 { t.Errorf("channel hilang: %d", w.Code) }
+	if w.Code != 404 { t.Errorf("missing channel: %d", w.Code) }
 }
 ```
 
-- [ ] **Step 4: Run — PASS lalu commit**
+- [ ] **Step 4: Run — PASS, then commit**
 
 Run: `go test ./internal/notify/ ./internal/api/ -v`
 
@@ -855,7 +855,7 @@ git add internal/ && git commit -m "feat(notify+api): channel factory + endpoint
 - Test: `internal/scheduler/scheduler_test.go`
 
 **Interfaces:**
-- Consumes: `store.Store`, `store.NotificationEntry`, `calendarprov.Provider`, `notify.Notifier`, `domain.OccurrencesBetween`, `domain.Saptawara` tidak dipakai di sini
+- Consumes: `store.Store`, `store.NotificationEntry`, `calendarprov.Provider`, `notify.Notifier`, `domain.OccurrencesBetween`; `domain.Saptawara` is not used here
 - Produces:
 ```go
 type Clock interface{ Now() time.Time }
@@ -881,22 +881,22 @@ type Service struct {
 	Clock     Clock
 	Providers []calendarprov.Provider
 	Resolve   Resolver
-	failUntil map[int64]time.Time // channel gagal → skip sampai
+	failUntil map[int64]time.Time // failed channel → skip until
 	mu        sync.Mutex
 }
 func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error)
 ```
 
-**Semantik RunOnce (dokumen keputusan — ikuti persis):**
-1. Waktu kirim reminder ber-tanggal `R` = `R` pukul `SendTime` (timezone Snapshot). Due jika `sendAt ≤ now`.
-2. Window catch-up: `dueStart = today@SendTime − CatchUpHours`. `sendAt < dueStart` → catat `missed` (per channel, dedupe). `dueStart ≤ sendAt ≤ now` → kirim; jika `now − sendAt > 1 jam` → pesan diberi label `late`.
-3. Rentang scan: `from = today − (maxOffset + ceil(CatchUp/24) + 2 hari)` s.d. `to = today + maxOffset + 2`. Reminder lebih tua dari itu tidak pernah di-record (bounded, tidak menumpuk).
-4. Kirim sukses → record `sent`. Kirim gagal → TIDAK di-record (retry scan berikutnya); channel diskip 15 menit via `failUntil`.
-5. Channel tujuan per kontak: `prefs.ChannelIDs` (yang enabled & milik owner) — kosong → semua channel enabled milik owner.
-6. Hari raya memakai `DefaultOffsets` + `HolidayCategories` filter, key = `HolidayKey(category, h)`.
-7. `RunOnce` serial via `mutex`.
+**RunOnce semantics (decision record — follow exactly):**
+1. The send time for a reminder dated `R` = `R` at `SendTime` (Snapshot timezone). Due when `sendAt ≤ now`.
+2. Catch-up window: `dueStart = today@SendTime − CatchUpHours`. `sendAt < dueStart` → record `missed` (per channel, deduped). `dueStart ≤ sendAt ≤ now` → send; if `now − sendAt > 1 hour` → the message is labeled `late`.
+3. Scan range: `from = today − (maxOffset + ceil(CatchUp/24) + 2 days)` through `to = today + maxOffset + 2`. Reminders older than that are never recorded (bounded, no pile-up).
+4. Successful send → record `sent`. Failed send → NOT recorded (retried on the next scan); the channel is skipped for 15 minutes via `failUntil`.
+5. Target channels per contact: `prefs.ChannelIDs` (enabled & owned by the owner) — empty → all enabled channels owned by the owner.
+6. Holidays use `DefaultOffsets` + the `HolidayCategories` filter, key = `HolidayKey(category, h)`.
+7. `RunOnce` is serialized via a `mutex`.
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [ ] **Step 1: Write the failing test**
 
 `internal/scheduler/scheduler_test.go`:
 
@@ -942,8 +942,8 @@ func snapUTC() Snapshot {
 		HolidayCategories: map[string]bool{"pawukon": true, "saka": true, "national": true}}
 }
 
-// seed: user@1, contact, otonan base = today-210 (occurrence TEPAT di `today`),
-// 1 channel gotify.
+// seed: user@1, contact, otonan base = today-210 (occurrence EXACTLY on `today`),
+// 1 gotify channel.
 func seed(t *testing.T, st *store.Store, today domain.Date) {
 	t.Helper()
 	ctx := context.Background()
@@ -979,7 +979,7 @@ func newHarness(t *testing.T, now time.Time) *harness {
 	return &harness{st: st, fc: fc, notif: n, svc: svc}
 }
 
-// hari ini pukul 08:02 UTC → offset H dikirim; H-1..H-7 (4 offset lain) → missed.
+// today at 08:02 UTC → the D offset is sent; D-1..D-7 (the other 4 offsets) → missed.
 func TestRunOnceOnTime(t *testing.T) {
 	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
 	h := newHarness(t, now)
@@ -989,25 +989,25 @@ func TestRunOnceOnTime(t *testing.T) {
 		t.Fatalf("res = %+v, want Sent1 Missed4", res)
 	}
 	if len(h.notif.sent) != 1 { t.Fatalf("notif = %d", len(h.notif.sent)) }
-	if strings.Contains(h.notif.sent[0].Body, "terlambat") { t.Error("tidak boleh late") }
+	if strings.Contains(h.notif.sent[0].Body, "terlambat") { t.Error("must not be late") }
 
-	// run ke-2 → semua ter-dedupe
+	// 2nd run → everything is deduped
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
-	if res.Sent != 0 || res.Missed != 0 { t.Errorf("dedupe gagal: %+v", res) }
+	if res.Sent != 0 || res.Missed != 0 { t.Errorf("dedupe failed: %+v", res) }
 }
 
-// pukul 07:00 → offset H-1 (kemarin 08:00) masih dalam window → kirim late;
-// H-2..H-7 → missed; H belum due.
+// at 07:00 → the D-1 offset (yesterday 08:00) is still within the window → send late;
+// D-2..D-7 → missed; D is not due yet.
 func TestRunOnceCatchUpLate(t *testing.T) {
 	now := time.Date(2026, 6, 17, 7, 0, 0, 0, time.UTC)
 	h := newHarness(t, now)
 	res, err := h.svc.RunOnce(context.Background(), snapUTC())
 	if err != nil { t.Fatal(err) }
 	if res.Sent != 1 || res.Missed != 3 { t.Fatalf("res = %+v, want Sent1 Missed3", res) }
-	if !strings.Contains(h.notif.sent[0].Body, "terlambat") { t.Errorf("harus late: %q", h.notif.sent[0].Body) }
+	if !strings.Contains(h.notif.sent[0].Body, "terlambat") { t.Errorf("must be late: %q", h.notif.sent[0].Body) }
 }
 
-// send gagal → tidak recorded → retry setelah backoff 15 menit lewat.
+// send fails → not recorded → retried after the 15-minute backoff passes.
 func TestRunOnceRetryAfterFailure(t *testing.T) {
 	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
 	h := newHarness(t, now)
@@ -1015,16 +1015,16 @@ func TestRunOnceRetryAfterFailure(t *testing.T) {
 	res, _ := h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Failed != 1 { t.Fatalf("failed = %d", res.Failed) }
 
-	// 1 menit kemudian: masih dalam backoff → tidak ada attempt
+	// 1 minute later: still in backoff → no attempt
 	h.fc.Add(time.Minute)
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
-	if res.Failed != 0 || res.Sent != 0 { t.Errorf("backoff bocor: %+v", res) }
+	if res.Failed != 0 || res.Sent != 0 { t.Errorf("backoff leaked: %+v", res) }
 
-	// 16 menit kemudian + sudah sukses → sent
+	// 16 minutes later + now succeeding → sent
 	h.fc.Add(16 * time.Minute)
 	h.notif.err = nil
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
-	if res.Sent != 1 { t.Errorf("retry gagal: %+v", res) }
+	if res.Sent != 1 { t.Errorf("retry failed: %+v", res) }
 }
 
 func TestHolidayReminder(t *testing.T) {
@@ -1037,10 +1037,10 @@ func TestHolidayReminder(t *testing.T) {
 	if res.Sent != 2 { t.Fatalf("sent = %d, want 2 (otoman + galungan)", res.Sent) }
 	found := false
 	for _, m := range h.notif.sent { if strings.Contains(m.Title, "Galungan") { found = true } }
-	if !found { t.Error("pesan galungan tidak terkirim") }
-	// dedupe holiday
+	if !found { t.Error("the galungan message was not sent") }
+	// holiday dedupe
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
-	if res.Sent != 0 { t.Errorf("holiday dedupe gagal: %+v", res) }
+	if res.Sent != 0 { t.Errorf("holiday dedupe failed: %+v", res) }
 }
 
 func TestHolidayKey(t *testing.T) {
@@ -1049,17 +1049,17 @@ func TestHolidayKey(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**
+- [ ] **Step 2: Run — FAIL**
 
 Run: `go test ./internal/scheduler/ -v`
 Expected: FAIL — `Snapshot`/`Service` undefined
 
-- [ ] **Step 3: Implementasi scheduler.go**
+- [ ] **Step 3: Implement scheduler.go**
 
 ```go
-// Package scheduler: scan-based reminder engine. Stateless terhadap DB —
-// keputusan kirim/missed dihitung tiap scan dari (now, settings, contacts,
-// notification_log). Idempotent: aman crash/restart.
+// Package scheduler: scan-based reminder engine. Stateless with respect to the DB —
+// the send/missed decision is recomputed on every scan from (now, settings,
+// contacts, notification_log). Idempotent: crash/restart safe.
 package scheduler
 
 import (
@@ -1134,7 +1134,7 @@ func maxOffset(offsets []int) int {
 	return m
 }
 
-// targetChannels: channel tujuan satu kontak.
+// targetChannels: the target channels for one contact.
 func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions) []store.Channel {
 	all, err := s.St.ListChannels(ctx, cw.OwnerID)
 	if err != nil { return nil }
@@ -1173,7 +1173,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	to := today.AddDays(maxOff + 2)
 
 	// ---- occasions ----
-	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: semua kontak
+	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: all contacts
 	if err != nil { return res, err }
 	for _, cw := range contacts {
 		if cw.Prefs != nil && !cw.Prefs.Enabled { continue }
@@ -1214,7 +1214,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		if !snap.HolidayCategories[p.Category()] { continue }
 		hs, err := p.HolidaysBetween(ctx, from, to)
 		if err != nil {
-			// provider remote gagal → lewati; pawukon computed tetap jalan
+			// remote provider failed → skip; computed pawukon keeps working
 			continue
 		}
 		for _, h := range hs {
@@ -1226,7 +1226,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 				entry := store.NotificationEntry{HolidayKey: &hkey,
 					OccurrenceDate: h.Date, OffsetDays: off}
 				if sendAt.Before(dueStart) {
-					// holiday → semua channel milik SEMUA user (broadcast)
+					// holiday → all channels of ALL users (broadcast)
 					users, err := s.St.ListUsers(ctx)
 					if err != nil { continue }
 					for _, u := range users {
@@ -1274,7 +1274,7 @@ func (s *Service) deliver(ctx context.Context, channels []store.Channel,
 			continue
 		}
 		if err := n.Send(ctx, msg); err != nil {
-			res.Failed++ // TIDAK di-record → retry scan berikutnya
+			res.Failed++ // NOT recorded → retried on the next scan
 			s.failUntil[ch.ID] = now.Add(failBackoff)
 			notifCounter.WithLabelValues("failed", kind).Inc()
 			continue
@@ -1288,14 +1288,14 @@ func (s *Service) deliver(ctx context.Context, channels []store.Channel,
 }
 ```
 
-Catatan keputusan yang tersirat di kode (jelaskan ke reviewer bila ditanya):
-- Hari raya di-broadcast ke channel SEMUA user (milik siapa pun); occasion hanya ke owner kontak. Untuk 1 keluarga = 1 user, hasilnya identik.
-- `missed` di-record per channel supaya dedupe konsisten; counter Prometheus membedakan `kind`.
+Decisions implied by the code (explain them to a reviewer if asked):
+- Holidays are broadcast to the channels of ALL users (whoever owns them); occasions only go to the contact's owner. For one family = one user, the result is identical.
+- `missed` is recorded per channel so dedupe stays consistent; the Prometheus counter distinguishes `kind`.
 
 - [ ] **Step 4: Run — PASS**
 
 Run: `go test ./internal/scheduler/ -v`
-Expected: PASS semua. Jika `TestRunOnceCatchUpLate` salah offset (Sent/Missed beda 1): cek `dueStart` — pastikan pakai `sendToday` (today@08:00), bukan `now`.
+Expected: all PASS. If `TestRunOnceCatchUpLate` is off by one (Sent/Missed differ by 1): check `dueStart` — make sure it uses `sendToday` (today@08:00), not `now`.
 
 ```bash
 gofmt -w internal/ && go vet ./...
@@ -1304,7 +1304,7 @@ git add internal/scheduler/ && git commit -m "feat(scheduler): scan-based runonc
 
 ---
 
-### Task 7: Loop ticker + adapter runner di API
+### Task 7: Ticker loop + runner adapter in the API
 
 **Files:**
 - Create: `internal/scheduler/loop.go`
@@ -1313,9 +1313,9 @@ git add internal/scheduler/ && git commit -m "feat(scheduler): scan-based runonc
 
 **Interfaces:**
 - Consumes: `api.SchedulerRunner` + `api.RunResult` (Plan 2), `Service.RunOnce`
-- Produces: `func (s *Service) Loop(ctx context.Context, every time.Duration, snapshot func(context.Context) (Snapshot, error))`; `type SchedulerRunnerFunc func(ctx context.Context) (RunResult, error)` + method `RunOnce` (adapter agar closure main.go memenuhi interface).
+- Produces: `func (s *Service) Loop(ctx context.Context, every time.Duration, snapshot func(context.Context) (Snapshot, error))`; `type SchedulerRunnerFunc func(ctx context.Context) (RunResult, error)` + a `RunOnce` method (adapter so main.go's closure satisfies the interface).
 
-- [ ] **Step 1: Test runner adapter + endpoint (gagal)**
+- [ ] **Step 1: Runner adapter + endpoint test (failing)**
 
 `internal/api/runner_test.go`:
 
@@ -1345,12 +1345,12 @@ func TestSchedulerRunEndpointWithRunner(t *testing.T) {
 }
 
 func TestLoopStopsOnCancel(t *testing.T) {
-	// loop harus berhenti saat ctx cancel — diuji via scheduler package di bawah
+	// the loop must stop when ctx is cancelled — tested via the scheduler package below
 }
 ```
-Tambahkan `"strings"` di import bila belum ada.
+Add `"strings"` to the imports if it is not there yet.
 
-Tambahkan juga test loop di `internal/scheduler/loop_test.go`:
+Also add a loop test in `internal/scheduler/loop_test.go`:
 
 ```go
 package scheduler
@@ -1372,15 +1372,15 @@ func TestLoopRunsAndStops(t *testing.T) {
 	select {
 	case <-called:
 	case <-time.After(2 * time.Second):
-		t.Fatal("loop tidak pernah menjalankan scan")
+		t.Fatal("the loop never ran a scan")
 	}
 	cancel()
-	// tidak ada cara sinkron menunggu exit tanpa instrumentasi — cukup pastikan
-	// tidak panic dan test selesai; race detector yang menjaga.
+	// there is no synchronous way to wait for exit without instrumentation — just make
+	// sure nothing panics and the test finishes; the race detector is the real guard.
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement
+- [ ] **Step 2: Run — FAIL**, then implement
 
 `internal/api/runner.go`:
 
@@ -1389,7 +1389,7 @@ package api
 
 import "context"
 
-// SchedulerRunnerFunc: adapter closure → api.SchedulerRunner (dipakai main.go).
+// SchedulerRunnerFunc: adapter from a closure to api.SchedulerRunner (used by main.go).
 type SchedulerRunnerFunc func(ctx context.Context) (RunResult, error)
 
 func (f SchedulerRunnerFunc) RunOnce(ctx context.Context) (RunResult, error) { return f(ctx) }
@@ -1406,8 +1406,8 @@ import (
 	"time"
 )
 
-// Loop: ticker per menit; snapshot settings diambil tiap iterasi supaya
-// perubahan Settings (timezone/jam kirim/catch-up) berlaku tanpa restart.
+// Loop: a per-minute ticker; the settings snapshot is taken each iteration so
+// Settings changes (timezone/send time/catch-up) apply without a restart.
 func (s *Service) Loop(ctx context.Context, every time.Duration,
 	snapshot func(context.Context) (Snapshot, error)) {
 	t := time.NewTicker(every)
@@ -1432,7 +1432,7 @@ func (s *Service) Loop(ctx context.Context, every time.Duration,
 }
 ```
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/scheduler/ ./internal/api/ -v`
 
@@ -1442,13 +1442,13 @@ git add internal/ && git commit -m "feat(scheduler+api): loop ticker per menit +
 
 ---
 
-### Task 8: Provider remote hari raya (dayoffapi + kresnasatya) + cache
+### Task 8: Remote holiday providers (dayoffapi + kresnasatya) + cache
 
 **Files:**
 - Create: `internal/calendarprov/dayoffapi.go`
 - Create: `internal/calendarprov/kresnasatya.go`
 - Create: `internal/calendarprov/cached.go`
-- Modify: `internal/store/holidaycache.go` (baru — akses tabel holiday_cache)
+- Modify: `internal/store/holidaycache.go` (new — access to the holiday_cache table)
 - Test: `internal/calendarprov/remote_test.go`, `internal/store/holidaycache_test.go`
 
 **Interfaces:**
@@ -1456,25 +1456,25 @@ git add internal/ && git commit -m "feat(scheduler+api): loop ticker per menit +
 - Produces:
 ```go
 func NewDayOffAPI() *DayOffAPI   // Category "national", BaseURL https://dayoffapi.vercel.app, GET /api?year=YYYY
-func NewKresna(baseURL string) *Kresna // Category "saka"; baseURL default https://artworks.kresna.me/api-harilibur
+func NewKresna(baseURL string) *Kresna // Category "saka"; baseURL defaults to https://artworks.kresna.me/api-harilibur
 type CachedRemote struct{ /* Inner Provider + St *store.Store */ }
-func NewCachedRemote(inner Provider, st *store.Store) *CachedRemote // cache-first, refresh jika payload >24 jam, gagal network → pakai stale
+func NewCachedRemote(inner Provider, st *store.Store) *CachedRemote // cache-first, refresh if payload >24h old, network failure → use stale
 func (s *Store) GetHolidayCache(ctx context.Context, year int, source string, dst any) error
 func (s *Store) PutHolidayCache(ctx context.Context, year int, source string, v any) error
 ```
 
-- [ ] **Step 1: VERIFIKASI BENTUK DATA (wajib sebelum koding)**
+- [ ] **Step 1: VERIFY THE DATA SHAPE (mandatory before coding)**
 
 ```bash
 curl -s --max-time 15 'https://dayoffapi.vercel.app/api?year=2026' | head -c 600; echo
 curl -s --max-time 15 'https://artworks.kresna.me/api-harilibur/api?year=2026' | head -c 600; echo
 ```
-Catat bentuk JSON aktual. Kode di bawah ditulis dengan asumsi:
+Note the actual JSON shape. The code below assumes:
 - dayoffapi: `[{"tanggal":"2026-01-01","keterangan":"...","is_cuti_bersama":false}]`
-- kresnasatya: `[{"holiday_date":"2026-...","holiday_name":"..."}]` (atau dibungkus `{"data":[...]}` — sudah di-handle).
-**Jika berbeda**: sesuaikan HANYA struct tag/parsing di file ini. **Jika kedua API tidak bisa diakses saat eksekusi**: tetap implement + test dengan httptest (base URL di-inject), tandai smoke remote sebagai manual di README, lanjut — arsitektur tidak tergantung API hidup.
+- kresnasatya: `[{"holiday_date":"2026-...","holiday_name":"..."}]` (or wrapped in `{"data":[...]}` — already handled).
+**If different**: adjust ONLY the struct tags/parsing in this file. **If neither API is reachable during execution**: still implement + test with httptest (injected base URL), mark the remote smoke test as manual in the README, and move on — the architecture does not depend on a live API.
 
-- [ ] **Step 2: Test dengan httptest (gagal)**
+- [ ] **Step 2: Test with httptest (failing)**
 
 `internal/calendarprov/remote_test.go`:
 
@@ -1540,12 +1540,12 @@ func TestCachedRemoteCacheFirst(t *testing.T) {
 		if err != nil { t.Fatal(err) }
 		if len(hs) != 1 { t.Fatalf("hs = %+v", hs) }
 	}
-	if calls != 1 { t.Errorf("remote dipanggil %d×, want 1 (cache-first)", calls) }
+	if calls != 1 { t.Errorf("remote called %d×, want 1 (cache-first)", calls) }
 }
 ```
-Tambahkan import `"io"` bila gofmt menuntut.
+Add the `"io"` import if gofmt demands it.
 
-- [ ] **Step 3: Run — GAGAL**, lalu implement
+- [ ] **Step 3: Run — FAIL**, then implement
 
 `internal/store/holidaycache.go`:
 
@@ -1594,8 +1594,8 @@ import (
 	"otorem/internal/domain"
 )
 
-// DayOffAPI: libur nasional & cuti bersama Indonesia (termasuk Nyepi).
-// Sumber: github.com/gerinsp/dayoff-API (data SKB 3 Menteri).
+// DayOffAPI: Indonesian national holidays & joint leave (cuti bersama), including Nyepi.
+// Source: github.com/gerinsp/dayoff-API (data from the joint decree of 3 ministers).
 type DayOffAPI struct {
 	BaseURL string
 	hc      *http.Client
@@ -1669,8 +1669,8 @@ import (
 	"otorem/internal/domain"
 )
 
-// Kresna: hari libur nasional + daerah Bali (Galungan, Kuningan, Saraswati, dll.).
-// Sumber: github.com/kresnasatya/api-harilibur.
+// Kresna: national + Bali regional holidays (Galungan, Kuningan, Saraswati, etc.).
+// Source: github.com/kresnasatya/api-harilibur.
 type Kresna struct {
 	BaseURL string
 	hc      *http.Client
@@ -1697,7 +1697,7 @@ func (k *Kresna) fetchYear(ctx context.Context, year int) ([]domain.Holiday, err
 	if err != nil { return nil, fmt.Errorf("kresna: %w", err) }
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	// bentuk respons sumber bisa array langsung atau dibungkus {"data":[...]}
+	// the source response may be a plain array or wrapped as {"data":[...]}
 	var items []kresnaItem
 	if err := json.Unmarshal(raw, &items); err != nil {
 		var wrapped struct {
@@ -1748,8 +1748,8 @@ type cachePayload struct {
 	Holidays  []domain.Holiday `json:"holidays"`
 }
 
-// CachedRemote: cache-first ke holiday_cache (SQLite). Refresh bila payload
-// > 24 jam; jika refetch gagal → pakai cache stale (degrade, jangan mati).
+// CachedRemote: cache-first against holiday_cache (SQLite). Refresh when the payload
+// is > 24h old; if the refetch fails → use the stale cache (degrade, don't die).
 type CachedRemote struct {
 	Inner Provider
 	St    *store.Store
@@ -1768,7 +1768,7 @@ func (c *CachedRemote) loadYear(ctx context.Context, y int) ([]domain.Holiday, b
 	if err == nil && time.Since(p.FetchedAt) < 24*time.Hour {
 		return p.Holidays, true, nil
 	}
-	// miss atau stale → coba refresh
+	// miss or stale → try to refresh
 	fresh, ferr := c.Inner.HolidaysBetween(ctx, domain.NewDate(y, 1, 1), domain.NewDate(y, 12, 31))
 	if ferr == nil {
 		_ = c.St.PutHolidayCache(ctx, y, c.Inner.Name(), cachePayload{
@@ -1776,7 +1776,7 @@ func (c *CachedRemote) loadYear(ctx context.Context, y int) ([]domain.Holiday, b
 		})
 		return fresh, true, nil
 	}
-	if err == nil { // stale cache ada → pakai, jangan gagalkan scheduler
+	if err == nil { // a stale cache exists → use it, don't fail the scheduler
 		return p.Holidays, true, nil
 	}
 	return nil, false, ferr
@@ -1796,10 +1796,10 @@ func (c *CachedRemote) HolidaysBetween(ctx context.Context, from, to domain.Date
 }
 ```
 
-- [ ] **Step 4: Run — PASS lalu commit**
+- [ ] **Step 4: Run — PASS, then commit**
 
 Run: `go test ./internal/calendarprov/ ./internal/store/ -v`
-(`remote_test.go` sudah meng-include import `io`.)
+(`remote_test.go` already includes the `io` import.)
 
 ```bash
 git add internal/ && git commit -m "feat(calendarprov): provider remote dayoffapi+kresnasatya dengan cache-first"
@@ -1807,17 +1807,17 @@ git add internal/ && git commit -m "feat(calendarprov): provider remote dayoffap
 
 ---
 
-### Task 9: Wiring final main.go + smoke end-to-end
+### Task 9: Final main.go wiring + end-to-end smoke test
 
 **Files:**
-- Modify: `cmd/server/main.go` (tambah scheduler + provider remote)
+- Modify: `cmd/server/main.go` (add the scheduler + remote providers)
 
 **Interfaces:**
-- Consumes: semua di atas
+- Consumes: everything above
 
 - [ ] **Step 1: Update main.go**
 
-Ganti body `main` setelah `providers := ...` menjadi:
+Replace the body of `main` after `providers := ...` with:
 
 ```go
 	key := secret.DeriveKey(cfg.AppSecret)
@@ -1855,9 +1855,9 @@ Ganti body `main` setelah `providers := ...` menjadi:
 		}, nil
 	})
 ```
-dengan import tambahan: `otorem/internal/notify`, `otorem/internal/scheduler`, `otorem/internal/secret`, `otorem/internal/store`, `otorem/internal/calendarprov`, `"time"`. (Snapshot builder yang sama dipakai dua tempat — ekstrak ke closure lokal `buildSnapshot := func(ctx context.Context) scheduler.Snapshot { ... }` agar DRY.)
+with additional imports: `otorem/internal/notify`, `otorem/internal/scheduler`, `otorem/internal/secret`, `otorem/internal/store`, `otorem/internal/calendarprov`, `"time"`. (The same snapshot builder is used in two places — extract it into a local closure `buildSnapshot := func(ctx context.Context) scheduler.Snapshot { ... }` to stay DRY.)
 
-- [ ] **Step 2: Build + smoke**
+- [ ] **Step 2: Build + smoke test**
 
 ```bash
 gofmt -l cmd/ internal/ ; go vet ./... && CGO_ENABLED=0 go test ./... -count=1
@@ -1869,7 +1869,7 @@ curl -s -X POST -H 'X-Dev-Email: admin@x.id' localhost:8080/api/v1/scheduler/run
 curl -s localhost:8080/metrics | grep otorem_notifications || true
 pkill -f /tmp/otorem || true
 ```
-Expected: upcoming berisi occasion/hari raya Pawukon (computed selalu ada); scheduler/run mengembalikan JSON `{"sent":..,"failed":..,"missed":..}`; metrics counter ada. Remote API gagal (offline) TIDAK boleh bikin 500 — pastikan log hanya warning/lewati.
+Expected: upcoming contains occasions/Pawukon holidays (computed ones are always present); scheduler/run returns JSON `{"sent":..,"failed":..,"missed":..}`; the metrics counter exists. Remote API failures (offline) MUST NOT cause a 500 — make sure the log only warns/skips.
 
 - [ ] **Step 3: Commit + tag**
 
@@ -1882,12 +1882,12 @@ git tag plan-3-scheduler-notify-done
 
 ## Definition of Done (Plan 3)
 
-- [ ] `CGO_ENABLED=0 go test ./... -count=1` hijau penuh (unit + integrasi fake-clock).
-- [ ] Dedupe: scan 2× tidak mengirim dobel (test `TestRunOnceOnTime` run ke-2).
-- [ ] Catch-up: kirim late ≤ 24 jam; > window → `missed`; > lookback → diabaikan.
-- [ ] Channel gagal → retry otomatis dengan backoff 15 menit.
-- [ ] Tombol test-send channel berfungsi (mock server 200 → 200 OK).
-- [ ] Provider remote down ≠ scheduler down (cache-first + stale fallback).
+- [ ] `CGO_ENABLED=0 go test ./... -count=1` fully green (unit + fake-clock integration).
+- [ ] Dedupe: scanning 2× does not send twice (`TestRunOnceOnTime`, 2nd run).
+- [ ] Catch-up: late sends within ≤ 24 hours; beyond the window → `missed`; beyond the lookback → ignored.
+- [ ] Failed channel → automatic retry with a 15-minute backoff.
+- [ ] The channel test-send button works (mock server 200 → 200 OK).
+- [ ] A remote provider outage ≠ scheduler outage (cache-first + stale fallback).
 - [ ] Tag `plan-3-scheduler-notify-done`.
 
-**Kontrak untuk Plan 4 (SPA):** endpoint yang dipakai UI: `GET /api/v1/upcoming?days=30`, `GET/POST /api/v1/contacts`, `GET/PATCH/DELETE /api/v1/contacts/:id`, `POST /api/v1/contacts/:id/occasions`, `DELETE /api/v1/occasions/:id`, `PUT /api/v1/contacts/:id/prefs`, `GET/POST /api/v1/channels`, `PATCH/DELETE /api/v1/channels/:id`, `POST /api/v1/channels/:id/test`, `GET/PUT /api/v1/settings`, `GET /api/v1/pawukon?date=`, `GET /api/v1/me`. Dev auth via header `X-Dev-Email`.
+**Contract for Plan 4 (SPA):** endpoints used by the UI: `GET /api/v1/upcoming?days=30`, `GET/POST /api/v1/contacts`, `GET/PATCH/DELETE /api/v1/contacts/:id`, `POST /api/v1/contacts/:id/occasions`, `DELETE /api/v1/occasions/:id`, `PUT /api/v1/contacts/:id/prefs`, `GET/POST /api/v1/channels`, `PATCH/DELETE /api/v1/channels/:id`, `POST /api/v1/channels/:id/test`, `GET/PUT /api/v1/settings`, `GET /api/v1/pawukon?date=`, `GET /api/v1/me`. Dev auth via the `X-Dev-Email` header.

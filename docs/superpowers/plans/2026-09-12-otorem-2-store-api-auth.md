@@ -2,43 +2,43 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** HTTP API lengkap (`/api/v1`) di atas SQLite dengan auth Cloudflare Access (+ mode dev), CRUD kontak/occasions/channels/settings, endpoint upcoming, dan provider hari raya Pawukon computed.
+**Goal:** A complete HTTP API (`/api/v1`) on top of SQLite with Cloudflare Access auth (+ dev mode), CRUD for contacts/occasions/channels/settings, an upcoming endpoint, and a computed Pawukon holiday provider.
 
-**Architecture:** Modul monolith: `internal/store` (SQLite + migrasi embedded + repositori), `internal/secret` (AES-256-GCM), `internal/calendarprov` (interface provider), `internal/api` (Gin + middleware auth + handlers). `cmd/server/main.go` merangkai semuanya. Tidak ada scheduler di plan ini (Plan 3).
+**Architecture:** Modular monolith: `internal/store` (SQLite + embedded migrations + repositories), `internal/secret` (AES-256-GCM), `internal/calendarprov` (provider interface), `internal/api` (Gin + auth middleware + handlers). `cmd/server/main.go` wires everything together. There is no scheduler in this plan (Plan 3).
 
-**Tech Stack:** Go ≥ 1.23, `github.com/gin-gonic/gin`, `modernc.org/sqlite` (CGO off), `github.com/golang-jwt/jwt/v5` + `github.com/MicahParks/keyfunc/v3` (JWKS Cloudflare), `github.com/prometheus/client_golang`.
+**Tech Stack:** Go ≥ 1.23, `github.com/gin-gonic/gin`, `modernc.org/sqlite` (CGO off), `github.com/golang-jwt/jwt/v5` + `github.com/MicahParks/keyfunc/v3` (Cloudflare JWKS), `github.com/prometheus/client_golang`.
 
 ## Global Constraints
 
-- `CGO_ENABLED=0` selalu. `internal/domain` TETAP bebas I/O — kebutuhan parsing tanggal di store dilakukan dengan helper lokal, dan serializer JSON Date masuk sebagai file additive `internal/domain/datejson.go` (Task 2).
-- Semua endpoint selain `/healthz`, `/readyz`, `/metrics` wajib melewati middleware auth.
-- Config channel TIDAK PERNAH dikirim balik ke client ( hanya `{id,type,name,enabled}` ).
-- Bahasa error API: Indonesia singkat, field `{"error": "..."}`.
-- Dev mode (`AUTH_MODE=dev`) hanya boleh aktif via env eksplisit; middleware menolak request tanpa `X-Dev-Email`.
-- TDD: test dulu → merah → implement → hijau → commit (`feat:`/`test:`). Nama tipe/fungsi HARUS persis seperti blok "Interfaces" (Plan 3 & 4 mengonsumsinya).
-- Dilarang menambah dependency selain yang tercantum di Tech Stack tanpa alasan kuat.
+- `CGO_ENABLED=0` always. `internal/domain` STAYS I/O-free — date parsing needs in the store are handled with local helpers, and the Date JSON serializer arrives as an additive file `internal/domain/datejson.go` (Task 2).
+- All endpoints except `/healthz`, `/readyz`, `/metrics` must pass through the auth middleware.
+- Channel config is NEVER sent back to the client (only `{id,type,name,enabled}`).
+- API error language: short Indonesian, field `{"error": "..."}`.
+- Dev mode (`AUTH_MODE=dev`) may only be enabled through an explicit env var; the middleware rejects requests without `X-Dev-Email`.
+- TDD: test first → red → implement → green → commit (`feat:`/`test:`). Type/function names MUST match the "Interfaces" blocks exactly (Plans 3 & 4 consume them).
+- Adding dependencies beyond those listed in Tech Stack is forbidden without a strong reason.
 
-**Konsumsi dari Plan 1 (internal/domain):** `Date`, `NewDate`, `DateFromTime`, `Date.String()`, `Date.JDN()`, `Date.AddDays`, `Pawukon`, `PawukonDate.Label()`, `OccurrencesBetween`, `OccurrenceType` (`Birthday`/`Otonan`/`Anniversary`), `PawukonHolidaysBetween`, `DefaultOffsets`, `ValidateOffsets`.
+**Consumed from Plan 1 (internal/domain):** `Date`, `NewDate`, `DateFromTime`, `Date.String()`, `Date.JDN()`, `Date.AddDays`, `Pawukon`, `PawukonDate.Label()`, `OccurrencesBetween`, `OccurrenceType` (`Birthday`/`Otonan`/`Anniversary`), `PawukonHolidaysBetween`, `DefaultOffsets`, `ValidateOffsets`.
 
 ---
 
-### Task 1: Dependensi + package config
+### Task 1: Dependencies + config package
 
 **Files:**
-- Modify: `go.mod` (module `otorem` sudah ada dari Plan 1)
+- Modify: `go.mod` (module `otorem` already exists from Plan 1)
 - Create: `internal/config/config.go`
 - Test: `internal/config/config_test.go`
 
 **Interfaces:**
 - Produces: `package config` — `const AuthCFAccess = "cfaccess"`, `const AuthDev = "dev"`; `type Config struct{ Addr, DataDir, AppSecret, AuthMode, CFTeamDomain, CFAud, TZ string; AdminEmails map[string]bool }`; `func Load() (Config, error)`; `func (c Config) DBPath() string` (= `DataDir/otorem.db`).
 
-- [ ] **Step 1: Install dependensi**
+- [ ] **Step 1: Install dependencies**
 
 ```bash
 cd code && go get github.com/gin-gonic/gin@latest modernc.org/sqlite@latest github.com/golang-jwt/jwt/v5@latest github.com/MicahParks/keyfunc/v3@latest github.com/prometheus/client_golang@latest
 ```
 
-- [ ] **Step 2: Tulis test yang gagal**
+- [ ] **Step 2: Write the failing test**
 
 `internal/config/config_test.go`:
 
@@ -71,31 +71,31 @@ func TestLoadValid(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if c.Addr != ":8080" { t.Errorf("Addr default = %q", c.Addr) }
 	if c.DBPath() != "./data/otorem.db" { t.Errorf("DBPath = %q", c.DBPath()) }
-	if !c.AdminEmails["admin@x.com"] { t.Errorf("email admin harus di-lowercase: %v", c.AdminEmails) }
+	if !c.AdminEmails["admin@x.com"] { t.Errorf("admin email must be lowercased: %v", c.AdminEmails) }
 }
 
 func TestLoadRejectsShortSecret(t *testing.T) {
 	setEnv(t, map[string]string{"APP_SECRET": "pendek"})
-	if _, err := Load(); err == nil { t.Error("secret pendek harus error") }
+	if _, err := Load(); err == nil { t.Error("short secret must error") }
 }
 
 func TestLoadCFAccessRequiresTeamAndAud(t *testing.T) {
 	setEnv(t, map[string]string{"APP_SECRET": "super-secret-panjang-16"})
-	if _, err := Load(); err == nil { t.Error("cfaccess tanpa team/aud harus error") }
+	if _, err := Load(); err == nil { t.Error("cfaccess without team/aud must error") }
 }
 
 func TestLoadDevModeOK(t *testing.T) {
 	setEnv(t, map[string]string{"APP_SECRET": "super-secret-panjang-16", "AUTH_MODE": "dev"})
-	if _, err := Load(); err != nil { t.Errorf("dev mode tanpa CF env harus valid: %v", err) }
+	if _, err := Load(); err != nil { t.Errorf("dev mode without CF env must be valid: %v", err) }
 }
 ```
 
-- [ ] **Step 3: Run — GAGAL**
+- [ ] **Step 3: Run — FAIL**
 
 Run: `go test ./internal/config/ -v`
 Expected: FAIL — `Load undefined`
 
-- [ ] **Step 4: Implementasi**
+- [ ] **Step 4: Implementation**
 
 `internal/config/config.go`:
 
@@ -161,7 +161,7 @@ func envOr(k, d string) string {
 }
 ```
 
-- [ ] **Step 5: Run — PASS lalu commit**
+- [ ] **Step 5: Run — PASS, then commit**
 
 Run: `go test ./internal/config/ -v`
 Expected: PASS
@@ -172,20 +172,20 @@ git add go.mod go.sum internal/config/ && git commit -m "feat(config): env confi
 
 ---
 
-### Task 2: Migrasi embedded + store.Open + Date JSON
+### Task 2: Embedded migrations + store.Open + Date JSON
 
 **Files:**
 - Create: `internal/store/store.go`
 - Create: `internal/store/migrate.go`
 - Create: `internal/store/migrations/001_init.sql`
-- Create: `internal/domain/datejson.go` (additive ke domain — serializer saja, logika tetap di Plan 1)
+- Create: `internal/domain/datejson.go` (additive to domain — serializer only, logic stays in Plan 1)
 - Test: `internal/store/store_test.go`, `internal/domain/datejson_test.go`
 
 **Interfaces:**
 - Consumes: `domain.Date`
-- Produces: `package store` — `type Store struct{}` (field `db *sql.DB`, unexported); `func Open(path string) (*Store, error)`; `func OpenInMemory() (*Store, error)`; `func (s *Store) Migrate() error`; `func (s *Store) Close() error`; `func (s *Store) Ping(ctx context.Context) error`; `var ErrNotFound = errors.New("not found")`. Dan di domain: `func ParseDate(s string) (Date, error)`; `(Date) MarshalJSON() ([]byte, error)`; `(Date) UnmarshalJSON(b []byte) error` (format `"2006-01-02"`).
+- Produces: `package store` — `type Store struct{}` (field `db *sql.DB`, unexported); `func Open(path string) (*Store, error)`; `func OpenInMemory() (*Store, error)`; `func (s *Store) Migrate() error`; `func (s *Store) Close() error`; `func (s *Store) Ping(ctx context.Context) error`; `var ErrNotFound = errors.New("not found")`. And in domain: `func ParseDate(s string) (Date, error)`; `(Date) MarshalJSON() ([]byte, error)`; `(Date) UnmarshalJSON(b []byte) error` (format `"2006-01-02"`).
 
-- [ ] **Step 1: Test domain JSON (gagal)**
+- [ ] **Step 1: Domain JSON test (failing)**
 
 `internal/domain/datejson_test.go`:
 
@@ -206,11 +206,11 @@ func TestDateJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(b, &back); err != nil { t.Fatal(err) }
 	if back != d { t.Errorf("unmarshal = %s", back) }
 	if _, err := ParseDate("2026-06-17"); err != nil { t.Errorf("ParseDate: %v", err) }
-	if _, err := ParseDate("17-06-2026"); err == nil { t.Error("format salah harus error") }
+	if _, err := ParseDate("17-06-2026"); err == nil { t.Error("wrong format must error") }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/domain/datejson.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/domain/datejson.go`
 
 ```go
 package domain
@@ -242,7 +242,7 @@ func (d *Date) UnmarshalJSON(b []byte) error {
 
 Run: `go test ./internal/domain/ -run DateJSON -v` → PASS.
 
-- [ ] **Step 3: Skema SQL (spec §4)**
+- [ ] **Step 3: SQL schema (spec §4)**
 
 `internal/store/migrations/001_init.sql`:
 
@@ -320,7 +320,7 @@ CREATE TABLE holiday_cache (
 );
 ```
 
-- [ ] **Step 4: Test store (gagal)**
+- [ ] **Step 4: Store test (failing)**
 
 `internal/store/store_test.go`:
 
@@ -347,7 +347,7 @@ func TestForeignKeysActive(t *testing.T) {
 	defer s.Close()
 	_ = s.Migrate()
 	_, err := s.db.Exec(`INSERT INTO contacts (owner_id, name) VALUES (999, 'x')`)
-	if err == nil { t.Error("FK mati — contact tanpa user harus ditolak") }
+	if err == nil { t.Error("FK disabled — a contact without a user must be rejected") }
 }
 ```
 
@@ -379,7 +379,7 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// OpenInMemory: dipakai test — satu DB bersama via cache=shared.
+// OpenInMemory: used by tests — a single shared DB via cache=shared.
 func OpenInMemory() (*Store, error) {
 	db, err := sql.Open("sqlite", "file:otoremtest?mode=memory&cache=shared")
 	if err != nil { return nil, err }
@@ -439,7 +439,7 @@ func (s *Store) Migrate() error {
 }
 ```
 
-- [ ] **Step 6: Run — PASS lalu commit**
+- [ ] **Step 6: Run — PASS, then commit**
 
 Run: `go test ./internal/store/ ./internal/domain/ -v`
 Expected: PASS
@@ -450,16 +450,16 @@ git add internal/ && git commit -m "feat(store): embedded migrations, WAL sqlite
 
 ---
 
-### Task 3: Enkripsi config channel (AES-256-GCM)
+### Task 3: Channel config encryption (AES-256-GCM)
 
 **Files:**
 - Create: `internal/secret/secret.go`
 - Test: `internal/secret/secret_test.go`
 
 **Interfaces:**
-- Produces: `package secret` — `func DeriveKey(appSecret string) []byte` (SHA-256 → 32 byte); `func Encrypt(key, plaintext []byte) ([]byte, error)`; `func Decrypt(key, blob []byte) ([]byte, error)` (format: nonce ‖ ciphertext, AES-256-GCM).
+- Produces: `package secret` — `func DeriveKey(appSecret string) []byte` (SHA-256 → 32 bytes); `func Encrypt(key, plaintext []byte) ([]byte, error)`; `func Decrypt(key, blob []byte) ([]byte, error)` (format: nonce ‖ ciphertext, AES-256-GCM).
 
-- [ ] **Step 1: Test (gagal)**
+- [ ] **Step 1: Test (failing)**
 
 `internal/secret/secret_test.go`:
 
@@ -476,7 +476,7 @@ func TestRoundTrip(t *testing.T) {
 	plain := []byte(`{"token":"rahasia"}`)
 	blob, err := Encrypt(key, plain)
 	if err != nil { t.Fatal(err) }
-	if bytes.Contains(blob, plain) { t.Error("plaintext tidak boleh terlihat di blob") }
+	if bytes.Contains(blob, plain) { t.Error("plaintext must not be visible in the blob") }
 	got, err := Decrypt(key, blob)
 	if err != nil { t.Fatal(err) }
 	if !bytes.Equal(got, plain) { t.Errorf("got %q", got) }
@@ -486,18 +486,18 @@ func TestTamperFails(t *testing.T) {
 	key := DeriveKey("super-secret-panjang-16")
 	blob, _ := Encrypt(key, []byte("data"))
 	blob[len(blob)-1] ^= 0xFF
-	if _, err := Decrypt(key, blob); err == nil { t.Error("blob yang diubah harus gagal auth") }
+	if _, err := Decrypt(key, blob); err == nil { t.Error("a modified blob must fail auth") }
 }
 
 func TestWrongKeyFails(t *testing.T) {
 	blob, _ := Encrypt(DeriveKey("kunci-satu-panjang-16"), []byte("data"))
 	if _, err := Decrypt(DeriveKey("kunci-dua-panjang-16"), blob); err == nil {
-		t.Error("kunci salah harus gagal")
+		t.Error("wrong key must fail")
 	}
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement
+- [ ] **Step 2: Run — FAIL**, then implement
 
 `internal/secret/secret.go`:
 
@@ -514,7 +514,7 @@ import (
 	"io"
 )
 
-// DeriveKey: APP_SECRET string env → kunci 32 byte untuk AES-256-GCM.
+// DeriveKey: APP_SECRET string env → 32-byte key for AES-256-GCM.
 func DeriveKey(appSecret string) []byte {
 	k := sha256.Sum256([]byte(appSecret))
 	return k[:]
@@ -543,7 +543,7 @@ func gcm(key []byte) (cipher.AEAD, error) {
 }
 ```
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/secret/ -v`
 
@@ -553,7 +553,7 @@ git add internal/secret/ && git commit -m "feat(secret): aes-256-gcm encrypt/dec
 
 ---
 
-### Task 4: Repositori users, contacts, occasions, prefs
+### Task 4: Repositories for users, contacts, occasions, prefs
 
 **Files:**
 - Create: `internal/store/users.go`
@@ -574,7 +574,7 @@ type ReminderPrefs struct{ ContactID int64; Offsets []int; ChannelIDs []int64; E
 type ContactWithOccasions struct { Contact; Occasions []Occasion; Prefs *ReminderPrefs }
 
 func (s *Store) CreateContact(ctx context.Context, ownerID int64, name, nickname, notes string) (Contact, error)
-func (s *Store) ListContacts(ctx context.Context, ownerID int64) ([]ContactWithOccasions, error) // ownerID 0 = semua (admin)
+func (s *Store) ListContacts(ctx context.Context, ownerID int64) ([]ContactWithOccasions, error) // ownerID 0 = all (admin)
 func (s *Store) GetContact(ctx context.Context, ownerID, contactID int64) (*ContactWithOccasions, error) // ownerID 0 = bypass
 func (s *Store) UpdateContact(ctx context.Context, ownerID, contactID int64, name, nickname, notes string) error
 func (s *Store) DeleteContact(ctx context.Context, ownerID, contactID int64) error
@@ -583,7 +583,7 @@ func (s *Store) DeleteOccasion(ctx context.Context, id int64) error
 func (s *Store) SetReminderPrefs(ctx context.Context, p ReminderPrefs) error
 ```
 
-- [ ] **Step 1: Test users (gagal)**
+- [ ] **Step 1: Users test (failing)**
 
 `internal/store/users_test.go`:
 
@@ -604,15 +604,15 @@ func TestGetOrCreateUser(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if u1.Role != "admin" { t.Errorf("role = %q, want admin", u1.Role) }
 	u2, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi Lain", admins) // same email → no dup
-	if u2.ID != u1.ID { t.Errorf("duplikat user: %d vs %d", u1.ID, u2.ID) }
+	if u2.ID != u1.ID { t.Errorf("duplicate user: %d vs %d", u1.ID, u2.ID) }
 	u3, _ := s.GetOrCreateUser(ctx, "citra@x.id", "Citra", admins)
 	if u3.Role != "member" { t.Errorf("non-admin role = %q", u3.Role) }
 	users, _ := s.ListUsers(ctx)
-	if len(users) != 2 { t.Errorf("jumlah user = %d, want 2", len(users)) }
+	if len(users) != 2 { t.Errorf("user count = %d, want 2", len(users)) }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/store/users.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/store/users.go`
 
 ```go
 package store
@@ -629,7 +629,7 @@ type User struct {
 	Role  string
 }
 
-// GetOrCreateUser: auto-provision dari klaim email. Role hanya diset saat create.
+// GetOrCreateUser: auto-provision from the email claim. Role is only set on create.
 func (s *Store) GetOrCreateUser(ctx context.Context, email, name string, adminEmails map[string]bool) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	role := "member"
@@ -660,7 +660,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 }
 ```
 
-- [ ] **Step 3: Test contacts (gagal)**
+- [ ] **Step 3: Contacts test (failing)**
 
 `internal/store/contacts_test.go`:
 
@@ -693,26 +693,26 @@ func TestContactCRUD(t *testing.T) {
 	defer s.Close()
 	u, cw := seedContact(t, s)
 	if len(cw.Occasions) != 2 { t.Fatalf("occasions = %d", len(cw.Occasions)) }
-	if cw.Prefs == nil || len(cw.Prefs.Offsets) != 2 { t.Fatalf("prefs salah: %+v", cw.Prefs) }
+	if cw.Prefs == nil || len(cw.Prefs.Offsets) != 2 { t.Fatalf("prefs wrong: %+v", cw.Prefs) }
 	if cw.Nickname != "Made" { t.Errorf("nickname = %q", cw.Nickname) }
 
 	if err := s.UpdateContact(context.Background(), u.ID, cw.ID, "Made W.", "", "catatan baru"); err != nil { t.Fatal(err) }
 	ls, _ := s.ListContacts(context.Background(), u.ID)
-	if ls[0].Name != "Made W." { t.Errorf("update gagal: %q", ls[0].Name) }
+	if ls[0].Name != "Made W." { t.Errorf("update failed: %q", ls[0].Name) }
 
-	// owner lain tidak bisa lihat
+	// another owner cannot see it
 	v, _ := s.GetOrCreateUser(context.Background(), "lain@x.id", "Lain", nil)
 	if _, err := s.GetContact(context.Background(), v.ID, cw.ID); err == nil {
-		t.Error("akses kontak user lain harus error")
+		t.Error("accessing another user's contact must error")
 	}
-	// admin (ownerID 0) bisa
+	// admin (ownerID 0) can
 	if _, err := s.GetContact(context.Background(), 0, cw.ID); err != nil {
-		t.Errorf("admin harus bisa akses: %v", err)
+		t.Errorf("admin must have access: %v", err)
 	}
 
 	if err := s.DeleteContact(context.Background(), u.ID, cw.ID); err != nil { t.Fatal(err) }
 	ls, _ = s.ListContacts(context.Background(), u.ID)
-	if len(ls) != 0 { t.Errorf("delete gagal: %d tersisa", len(ls)) }
+	if len(ls) != 0 { t.Errorf("delete failed: %d left", len(ls)) }
 }
 
 func TestAddOccasionValidatesType(t *testing.T) {
@@ -721,12 +721,12 @@ func TestAddOccasionValidatesType(t *testing.T) {
 	u, _ := s.GetOrCreateUser(context.Background(), "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(context.Background(), u.ID, "X", "", "")
 	if _, err := s.AddOccasion(context.Background(), c.ID, "salfok", domain.NewDate(2000, 1, 1), ""); err == nil {
-		t.Error("tipe ilegal harus ditolak")
+		t.Error("an illegal type must be rejected")
 	}
 }
 ```
 
-- [ ] **Step 4: Run — GAGAL**, lalu implement `internal/store/contacts.go`
+- [ ] **Step 4: Run — FAIL**, then implement `internal/store/contacts.go`
 
 ```go
 package store
@@ -891,7 +891,7 @@ func (s *Store) SetReminderPrefs(ctx context.Context, p ReminderPrefs) error {
 func boolInt(b bool) int { if b { return 1 }; return 0 }
 ```
 
-- [ ] **Step 5: Run — PASS lalu commit**
+- [ ] **Step 5: Run — PASS, then commit**
 
 Run: `go test ./internal/store/ -v`
 
@@ -901,29 +901,29 @@ git add internal/store/ && git commit -m "feat(store): users, contacts, occasion
 
 ---
 
-### Task 5: Repositori channels, settings, notification_log (dedupe)
+### Task 5: Repositories for channels, settings, notification_log (dedupe)
 
 **Files:**
 - Create: `internal/store/channels.go`
 - Create: `internal/store/settings.go`
 - Create: `internal/store/log.go`
-- Test: `internal/store/log_test.go` (channels/settings diuji via log_test + contacts_test pola yang sama — sertakan kedua file test)
+- Test: `internal/store/log_test.go` (channels/settings are tested via log_test + contacts_test following the same pattern — include both test files)
 
 **Interfaces:**
 - Produces:
 ```go
 type Channel struct{ ID, OwnerID int64; Type, Name string; ConfigEnc []byte; Enabled bool }
 func (s *Store) CreateChannel(ctx context.Context, ownerID int64, typ, name string, configEnc []byte) (Channel, error)
-func (s *Store) ListChannels(ctx context.Context, ownerID int64) ([]Channel, error) // 0 = semua
+func (s *Store) ListChannels(ctx context.Context, ownerID int64) ([]Channel, error) // 0 = all
 func (s *Store) GetChannel(ctx context.Context, ownerID, id int64) (*Channel, error)
 func (s *Store) SetChannelEnabled(ctx context.Context, ownerID, id int64, enabled bool) error
 func (s *Store) DeleteChannel(ctx context.Context, ownerID, id int64) error
 
-func (s *Store) GetSettingJSON(ctx context.Context, key string, dst any) error // ErrNotFound jika belum ada
+func (s *Store) GetSettingJSON(ctx context.Context, key string, dst any) error // ErrNotFound if absent
 func (s *Store) PutSettingJSON(ctx context.Context, key string, v any) error
 
 type NotificationEntry struct {
-	OccasionID     *int64  // satu dari OccasionID/HolidayKey wajib
+	OccasionID     *int64  // exactly one of OccasionID/HolidayKey is required
 	HolidayKey     *string
 	OccurrenceDate domain.Date
 	OffsetDays     int
@@ -934,7 +934,7 @@ type NotificationEntry struct {
 func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (inserted bool, err error) // INSERT OR IGNORE
 ```
 
-- [ ] **Step 1: Test — khususnya dedupe (gagal)**
+- [ ] **Step 1: Test — especially dedupe (failing)**
 
 `internal/store/log_test.go`:
 
@@ -961,10 +961,10 @@ func TestRecordNotificationDedupe(t *testing.T) {
 		OffsetDays: 7, ChannelID: ch.ID, Status: "sent"}
 
 	inserted, err := s.RecordNotification(ctx, e)
-	if err != nil || !inserted { t.Fatalf("pertama: inserted=%v err=%v", inserted, err) }
+	if err != nil || !inserted { t.Fatalf("first: inserted=%v err=%v", inserted, err) }
 	inserted, err = s.RecordNotification(ctx, e)
 	if err != nil { t.Fatal(err) }
-	if inserted { t.Error("kirim dobel harus di-dedupe (inserted=false)") }
+	if inserted { t.Error("a double send must be deduped (inserted=false)") }
 }
 
 func TestHolidayDedupeIndependent(t *testing.T) {
@@ -978,7 +978,7 @@ func TestHolidayDedupeIndependent(t *testing.T) {
 		OccurrenceDate: domain.NewDate(2026, 6, 17), OffsetDays: 7, ChannelID: ch.ID, Status: "sent"})
 	inserted, err := s.RecordNotification(ctx, NotificationEntry{HolidayKey: &hk,
 		OccurrenceDate: domain.NewDate(2026, 6, 17), OffsetDays: 7, ChannelID: ch.ID, Status: "missed"})
-	if err != nil || inserted { t.Errorf("dedupe holiday gagal: inserted=%v err=%v", inserted, err) }
+	if err != nil || inserted { t.Errorf("holiday dedupe failed: inserted=%v err=%v", inserted, err) }
 }
 
 func TestSettingsRoundTrip(t *testing.T) {
@@ -987,7 +987,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	var v map[string]any
 	if err := s.GetSettingJSON(ctx, "tidak_ada", &v); err != ErrNotFound {
-		t.Errorf("setting kosong harus ErrNotFound, dapat %v", err)
+		t.Errorf("an absent setting must be ErrNotFound, got %v", err)
 	}
 	in := map[string]any{"timezone": "Asia/Makassar", "n": float64(2)}
 	if err := s.PutSettingJSON(ctx, "tz", in); err != nil { t.Fatal(err) }
@@ -997,7 +997,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement ketiga file
+- [ ] **Step 2: Run — FAIL**, then implement the three files
 
 `internal/store/channels.go`:
 
@@ -1130,8 +1130,8 @@ type NotificationEntry struct {
 	Error          string
 }
 
-// RecordNotification: INSERT OR IGNORE — dedupe anti kirim dobel.
-// Return inserted=true hanya bila baris benar-benar baru.
+// RecordNotification: INSERT OR IGNORE — dedupe against double sends.
+// Returns inserted=true only when the row is genuinely new.
 func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (bool, error) {
 	r, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO notification_log
 		(occasion_id, holiday_key, occurrence_date, offset_days, channel_id, status, error)
@@ -1143,7 +1143,7 @@ func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (bo
 }
 ```
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/store/ -v`
 
@@ -1153,7 +1153,7 @@ git add internal/store/ && git commit -m "feat(store): channels, settings json, 
 
 ---
 
-### Task 6: calendarprov — provider hari raya (computed)
+### Task 6: calendarprov — holiday provider (computed)
 
 **Files:**
 - Create: `internal/calendarprov/calendarprov.go`
@@ -1170,11 +1170,11 @@ type Provider interface {
 }
 func NewComputedPawukon() Provider
 type MultiProvider struct{ Providers []Provider }
-func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date, enabled map[string]bool) ([]domain.Holiday, error) // filter per kategori
+func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date, enabled map[string]bool) ([]domain.Holiday, error) // filter per category
 ```
-(Interface iniFINAL — Plan 3 menambah implementasi remote, bukan mengubah interface.)
+(This interface is FINAL — Plan 3 adds remote implementations rather than changing the interface.)
 
-- [ ] **Step 1: Test (gagal)**
+- [ ] **Step 1: Test (failing)**
 
 `internal/calendarprov/calendarprov_test.go`:
 
@@ -1195,7 +1195,7 @@ func TestComputedPawukon(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	found := map[string]bool{}
 	for _, h := range hs { found[h.Name] = true }
-	if !found["Galungan"] || !found["Kuningan"] { t.Errorf("galungan/kuningan hilang: %v", hs) }
+	if !found["Galungan"] || !found["Kuningan"] { t.Errorf("galungan/kuningan missing: %v", hs) }
 }
 
 func TestMultiProviderFilter(t *testing.T) {
@@ -1203,20 +1203,20 @@ func TestMultiProviderFilter(t *testing.T) {
 	hs, err := m.HolidaysBetween(context.Background(),
 		domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30), map[string]bool{"pawukon": false})
 	if err != nil { t.Fatal(err) }
-	if len(hs) != 0 { t.Errorf("kategori off harus kosong: %v", hs) }
+	if len(hs) != 0 { t.Errorf("category off must be empty: %v", hs) }
 	hs, _ = m.HolidaysBetween(context.Background(),
 		domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30), map[string]bool{"pawukon": true})
-	if len(hs) != 2 { t.Errorf("kategori on: %v", hs) }
+	if len(hs) != 2 { t.Errorf("category on: %v", hs) }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement
+- [ ] **Step 2: Run — FAIL**, then implement
 
 `internal/calendarprov/calendarprov.go`:
 
 ```go
-// Package calendarprov: sumber hari raya. Computed dihitung lokal dari engine
-// Pawukon; provider remote (Plan 3) menambah sumber API dengan cache.
+// Package calendarprov: holiday sources. Computed holidays are derived locally
+// from the Pawukon engine; remote providers (Plan 3) add API sources with caching.
 package calendarprov
 
 import (
@@ -1240,7 +1240,7 @@ func (computedPawukon) HolidaysBetween(_ context.Context, from, to domain.Date) 
 	return domain.PawukonHolidaysBetween(from, to), nil
 }
 
-// MultiProvider menggabungkan provider dan memfilter per kategori settings.
+// MultiProvider combines providers and filters by the settings categories.
 type MultiProvider struct{ Providers []Provider }
 
 func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date, enabled map[string]bool) ([]domain.Holiday, error) {
@@ -1255,7 +1255,7 @@ func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date
 }
 ```
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/calendarprov/ -v`
 
@@ -1265,24 +1265,24 @@ git add internal/calendarprov/ && git commit -m "feat(calendarprov): provider in
 
 ---
 
-### Task 7: Middleware auth — Cloudflare Access + dev mode
+### Task 7: Auth middleware — Cloudflare Access + dev mode
 
 **Files:**
 - Create: `internal/api/auth.go`
 - Test: `internal/api/auth_test.go`
 
 **Interfaces:**
-- Consumes: `config.Config`, `store.Store.GetOrCreateUser`, `secret` tidak dipakai di sini
+- Consumes: `config.Config`, `store.Store.GetOrCreateUser`, `secret` is not used here
 - Produces:
 ```go
 type UserProvisioner interface { GetOrCreateUser(ctx context.Context, email, name string, adminEmails map[string]bool) (store.User, error) }
 func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisioner, adminEmails map[string]bool) gin.HandlerFunc
 func NewCFAccess(ctx context.Context, cfg config.Config, provision UserProvisioner) (gin.HandlerFunc, error)
-// JWKS: https://{team}/cdn-cgi/access/certs, header: Cf-Access-Jwt-Assertion, RS256, aud & exp wajib
-// dev mode: header X-Dev-Email → provision; kosong → 401
+// JWKS: https://{team}/cdn-cgi/access/certs, header: Cf-Access-Jwt-Assertion, RS256, aud & exp required
+// dev mode: X-Dev-Email header → provision; empty → 401
 ```
 
-- [ ] **Step 1: Test dengan JWKS lokal (gagal)**
+- [ ] **Step 1: Test with a local JWKS (failing)**
 
 `internal/api/auth_test.go`:
 
@@ -1360,12 +1360,12 @@ func TestCFAccessMiddleware(t *testing.T) {
 		c.JSON(200, gin.H{"email": u.Email, "role": u.Role})
 	})
 
-	// tanpa header → 401
+	// no header → 401
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/who", nil))
-	if w.Code != 401 { t.Errorf("tanpa jwt: %d", w.Code) }
+	if w.Code != 401 { t.Errorf("without jwt: %d", w.Code) }
 
-	// token valid → provision admin
+	// valid token → provision admin
 	tok := signToken(t, key, "aud-1", "admin@x.id", time.Now().Add(time.Hour))
 	req := httptest.NewRequest("GET", "/who", nil)
 	req.Header.Set("Cf-Access-Jwt-Assertion", tok)
@@ -1375,13 +1375,13 @@ func TestCFAccessMiddleware(t *testing.T) {
 		t.Errorf("valid jwt: %d %s", w.Code, w.Body.String())
 	}
 
-	// aud salah → 401
+	// wrong aud → 401
 	tokBad := signToken(t, key, "aud-2", "admin@x.id", time.Now().Add(time.Hour))
 	req = httptest.NewRequest("GET", "/who", nil)
 	req.Header.Set("Cf-Access-Jwt-Assertion", tokBad)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != 401 { t.Errorf("aud salah: %d", w.Code) }
+	if w.Code != 401 { t.Errorf("wrong aud: %d", w.Code) }
 
 	// expired → 401
 	tokExp := signToken(t, key, "aud-1", "admin@x.id", time.Now().Add(-time.Hour))
@@ -1403,17 +1403,17 @@ func TestDevAuth(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/who", nil))
-	if w.Code != 401 { t.Errorf("tanpa header: %d", w.Code) }
+	if w.Code != 401 { t.Errorf("without header: %d", w.Code) }
 	req := httptest.NewRequest("GET", "/who", nil)
 	req.Header.Set("X-Dev-Email", "dev@x.id")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != 200 { t.Errorf("dengan header: %d %s", w.Code, w.Body.String()) }
+	if w.Code != 200 { t.Errorf("with header: %d %s", w.Code, w.Body.String()) }
 }
 ```
-(diuji via `strings.Contains` — helper khusus tidak perlu.)
+(tested via `strings.Contains` — no dedicated helper needed.)
 
-- [ ] **Step 2: Run — GAGAL**, lalu implement `internal/api/auth.go`
+- [ ] **Step 2: Run — FAIL**, then implement `internal/api/auth.go`
 
 ```go
 package api
@@ -1437,8 +1437,8 @@ type UserProvisioner interface {
 	GetOrCreateUser(ctx context.Context, email, name string, adminEmails map[string]bool) (store.User, error)
 }
 
-// NewCFAccessFromKeyfunc: verifikasi Cf-Access-Jwt-Assertion → provision user.
-// Keyfunc di-inject agar bisa diuji dengan JWKS lokal.
+// NewCFAccessFromKeyfunc: verify Cf-Access-Jwt-Assertion → provision the user.
+// The keyfunc is injected so it can be tested with a local JWKS.
 func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisioner, adminEmails map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := strings.TrimSpace(c.GetHeader("Cf-Access-Jwt-Assertion"))
@@ -1473,7 +1473,7 @@ func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisione
 	}
 }
 
-// NewCFAccess: keyfunc JWKS production dari team domain Access.
+// NewCFAccess: production JWKS keyfunc from the Access team domain.
 func NewCFAccess(ctx context.Context, cfg config.Config, provision UserProvisioner) (gin.HandlerFunc, error) {
 	jwksURL := fmt.Sprintf("https://%s/cdn-cgi/access/certs", cfg.CFTeamDomain)
 	kf, err := keyfunc.NewRemote(ctx, keyfunc.NewRemoteConfig{
@@ -1485,7 +1485,7 @@ func NewCFAccess(ctx context.Context, cfg config.Config, provision UserProvision
 	return NewCFAccessFromKeyfunc(kf, cfg.CFAud, provision, cfg.AdminEmails), nil
 }
 
-// devAuthMiddleware: HANYA untuk AUTH_MODE=dev.
+// devAuthMiddleware: ONLY for AUTH_MODE=dev.
 func devAuthMiddleware(provision UserProvisioner, adminEmails map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Dev-Email")))
@@ -1504,9 +1504,9 @@ func devAuthMiddleware(provision UserProvisioner, adminEmails map[string]bool) g
 }
 ```
 
-Catatan: `Store` memenuhi `UserProvisioner` secara struktural — tidak perlu adapter.
+Note: `Store` satisfies `UserProvisioner` structurally — no adapter needed.
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/api/ -v`
 
@@ -1516,7 +1516,7 @@ git add internal/api/ && git commit -m "feat(api): cloudflare access jwt middlew
 
 ---
 
-### Task 8: Server Gin, handlers, endpoint upcoming
+### Task 8: Gin server, handlers, upcoming endpoint
 
 **Files:**
 - Create: `internal/api/server.go`
@@ -1526,17 +1526,17 @@ git add internal/api/ && git commit -m "feat(api): cloudflare access jwt middlew
 - Test: `internal/api/server_test.go`
 
 **Interfaces:**
-- Consumes: semua di atas + `calendarprov.MultiProvider`, `secret.DeriveKey`
+- Consumes: everything above + `calendarprov.MultiProvider`, `secret.DeriveKey`
 - Produces:
 ```go
-type RunResult struct{ Sent, Failed, Missed int }          // Plan 3 mengisi
+type RunResult struct{ Sent, Failed, Missed int }          // filled in by Plan 3
 type SchedulerRunner interface { RunOnce(ctx context.Context) (RunResult, error) }
 type Server struct{ /* cfg, st, key, providers, runner */ }
 func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Provider) *Server
-func (s *Server) SetRunner(r SchedulerRunner)              // dipanggil Plan 3
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) // untuk httptest
+func (s *Server) SetRunner(r SchedulerRunner)              // called by Plan 3
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) // for httptest
 
-// Tipe Settings (settings.go), dipakai handler + Plan 3:
+// Settings type (settings.go), used by handlers + Plan 3:
 type Settings struct {
 	Timezone          string          `json:"timezone"`           // "Asia/Jakarta"
 	SendTime          string          `json:"send_time"`          // "08:00"
@@ -1545,11 +1545,11 @@ type Settings struct {
 	HolidayCategories map[string]bool `json:"holiday_categories"` // pawukon/saka/national
 }
 func DefaultSettings() Settings
-func (s *Server) LoadSettings(ctx context.Context) Settings // merge default ← DB
-func (s *Server) SaveSettings(ctx context.Context, in Settings) (Settings, error) // validasi
+func (s *Server) LoadSettings(ctx context.Context) Settings // merge defaults ← DB
+func (s *Server) SaveSettings(ctx context.Context, in Settings) (Settings, error) // validation
 ```
 
-- [ ] **Step 1: Implementasi server.go (struktur inti — handler menyusul)**
+- [ ] **Step 1: Implement server.go (core structure — handlers follow)**
 
 `internal/api/server.go`:
 
@@ -1628,13 +1628,13 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 	apiG.GET("/settings", s.handleGetSettings)
 	apiG.PUT("/settings", s.handlePutSettings)
 	apiG.GET("/users", s.handleListUsers) // admin
-	apiG.POST("/scheduler/run", s.handleSchedulerRun) // admin; runner dari Plan 3
+	apiG.POST("/scheduler/run", s.handleSchedulerRun) // admin; runner from Plan 3
 
 	s.engine = r
 	return s
 }
 
-// SetRunner dipanggil main setelah scheduler dibangun (Plan 3).
+// SetRunner is called by main after the scheduler is built (Plan 3).
 func (s *Server) SetRunner(r SchedulerRunner) { s.runner = r }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) { s.engine.ServeHTTP(w, req) }
@@ -1688,12 +1688,12 @@ func DefaultSettings() Settings {
 
 var sendTimeRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 
-// LoadSettings: default ← override JSON dari DB (key "settings").
+// LoadSettings: defaults ← JSON override from the DB (key "settings").
 func (s *Server) LoadSettings(ctx context.Context) Settings {
 	out := DefaultSettings()
 	var stored Settings
 	if err := s.st.GetSettingJSON(ctx, "settings", &stored); err != nil {
-		return out // ErrNotFound atau decode lama → default
+		return out // ErrNotFound or an old encoding → defaults
 	}
 	if stored.Timezone != "" { out.Timezone = stored.Timezone }
 	if stored.SendTime != "" { out.SendTime = stored.SendTime }
@@ -1810,7 +1810,7 @@ func (s *Server) multiProvider() calendarprov.MultiProvider {
 }
 ```
 
-`internal/api/handlers.go` — CRUD + pawukon + scheduler run (ringkas, pola sama untuk semua):
+`internal/api/handlers.go` — CRUD + pawukon + scheduler run (compact; the pattern is the same throughout):
 
 ```go
 package api
@@ -1974,7 +1974,7 @@ func (s *Server) handlePawukon(c *gin.Context) {
 		"pancawara": domain.Pancawara[p.Pancawara], "wuku": domain.Wuku[p.Wuku], "label": p.Label()})
 }
 
-// ---- channels: config disimpan terenkripsi; tidak pernah dikirim balik ----
+// ---- channels: config is stored encrypted; it is never sent back ----
 
 type channelIn struct {
 	Type   string          `json:"type"`
@@ -2021,8 +2021,8 @@ func (s *Server) handleDeleteChannel(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-// validateChannelConfig memastikan config JSON punya field minimum per tipe
-// sebelum dienkripsi. (Implementasi notifier-nya di Plan 3.)
+// validateChannelConfig ensures the JSON config has the minimum fields per type
+// before it is encrypted. (The notifier implementation lives in Plan 3.)
 func (s *Server) validateChannelConfig(typ string, raw json.RawMessage) error {
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil { return errors.New("config harus JSON object") }
@@ -2077,7 +2077,7 @@ func (s *Server) handleSchedulerRun(c *gin.Context) {
 }
 ```
 
-- [ ] **Step 2: Tulis test integrasi** — bila mengikuti TDD ketat: tulis file test ini lebih dulu, jalankan untuk melihatnya merah (compile error `NewServer undefined`), lalu buat hijau dengan implementasi Step 1
+- [ ] **Step 2: Write the integration test** — for strict TDD: write this test file first, run it to see it red (compile error `NewServer undefined`), then turn it green with the Step 1 implementation
 
 `internal/api/server_test.go`:
 
@@ -2113,7 +2113,7 @@ func newTestServer(t *testing.T, admin string) (*Server, *store.Store) {
 	return NewServer(cfg, st, nil), st
 }
 
-func ginSet(t *testing.T) { gin.SetMode(gin.TestMode) } // via import gin
+func ginSet(t *testing.T) { gin.SetMode(gin.TestMode) } // via the gin import
 
 func devReq(t *testing.T, method, target, email, body string) *http.Request {
 	t.Helper()
@@ -2132,8 +2132,8 @@ func TestContactFlow(t *testing.T) {
 		`{"name":"Made","nickname":"De","notes":"sepupu"}`))
 	if w.Code != 201 { t.Fatalf("create contact: %d %s", w.Code, w.Body.String()) }
 
-	// Otonan base = today − 210 → occurrence ke-1 jatuh TEPAT hari ini; deterministik
-	// untuk window 30 hari (tanggal acak sering jatuh di luar window → flaky).
+	// Otonan base = today − 210 → occurrence #1 falls EXACTLY today; deterministic
+	// for a 30-day window (random dates often fall outside the window → flaky).
 	today := domain.DateFromTime(time.Now())
 	base := today.AddDays(-domain.PawukonCycleDays)
 	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": base.String()})
@@ -2145,7 +2145,7 @@ func TestContactFlow(t *testing.T) {
 	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/upcoming?days=30", "admin@x.id", ""))
 	if w.Code != 200 { t.Fatalf("upcoming: %d %s", w.Code, w.Body.String()) }
 	if !strings.Contains(w.Body.String(), `"kind":"occasion"`) || !strings.Contains(w.Body.String(), `"pawukon"`) {
-		t.Errorf("upcoming tidak memuat occasion+pawukon: %s", w.Body.String())
+		t.Errorf("upcoming does not contain occasion+pawukon: %s", w.Body.String())
 	}
 }
 
@@ -2158,7 +2158,7 @@ func TestUpcomingEmpty(t *testing.T) {
 		Items []UpcomingItem `json:"items"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil { t.Fatal(err) }
-	// boleh kosong atau berisi holiday pawukon; tidak boleh error
+	// may be empty or contain pawukon holidays; must not error
 	_ = out
 }
 
@@ -2180,7 +2180,7 @@ func TestChannelConfigNeverLeaked(t *testing.T) {
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/channels", "admin@x.id", ""))
 	if strings.Contains(w.Body.String(), "TOKET-RAHASIA") {
-		t.Error("config channel bocor di response!")
+		t.Error("channel config leaked in the response!")
 	}
 }
 
@@ -2195,24 +2195,24 @@ func TestSettingsValidate(t *testing.T) {
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
 		`{"timezone":"Tidak/Ada","send_time":"07:30","catch_up_hours":12,"default_offsets":[1],"holiday_categories":{}}`))
-	if w.Code != 400 { t.Errorf("tz invalid harus 400: %d", w.Code) }
+	if w.Code != 400 { t.Errorf("an invalid tz must be 400: %d", w.Code) }
 }
 
 func TestSchedulerRunWithoutRunner(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/scheduler/run", "admin@x.id", ""))
-	if w.Code != 503 { t.Errorf("tanpa runner: %d", w.Code) }
+	if w.Code != 503 { t.Errorf("without a runner: %d", w.Code) }
 	_ = context.Background()
 }
 ```
 
-Perbaiki detail dari test di atas: `ginSet` perlu import `"github.com/gin-gonic/gin"`; `devReq` perlu import `"io"`. Sertakan keduanya.
+Fix the details in the test above: `ginSet` needs the `"github.com/gin-gonic/gin"` import; `devReq` needs the `"io"` import. Include both.
 
-- [ ] **Step 3: Run — PASS lalu commit**
+- [ ] **Step 3: Run — PASS, then commit**
 
 Run: `go test ./internal/api/ -v`
-Expected: PASS. (Catatan: `TestUpcomingEmpty` dengan `providers=nil` → `MultiProvider{nil}` loop over empty slice; handler `s.providers` nil tetap aman — `MultiProvider.Providers` kosong mengembalikan `nil, nil`.)
+Expected: PASS. (Note: `TestUpcomingEmpty` with `providers=nil` → `MultiProvider{nil}` loops over an empty slice; the handler's nil `s.providers` is still safe — an empty `MultiProvider.Providers` returns `nil, nil`.)
 
 ```bash
 git add internal/api/ && git commit -m "feat(api): gin server, crud handlers, upcoming timeline, settings"
@@ -2220,15 +2220,15 @@ git add internal/api/ && git commit -m "feat(api): gin server, crud handlers, up
 
 ---
 
-### Task 9: main.go wiring + smoke lokal
+### Task 9: main.go wiring + local smoke test
 
 **Files:**
 - Create: `cmd/server/main.go`
 
 **Interfaces:**
-- Consumes: semuanya di atas
+- Consumes: everything above
 
-- [ ] **Step 1: Implementasi main.go**
+- [ ] **Step 1: Implement main.go**
 
 ```go
 package main
@@ -2292,7 +2292,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 2: Build + smoke lokal**
+- [ ] **Step 2: Build + local smoke test**
 
 ```bash
 CGO_ENABLED=0 go build -o /tmp/otorem ./cmd/server
@@ -2303,7 +2303,7 @@ curl -s -H 'X-Dev-Email: admin@x.id' localhost:8080/api/v1/me
 curl -s localhost:8080/api/v1/me          # → 401
 pkill -f /tmp/otorem || true
 ```
-Expected: `{"ok":true}`, lalu data user admin, lalu 401 tanpa header.
+Expected: `{"ok":true}`, then the admin user data, then 401 without the header.
 
 - [ ] **Step 3: Commit + tag**
 
@@ -2317,9 +2317,9 @@ git tag plan-2-store-api-auth-done
 
 ## Definition of Done (Plan 2)
 
-- [ ] `CGO_ENABLED=0 go test ./... -count=1` hijau penuh.
-- [ ] Smoke lokal jalan: healthz OK, `/me` butuh auth, dev auth provision user.
-- [ ] Config channel terenkripsi di DB dan tidak pernah muncul di response.
+- [ ] `CGO_ENABLED=0 go test ./... -count=1` fully green.
+- [ ] The local smoke test works: healthz OK, `/me` requires auth, dev auth provisions users.
+- [ ] Channel config is encrypted in the DB and never appears in responses.
 - [ ] Tag `plan-2-store-api-auth-done`.
 
-**Kontrak untuk Plan 3:** `api.SchedulerRunner` + `api.RunResult{Sent,Failed,Missed}`; `store.RecordNotification` (dedupe); `store.ListChannels`/`GetChannel` (ConfigEnc terenkripsi); `calendarprov.Provider` (Name/Category/HolidaysBetween); `secret.DeriveKey(cfg.AppSecret)`; `api.Settings` (Timezone, SendTime "HH:MM", CatchUpHours, DefaultOffsets, HolidayCategories).
+**Contract for Plan 3:** `api.SchedulerRunner` + `api.RunResult{Sent,Failed,Missed}`; `store.RecordNotification` (dedupe); `store.ListChannels`/`GetChannel` (encrypted ConfigEnc); `calendarprov.Provider` (Name/Category/HolidaysBetween); `secret.DeriveKey(cfg.AppSecret)`; `api.Settings` (Timezone, SendTime "HH:MM", CatchUpHours, DefaultOffsets, HolidayCategories).

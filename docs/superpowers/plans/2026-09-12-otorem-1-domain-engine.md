@@ -2,30 +2,30 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Package Go murni `internal/domain` yang menghitung Pawukon Bali, otonan (siklus 210 hari), ulang tahun, anniversary, tanggal reminder, dan hari raya Pawukon — semua tervalidasi fixture nyata.
+**Goal:** A pure Go package `internal/domain` that computes Balinese Pawukon, otonan (the 210-day cycle), birthdays, anniversaries, reminder dates, and Pawukon holidays — all validated against real fixtures.
 
-**Architecture:** Package tanpa I/O (pure functions atas tipe `Date` civil). Anchor Pawukon tunggal di `pawukon.go`, dikunci oleh test terhadap 3 tanggal Galungan terpublikasi + fixture harian kalenderbali.org. Scraper fixture hidup di `scripts/` (bukan di domain) agar dependensi HTML tidak bocor ke logika.
+**Architecture:** An I/O-free package (pure functions over a civil `Date` type). A single Pawukon anchor in `pawukon.go`, locked by tests against 3 published Galungan dates + daily kalenderbali.org fixtures. The fixture scraper lives in `scripts/` (not in domain) so HTML dependencies do not leak into the logic.
 
-**Tech Stack:** Go ≥ 1.23 (stdlib only di `internal/domain`; `goquery` hanya di `scripts/`).
+**Tech Stack:** Go ≥ 1.23 (stdlib only in `internal/domain`; `goquery` only in `scripts/`).
 
 ## Global Constraints
 
-- Go ≥ 1.23; semua build dengan `CGO_ENABLED=0`.
-- `internal/domain` **dilarang** import `net/http`, `database/sql`, `os`, package pihak ketiga. Boleh: `fmt`, `time`, `strings`, `sort`.
-- Semua tanggal adalah tipe civil `domain.Date` (tanpa timezone); timezone hanya disentuh di layer scheduler (Plan 3).
-- Konstanta anchor Pawukon hanya ada di SATU tempat (`pawukon.go`); mengubahnya hanya boleh jika test anchor/fixture merah.
-- Setiap task: TDD (test dulu → merah → implement → hijau), lalu commit pesan conventional (`feat:`/`test:`/`chore:`).
-- Modul: `module otorem`; semua path import relatif `otorem/...`.
-- Definisi hari raya hanya memuat yang sudah baku (Galungan, Kuningan, Saraswati, Pagerwesi) — perluasan tabel WAJIB diverifikasi fixture dulu (spec §5.3).
+- Go ≥ 1.23; every build with `CGO_ENABLED=0`.
+- `internal/domain` **must not** import `net/http`, `database/sql`, `os`, or third-party packages. Allowed: `fmt`, `time`, `strings`, `sort`.
+- All dates are the civil type `domain.Date` (no timezone); timezones are only touched at the scheduler layer (Plan 3).
+- The Pawukon anchor constant exists in exactly ONE place (`pawukon.go`); changing it is only allowed when anchor/fixture tests are red.
+- Every task: TDD (test first → red → implement → green), then a conventional commit message (`feat:`/`test:`/`chore:`).
+- Module: `module otorem`; all import paths are relative `otorem/...`.
+- Holiday definitions include only well-established ones (Galungan, Kuningan, Saraswati, Pagerwesi) — expanding the table MUST be verified against fixtures first (spec §5.3).
 
-**Plan berikutnya (ditulis setelah plan ini tereksekusi):**
-- Plan 2/4: Store + API + Cloudflare Access (migrasi, repository, Gin, middleware JWT, endpoint `/api/v1`)
-- Plan 3/4: Scheduler + Notifier + HolidayProvider remote (ticker, dedupe, catch-up, Gotify/Telegram/SMTP, enkripsi)
+**Next plans (written after this plan is executed):**
+- Plan 2/4: Store + API + Cloudflare Access (migrations, repositories, Gin, JWT middleware, `/api/v1` endpoints)
+- Plan 3/4: Scheduler + Notifier + remote HolidayProvider (ticker, dedupe, catch-up, Gotify/Telegram/SMTP, encryption)
 - Plan 4/4: SPA + Deployment (Vite+React+TanStack, embed, Dockerfile, compose)
 
 ---
 
-### Task 1: Scaffold modul + tipe `Date` + konversi JDN
+### Task 1: Module scaffold + `Date` type + JDN conversion
 
 **Files:**
 - Create: `go.mod`
@@ -36,13 +36,13 @@
 **Interfaces:**
 - Produces: `type Date struct{ Year, Month, Day int }`; `NewDate(y, m, d int) Date`; `DateFromTime(t time.Time) Date`; `(d Date) Time(loc *time.Location) time.Time`; `(d Date) AddDays(n int) Date`; `(d Date) JDN() int`; `DateFromJDN(jdn int) Date`; `(d Date) Weekday() int` (0=Sunday/Redite … 6=Saturday/Saniscara); `(d Date) Before/After/Equal(o Date) bool`.
 
-- [ ] **Step 1: Init modul & package**
+- [ ] **Step 1: Init the module & package**
 
 ```bash
 cd code && go mod init otorem && mkdir -p internal/domain scripts testdata
 ```
 
-- [ ] **Step 2: Tulis tipe Date (belum ada test — tipe data murni)**
+- [ ] **Step 2: Write the Date type (no tests yet — pure data type)**
 
 `internal/domain/date.go`:
 
@@ -80,7 +80,7 @@ func (d Date) Equal(o Date) bool  { return d == o }
 func (d Date) String() string { return fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day) }
 ```
 
-- [ ] **Step 3: Tulis test JDN yang gagal**
+- [ ] **Step 3: Write the failing JDN test**
 
 `internal/domain/jdn_test.go`:
 
@@ -95,8 +95,8 @@ func TestJDNKnownValues(t *testing.T) {
 		jdn int
 	}{
 		{NewDate(1970, 1, 1), 2440588},
-		{NewDate(2000, 1, 1), 2451545}, // Sabtu
-		{NewDate(2026, 6, 17), 2461209}, // Rabu (Galungan)
+		{NewDate(2000, 1, 1), 2451545}, // Saturday
+		{NewDate(2026, 6, 17), 2461209}, // Wednesday (Galungan)
 	}
 	for _, c := range cases {
 		if got := c.d.JDN(); got != c.jdn {
@@ -125,8 +125,8 @@ func TestWeekday(t *testing.T) {
 
 func TestAddDaysRoundTrip(t *testing.T) {
 	d := NewDate(2026, 2, 28)
-	if got := d.AddDays(1); got != NewDate(2026, 3, 1) { // 2026 bukan kabisat
-		t.Errorf("AddDays(1) dari 2026-02-28 = %s, want 2026-03-01", got)
+	if got := d.AddDays(1); got != NewDate(2026, 3, 1) { // 2026 is not a leap year
+		t.Errorf("AddDays(1) from 2026-02-28 = %s, want 2026-03-01", got)
 	}
 	if got := d.AddDays(2).AddDays(-2); got != d {
 		t.Errorf("round trip: got %s, want %s", got, d)
@@ -134,12 +134,12 @@ func TestAddDaysRoundTrip(t *testing.T) {
 }
 ```
 
-- [ ] **Step 4: Run test — pastikan GAGAL (belum ada JDN())**
+- [ ] **Step 4: Run the tests — make sure they FAIL (no JDN() yet)**
 
 Run: `go test ./internal/domain/ -run TestJDN -v`
-Expected: FAIL — compile error `undefined: DateFromJDN` (date.go memakainya; Step 5 melengkapinya)
+Expected: FAIL — compile error `undefined: DateFromJDN` (date.go uses it; Step 5 completes it)
 
-- [ ] **Step 5: Implementasi JDN (Fliegel–Van Flandern + inverse)**
+- [ ] **Step 5: Implement JDN (Fliegel–Van Flandern + inverse)**
 
 `internal/domain/jdn.go`:
 
@@ -174,10 +174,10 @@ func DateFromJDN(jdn int) Date {
 func (d Date) Weekday() int { return (d.JDN() + 1) % 7 }
 ```
 
-- [ ] **Step 6: Run test — PASS**
+- [ ] **Step 6: Run the tests — PASS**
 
 Run: `go test ./internal/domain/ -v`
-Expected: PASS semua (jika `TestJDNKnownValues` gagal di 2026-06-17, cek aritmetika, JANGAN ubah nilai test — nilai itu terverifikasi weekday Rabu + delta 420 hari ke 2025-04-23).
+Expected: all PASS (if `TestJDNKnownValues` fails on 2026-06-17, check the arithmetic and do NOT change the test values — they are verified by the Wednesday weekday + the 420-day delta to 2025-04-23).
 
 - [ ] **Step 7: Commit**
 
@@ -189,7 +189,7 @@ git commit -m "feat(domain): civil Date type + JDN conversion (Fliegel-Van Fland
 
 ---
 
-### Task 2: Konverter Pawukon (anchor + 30 wuku)
+### Task 2: Pawukon converter (anchor + 30 wuku)
 
 **Files:**
 - Create: `internal/domain/pawukon.go`
@@ -197,9 +197,9 @@ git commit -m "feat(domain): civil Date type + JDN conversion (Fliegel-Van Fland
 
 **Interfaces:**
 - Consumes: `Date.JDN()`, `Date.Weekday()`, `Date.AddDays` (Task 1)
-- Produces: `const PawukonCycleDays = 210`; `func CycleDay(d Date) int` (1..210); `type PawukonDate struct{ Saptawara, Pancawara, Wuku int }`; `func Pawukon(d Date) PawukonDate`; `func (p PawukonDate) Label() string`; var `Saptawara [7]string`, `Pancawara [5]string`, `Wuku [30]string`.
+- Produces: `const PawukonCycleDays = 210`; `func CycleDay(d Date) int` (1..210); `type PawukonDate struct{ Saptawara, Pancawara, Wuku int }`; `func Pawukon(d Date) PawukonDate`; `func (p PawukonDate) Label() string`; vars `Saptawara [7]string`, `Pancawara [5]string`, `Wuku [30]string`.
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [ ] **Step 1: Write the failing test**
 
 `internal/domain/pawukon_test.go`:
 
@@ -208,9 +208,9 @@ package domain
 
 import "testing"
 
-// Anchor verification (spec §5.1): Galungan selalu Buda Kliwon Wuku Dunggulan.
-// Tanggal terpublikasi: 23 Apr 2025, 19 Nov 2025, 17 Jun 2026.
-// Kuningan = Saniscara Kliwon Wuku Kuningan (Galungan + 10 hari).
+// Anchor verification (spec §5.1): Galungan is always Buda Kliwon, Wuku Dunggulan.
+// Published dates: 23 Apr 2025, 19 Nov 2025, 17 Jun 2026.
+// Kuningan = Saniscara Kliwon, Wuku Kuningan (Galungan + 10 days).
 func TestPawukonAnchorDates(t *testing.T) {
 	cases := []struct {
 		d    Date
@@ -220,7 +220,7 @@ func TestPawukonAnchorDates(t *testing.T) {
 		{NewDate(2025, 11, 19), PawukonDate{Saptawara: 3, Pancawara: 3, Wuku: 10}}, // Buda Kliwon Dunggulan
 		{NewDate(2026, 6, 17), PawukonDate{Saptawara: 3, Pancawara: 3, Wuku: 10}},  // Buda Kliwon Dunggulan
 		{NewDate(2026, 6, 27), PawukonDate{Saptawara: 6, Pancawara: 3, Wuku: 11}},  // Saniscara Kliwon Kuningan
-		{NewDate(2026, 4, 5), PawukonDate{Saptawara: 0, Pancawara: 0, Wuku: 0}},    // hari-1 siklus: Redite Paing Sinta
+		{NewDate(2026, 4, 5), PawukonDate{Saptawara: 0, Pancawara: 0, Wuku: 0}},    // day 1 of the cycle: Redite Paing Sinta
 	}
 	for _, c := range cases {
 		got := Pawukon(c.d)
@@ -230,17 +230,17 @@ func TestPawukonAnchorDates(t *testing.T) {
 	}
 }
 
-// Property: siklus 210 hari tanpa kabisat — Pawukon(d) == Pawukon(d+210k),
-// dan saptawara hasil modulo siklus harus = weekday Gregorian (cek silang).
+// Property: a 210-day cycle with no leap days — Pawukon(d) == Pawukon(d+210k),
+// and the saptawara derived from the cycle modulo must equal the Gregorian weekday (cross-check).
 func TestPawukonCycleProperties(t *testing.T) {
 	base := NewDate(2000, 1, 1)
 	for i := 0; i < 500; i++ {
 		d := base.AddDays(i*3 + 11)
 		if Pawukon(d) != Pawukon(d.AddDays(PawukonCycleDays)) {
-			t.Fatalf("siklus 210 rusak pada %s", d)
+			t.Fatalf("210-day cycle broken at %s", d)
 		}
 		if saptawaraFromCycle := (CycleDay(d) - 1) % 7; saptawaraFromCycle != d.Weekday() {
-			t.Fatalf("saptawara siklus %d != weekday %d pada %s", saptawaraFromCycle, d.Weekday(), d)
+			t.Fatalf("cycle saptawara %d != weekday %d on %s", saptawaraFromCycle, d.Weekday(), d)
 		}
 	}
 }
@@ -252,25 +252,25 @@ func TestCycleDayAtAnchor(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**
+- [ ] **Step 2: Run — FAIL**
 
 Run: `go test ./internal/domain/ -run TestPawukon -v`
 Expected: FAIL — `Pawukon undefined`
 
-- [ ] **Step 3: Implementasi pawukon.go**
+- [ ] **Step 3: Implement pawukon.go**
 
 `internal/domain/pawukon.go`:
 
 ```go
 package domain
 
-// Pawukon: kalender Bali 210 hari, 10 minggu paralel. v1 hanya butuh
-// saptawara (7), pancawara (5), dan wuku (30×7 hari) — lihat spec §5.1.
+// Pawukon: the 210-day Balinese calendar, with 10 parallel weeks. v1 only needs
+// saptawara (7), pancawara (5), and wuku (30×7 days) — see spec §5.1.
 //
-// ANCHOR (satu-satunya konstanta kalender di codebase): 2026-06-17 adalah
-// Galungan = Buda Kliwon, Wuku Dunggulan = hari ke-74 siklus. Diverifikasi
-// oleh TestPawukonAnchorDates (3 tanggal Galungan terpublikasi) dan fixture
-// harian kalenderbali.org (Task 3). Jika test merah, perbaiki HANYA di sini.
+// ANCHOR (the only calendar constant in the codebase): 2026-06-17 is
+// Galungan = Buda Kliwon, Wuku Dunggulan = day 74 of the cycle. Verified
+// by TestPawukonAnchorDates (3 published Galungan dates) and the daily
+// kalenderbali.org fixtures (Task 3). If tests go red, fix it ONLY here.
 var (
 	pawukonAnchorJDN      = NewDate(2026, 6, 17).JDN()
 	pawukonAnchorCycleDay = 74
@@ -280,8 +280,8 @@ const PawukonCycleDays = 210
 
 var Saptawara = [7]string{"Redite", "Soma", "Anggara", "Buda", "Wraspati", "Sukra", "Saniscara"}
 
-// Urutan siklus pancawara: hari ke-1 siklus = Paing (diverifikasi anchor:
-// hari-74 = Kliwon → (74-1) mod 5 = 3 → indeks 3 = Kliwon).
+// Pancawara cycle order: day 1 of the cycle = Paing (verified by the anchor:
+// day 74 = Kliwon → (74-1) mod 5 = 3 → index 3 = Kliwon).
 var Pancawara = [5]string{"Paing", "Pon", "Wage", "Kliwon", "Umanis"}
 
 var Wuku = [30]string{
@@ -310,7 +310,7 @@ func CycleDay(d Date) int {
 func Pawukon(d Date) PawukonDate {
 	c := CycleDay(d)
 	return PawukonDate{
-		Saptawara: d.Weekday(), // saptawara identik hari Gregorian, Redite=Minggu
+		Saptawara: d.Weekday(), // saptawara is identical to the Gregorian weekday, Redite=Sunday
 		Pancawara: (c - 1) % 5,
 		Wuku:      (c - 1) / 7,
 	}
@@ -324,7 +324,7 @@ func (p PawukonDate) Label() string {
 - [ ] **Step 4: Run — PASS**
 
 Run: `go test ./internal/domain/ -v`
-Expected: PASS. Jika `TestPawukonAnchorDates` merah di SEMUA kasus: offset anchor salah → cek `pawukonAnchorCycleDay`. Jika hanya 1 tanggal merah: tanggal sumber yang salah, verifikasi ulang sebelum menyentuh kode.
+Expected: PASS. If `TestPawukonAnchorDates` is red on ALL cases, the anchor offset is wrong → check `pawukonAnchorCycleDay`. If only 1 date is red, the source date is wrong; verify again before touching the code.
 
 - [ ] **Step 5: Commit**
 
@@ -336,35 +336,35 @@ git commit -m "feat(domain): pawukon converter with verified anchor (Galungan 20
 
 ---
 
-### Task 3: Fixture scraper kalenderbali.org + test fixture
+### Task 3: kalenderbali.org fixture scraper + fixture tests
 
 **Files:**
 - Create: `scripts/fetch_fixtures/main.go`
-- Create: `scripts/fetch_fixtures/go.mod` (modul terpisah `otorem/scripts/fetchfixtures` — agar goquery tidak masuk modul utama)
+- Create: `scripts/fetch_fixtures/go.mod` (a separate module `otorem/scripts/fetchfixtures` — so goquery does not enter the main module)
 - Create: `internal/domain/fixture_test.go`
-- Create (hasil run): `testdata/pawukon_2025.csv`, `testdata/pawukon_2026.csv`
+- Create (run output): `testdata/pawukon_2025.csv`, `testdata/pawukon_2026.csv`
 
 **Interfaces:**
-- Consumes: `Pawukon(d Date) PawukonDate`, nama hari/wuku (Task 2)
-- Produces: fixture CSV `date,saptawara,pancawara,wuku` (format `2006-01-02`); test `TestPawukonAgainstFixtures` yang menjadi wasit anchor & tabel hari raya selamanya.
+- Consumes: `Pawukon(d Date) PawukonDate`, day/wuku names (Task 2)
+- Produces: CSV fixtures `date,saptawara,pancawara,wuku` (format `2006-01-02`); the `TestPawukonAgainstFixtures` test that serves as the eternal referee for the anchor & holiday table.
 
-- [ ] **Step 1: Buat modul scraper**
+- [ ] **Step 1: Create the scraper module**
 
 ```bash
 mkdir -p scripts/fetch_fixtures && cd scripts/fetch_fixtures && go mod init otorem/scripts/fetchfixtures && go get github.com/PuerkitoBio/goquery@latest
 ```
 
-- [ ] **Step 2: Tulis scraper**
+- [ ] **Step 2: Write the scraper**
 
 `scripts/fetch_fixtures/main.go`:
 
 ```go
-// Scraper fixture: ambil peta tanggal Gregorian → (saptawara, pancawara, wuku)
-// dari kalenderbali.org untuk setahun, tulis ke testdata/pawukon_<year>.csv.
-// Pemakaian data: fixture pengujian pribadi (spec §6) — data © kalenderbali.org
-// (I Wayan Nuarsa, Universitas Udayana), dikreditkan, TIDAK dire distribusikan.
+// Fixture scraper: fetch a Gregorian date → (saptawara, pancawara, wuku) map
+// from kalenderbali.org for one year, writing to testdata/pawukon_<year>.csv.
+// Data usage: personal test fixtures (spec §6) — data © kalenderbali.org
+// (I Wayan Nuarsa, Universitas Udayana), credited, NOT redistributed.
 //
-// Pemakaian: go run . -year 2026 -out ../../testdata
+// Usage: go run . -year 2026 -out ../../testdata
 package main
 
 import (
@@ -380,18 +380,18 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// pola baris harian di halaman rerainan/haripenting, contoh:
+// daily row pattern on the rerainan/haripenting pages, e.g.:
 // "17-06-2026. Buda Kliwon Dunggulan"
 var dayRe = regexp.MustCompile(`(\d{2})-(\d{2})-(\d{4})\.?\s+([A-Za-z]+)\s+([A-Za-z]+)\s+([A-Za-z]+)`)
 
-// ejaan sumber bervariasi; normalisasi ke konstanta engine. Nama yang tidak
-// ada di sini DAN tidak cocok konstanta engine = error keras (jangan diam).
+// source spellings vary; normalize to engine constants. A name that is not
+// here AND does not match an engine constant = hard error (never stay silent).
 var normalize = map[string]string{
 	"Keliwon": "Kliwon",
 	"Tolu":    "Taulu",
 	"Wugu":    "Ugu",
 	"Kaulu":   "Kelawu",
-	"Luang":   "Luang", // dipertahankan; test akan gagal jika muncul sebagai wuku
+	"Luang":   "Luang", // kept; the test will fail if it appears as a wuku
 }
 
 func norm(s string) string { if v, ok := normalize[s]; ok { return v }; return s }
@@ -416,29 +416,29 @@ func main() {
 		doc, err := goquery.NewDocumentFromReader(resp.Body)
 		resp.Body.Close()
 		if err != nil { log.Fatal(err) }
-		text, _ := doc.Find("body").Html() // baris harian berpola dayRe di dalam body
+		text, _ := doc.Find("body").Html() // daily rows matching dayRe inside the body
 		for _, m := range dayRe.FindAllStringSubmatch(strings.TrimSpace(text), -1) {
 			day, month, yearStr := m[1], m[2], m[3]
 			sap, pan, wuk := norm(m[4]), norm(m[5]), norm(m[6])
 			fmt.Fprintf(f, "%s-%s-%s,%s,%s,%s\n", yearStr, month, day, sap, pan, wuk)
 			seen++
 		}
-		time.Sleep(1500 * time.Millisecond) // sopan: jangan menembak server
+		time.Sleep(1500 * time.Millisecond) // be polite: don't hammer the server
 	}
 	log.Printf("total baris: %d → %s/pawukon_%d.csv", seen, *out, *year)
 	if seen < 350 { log.Fatalf("baris %d < 350 — kemungkinan struktur HTML berubah; curl halaman & sesuaikan dayRe", seen) }
 }
 ```
 
-- [ ] **Step 3: Jalankan scraper & periksa hasil**
+- [ ] **Step 3: Run the scraper & check the output**
 
 ```bash
 cd scripts/fetch_fixtures && go run . -year 2026 -out ../../testdata && go run . -year 2025 -out ../../testdata
 head -5 ../../testdata/pawukon_2026.csv && wc -l ../../testdata/pawukon_*.csv
 ```
-Expected: ≈365 baris/tahun. **Jika 0 baris / gagal parse**: `curl -s 'https://kalenderbali.org/rerainan.php?bulan=6&tahun=2026' | head -100`, lihat struktur aktual, sesuaikan `dayRe`/selektor — parser boleh disesuaikan, DOMAIN TIDAK. **Jika situs mati total**: buat CSV manual minimal berisi 8 baris terverifikasi (4 tanggal Galungan/Kuningan di Task 2 + 2026-04-05 Redite Paing Sinta + 3 baris lain dari sumber cetak), commit, dan lanjut — test fixture tetap jadi wasit.
+Expected: ≈365 rows/year. **If 0 rows / parse failure**: `curl -s 'https://kalenderbali.org/rerainan.php?bulan=6&tahun=2026' | head -100`, inspect the actual structure, adjust `dayRe`/selectors — the parser may change, the DOMAIN may not. **If the site is completely down**: create a minimal manual CSV with 8 verified rows (the 4 Galungan/Kuningan dates from Task 2 + 2026-04-05 Redite Paing Sinta + 3 more rows from print sources), commit it, and move on — the fixture test remains the referee.
 
-- [ ] **Step 4: Tulis test fixture (gagal jika CSV belum ada → di-skip)**
+- [ ] **Step 4: Write the fixture test (skipped if the CSVs do not exist yet)**
 
 `internal/domain/fixture_test.go`:
 
@@ -481,7 +481,7 @@ func TestPawukonAgainstFixtures(t *testing.T) {
 }
 
 func TestFixtureSpellingKnown(t *testing.T) {
-	// ejaan fixture harus persis konstanta engine (normalisasi terjadi di scraper)
+	// fixture spellings must exactly match the engine constants (normalization happens in the scraper)
 	for _, n := range strings.Split("Kliwon,Umanis,Dunggulan,Watugunung", ",") {
 		if indexOf(Wuku[:], n) < 0 && indexOf(Pancawara[:], n) < 0 {
 			t.Errorf("nama %q tidak dikenal engine", n)
@@ -490,12 +490,12 @@ func TestFixtureSpellingKnown(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Run semua test — PASS**
+- [ ] **Step 5: Run all tests — PASS**
 
 Run: `go test ./internal/domain/ -v`
-Expected: `TestPawukonAgainstFixtures` PASS terhadap ratusan baris nyata — ini bukti anchor & tabel benar. Jika ada baris merah: catat polanya (mis. selisih +1 hari di wuku tertentu = anchor geser; ejaan beda = tambah alias `normalize` di scraper, bukan di engine).
+Expected: `TestPawukonAgainstFixtures` PASSes against hundreds of real rows — proof that the anchor & table are correct. If any row is red: note the pattern (e.g. a +1-day shift on a specific wuku = shifted anchor; a spelling difference = add an alias to `normalize` in the scraper, not in the engine).
 
-- [ ] **Step 6: Commit (termasuk CSV fixture)**
+- [ ] **Step 6: Commit (including the CSV fixtures)**
 
 ```bash
 git add scripts/ testdata/ internal/
@@ -511,10 +511,10 @@ git commit -m "feat(domain): kalenderbali.org fixture scraper + daily fixture te
 - Test: `internal/domain/occurrence_test.go`
 
 **Interfaces:**
-- Consumes: `Date`, `Pawukon`, `PawukonDate.Label()` (Task 1–2)
-- Produces: `type OccurrenceType string`; const `Birthday, Otonan, Anniversary OccurrenceType`; `type Occurrence struct{ Date Date; Type OccurrenceType; Number int; Label string }`; `func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error)` (inklusif `from`); `func OccurrencesBetween(base Date, typ OccurrenceType, from, to Date) ([]Occurrence, error)`; `func Age(base, on Date) int`.
+- Consumes: `Date`, `Pawukon`, `PawukonDate.Label()` (Tasks 1–2)
+- Produces: `type OccurrenceType string`; consts `Birthday, Otonan, Anniversary OccurrenceType`; `type Occurrence struct{ Date Date; Type OccurrenceType; Number int; Label string }`; `func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error)` (inclusive of `from`); `func OccurrencesBetween(base Date, typ OccurrenceType, from, to Date) ([]Occurrence, error)`; `func Age(base, on Date) int`.
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [ ] **Step 1: Write the failing test**
 
 `internal/domain/occurrence_test.go`:
 
@@ -525,67 +525,67 @@ import "testing"
 
 func TestNextOccurrenceOtonan(t *testing.T) {
 	base := NewDate(2026, 1, 10)
-	// Otonan pertama = lahir + 210 hari; inclusive terhadap `from`.
+	// The first otonan = birth + 210 days; inclusive of `from`.
 	if occ, _ := NextOccurrence(base, Otonan, base); occ.Date != base.AddDays(210) {
-		t.Errorf("otoman pertama = %s, want %s", occ.Date, base.AddDays(210))
+		t.Errorf("first otonan = %s, want %s", occ.Date, base.AddDays(210))
 	}
 	if occ, _ := NextOccurrence(base, Otonan, base.AddDays(210)); occ.Number != 1 {
-		t.Errorf("Number tepat di hari otonan = %d, want 1 (inklusif)", occ.Number)
+		t.Errorf("Number exactly on the otonan day = %d, want 1 (inclusive)", occ.Number)
 	}
 	if occ, _ := NextOccurrence(base, Otonan, base.AddDays(211)); occ != (Occurrence{
 		Date: base.AddDays(420), Type: Otonan, Number: 2,
 		Label: "Otonan ke-2 — " + Pawukon(base.AddDays(420)).Label(),
 	}) {
-		t.Errorf("otoman kedua salah: %+v", occ)
+		t.Errorf("second otonan wrong: %+v", occ)
 	}
-	// konsistensi pawukon: label pawukon tanggal lahir == tanggal otonan
+	// pawukon consistency: the pawukon label of the birth date == the otonan date
 	b, _ := NextOccurrence(base, Otonan, base)
 	if Pawukon(base).Label() != Pawukon(b.Date).Label() {
-		t.Errorf("pawukon beda: %s vs %s", Pawukon(base).Label(), Pawukon(b.Date).Label())
+		t.Errorf("pawukon differs: %s vs %s", Pawukon(base).Label(), Pawukon(b.Date).Label())
 	}
 }
 
 func TestNextOccurrenceBirthday(t *testing.T) {
 	leap := NewDate(2000, 2, 29)
 	occ, _ := NextOccurrence(leap, Birthday, NewDate(2025, 1, 1))
-	if occ.Date != NewDate(2025, 3, 1) || occ.Number != 25 { // 29 Feb → 1 Mar non-kabisat (spec §5.2)
-		t.Errorf("29Feb non-kabisat: %+v, want 2025-03-01 umur 25", occ)
+	if occ.Date != NewDate(2025, 3, 1) || occ.Number != 25 { // Feb 29 → Mar 1 in non-leap years (spec §5.2)
+		t.Errorf("Feb29 non-leap: %+v, want 2025-03-01 age 25", occ)
 	}
 	occ, _ = NextOccurrence(leap, Birthday, NewDate(2024, 1, 1))
 	if occ.Date != NewDate(2024, 2, 29) || occ.Number != 24 {
-		t.Errorf("29Feb kabisat: %+v, want 2024-02-29 umur 24", occ)
+		t.Errorf("Feb29 leap: %+v, want 2024-02-29 age 24", occ)
 	}
 	occ, _ = NextOccurrence(NewDate(1990, 12, 30), Birthday, NewDate(2026, 1, 1))
 	if occ.Date != NewDate(2026, 12, 30) || occ.Number != 36 {
-		t.Errorf("birthday biasa lintas tahun: %+v", occ)
+		t.Errorf("ordinary birthday across years: %+v", occ)
 	}
 }
 
 func TestOccurrencesBetween(t *testing.T) {
 	base := NewDate(2026, 1, 10)
 	occs, _ := OccurrencesBetween(base, Otonan, base, base.AddDays(1000))
-	if len(occs) != 5 { // hari ke-210,420,630,840,1000? → 210,420,630,840 = 4 saja (1000 < 1050)
-		t.Fatalf("dapat %d occurrence, want 4", len(occs))
+	if len(occs) != 5 { // days 210,420,630,840,1000? → 210,420,630,840 = only 4 (1000 < 1050)
+		t.Fatalf("got %d occurrences, want 4", len(occs))
 	}
-	if occs[3].Number != 4 { t.Errorf("urutan N salah: %+v", occs[3]) }
+	if occs[3].Number != 4 { t.Errorf("wrong N order: %+v", occs[3]) }
 	occs2, _ := OccurrencesBetween(NewDate(2026, 6, 20), Birthday, NewDate(2026, 1, 1), NewDate(2026, 12, 31))
 	if len(occs2) != 1 || occs2[0].Date != NewDate(2026, 6, 20) {
-		t.Errorf("birthday dalam range: %+v", occs2)
+		t.Errorf("birthday within range: %+v", occs2)
 	}
 }
 
 func TestAge(t *testing.T) {
 	if Age(NewDate(2000, 2, 29), NewDate(2025, 3, 1)) != 25 { t.Error("age 29Feb") }
-	if Age(NewDate(1990, 12, 30), NewDate(2026, 12, 29)) != 35 { t.Error("age sebelum ultah") }
+	if Age(NewDate(1990, 12, 30), NewDate(2026, 12, 29)) != 35 { t.Error("age before birthday") }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**
+- [ ] **Step 2: Run — FAIL**
 
 Run: `go test ./internal/domain/ -run 'Occurrence|Age' -v`
 Expected: FAIL — `NextOccurrence undefined`
 
-- [ ] **Step 3: Implementasi occurrence.go**
+- [ ] **Step 3: Implement occurrence.go**
 
 `internal/domain/occurrence.go`:
 
@@ -603,8 +603,8 @@ const (
 )
 
 // Occurrence is one concrete happening of a recurring occasion.
-// Number semantics: Otonan → siklus ke-N (N≥1); Birthday → umur;
-// Anniversary → tahun ke- sejak base.
+// Number semantics: Otonan → cycle N (N≥1); Birthday → age;
+// Anniversary → number of years since base.
 type Occurrence struct {
 	Date   Date
 	Type   OccurrenceType
@@ -641,7 +641,7 @@ func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error
 	}
 }
 
-// yearlyDate: ulang tahun base di tahun y; 29 Feb → 1 Mar pada tahun non-kabisat.
+// yearlyDate: the base anniversary in year y; Feb 29 → Mar 1 in non-leap years.
 func yearlyDate(base Date, y int) Date {
 	if base.Month == 2 && base.Day == 29 && !isLeap(y) {
 		return NewDate(y, 3, 1)
@@ -686,7 +686,7 @@ func OccurrencesBetween(base Date, typ OccurrenceType, from, to Date) ([]Occurre
 	return out, nil
 }
 
-// Age: umur penuh pada tanggal `on` (aman untuk 29 Feb → hitung berdasar tahun).
+// Age: full age on date `on` (safe for Feb 29 → computed from the year).
 func Age(base, on Date) int { return on.Year - base.Year }
 
 func isLeap(y int) bool { return y%4 == 0 && (y%100 != 0 || y%400 == 0) }
@@ -697,7 +697,7 @@ func max(a, b int) int { if a > b { return a }; return b }
 - [ ] **Step 4: Run — PASS**
 
 Run: `go test ./internal/domain/ -v`
-Expected: PASS semua. Catatan TestOccurrencesBetween: 4 occurrence (210/420/630/840) — komentar test sengaja menuntut 4, bukan 5.
+Expected: all PASS. Note on TestOccurrencesBetween: 4 occurrences (210/420/630/840) — the test comment intentionally demands 4, not 5.
 
 - [ ] **Step 5: Commit**
 
@@ -709,17 +709,17 @@ git commit -m "feat(domain): occurrence engine (otongan 210d, birthday feb29, an
 
 ---
 
-### Task 5: Hari raya Pawukon (dihitung lokal)
+### Task 5: Pawukon holidays (computed locally)
 
 **Files:**
 - Create: `internal/domain/holidays.go`
 - Test: `internal/domain/holidays_test.go`
 
 **Interfaces:**
-- Consumes: `Pawukon`, `PawukonDate`, nama-nama (Task 2), `Date` (Task 1)
-- Produces: `type Holiday struct{ Date Date; Name string }`; `func PawukonHolidaysBetween(from, to Date) []Holiday`; var `PawukonHolidayDefs []HolidayDef` (`type HolidayDef struct{ Name string; Saptawara, Pancawara, Wuku int }`) — hanya 4 definisi baku; perluasan harus lolos fixture dulu.
+- Consumes: `Pawukon`, `PawukonDate`, the name tables (Task 2), `Date` (Task 1)
+- Produces: `type Holiday struct{ Date Date; Name string }`; `func PawukonHolidaysBetween(from, to Date) []Holiday`; var `PawukonHolidayDefs []HolidayDef` (`type HolidayDef struct{ Name string; Saptawara, Pancawara, Wuku int }`) — only the 4 standard definitions; expansions must pass fixtures first.
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [ ] **Step 1: Write the failing test**
 
 `internal/domain/holidays_test.go`:
 
@@ -732,29 +732,29 @@ func TestGalunganKuningan2026(t *testing.T) {
 	hs := PawukonHolidaysBetween(NewDate(2026, 6, 1), NewDate(2026, 7, 31))
 	got := map[Date]string{}
 	for _, h := range hs { got[h.Date] = h.Name }
-	if got[NewDate(2026, 6, 17)] != "Galungan" { t.Errorf("Galungan 2026-06-17 tidak ada: %v", got) }
-	if got[NewDate(2026, 6, 27)] != "Kuningan" { t.Errorf("Kuningan 2026-06-27 tidak ada: %v", got) }
+	if got[NewDate(2026, 6, 17)] != "Galungan" { t.Errorf("Galungan 2026-06-17 missing: %v", got) }
+	if got[NewDate(2026, 6, 27)] != "Kuningan" { t.Errorf("Kuningan 2026-06-27 missing: %v", got) }
 }
 
-// Satu siklus penuh (210 hari mulai hari-1 siklus = 2026-04-05) memuat tepat
-// sekali: Galungan (hari-74), Kuningan (hari-84), Pagerwesi (hari-4), Saraswati (hari-210).
+// One full cycle (210 days starting on cycle day 1 = 2026-04-05) contains exactly
+// one of each: Galungan (day 74), Kuningan (day 84), Pagerwesi (day 4), Saraswati (day 210).
 func TestOneCycleExactHolidays(t *testing.T) {
 	hs := PawukonHolidaysBetween(NewDate(2026, 4, 5), NewDate(2026, 4, 5).AddDays(209))
-	if len(hs) != 4 { t.Fatalf("dapat %d hari raya, want 4: %+v", len(hs), hs) }
+	if len(hs) != 4 { t.Fatalf("got %d holidays, want 4: %+v", len(hs), hs) }
 	names := map[string]bool{}
 	for _, h := range hs { names[h.Name] = true }
 	for _, want := range []string{"Galungan", "Kuningan", "Saraswati", "Pagerwesi"} {
-		if !names[want] { t.Errorf("hilang %s dalam 1 siklus", want) }
+		if !names[want] { t.Errorf("missing %s within 1 cycle", want) }
 	}
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**
+- [ ] **Step 2: Run — FAIL**
 
 Run: `go test ./internal/domain/ -run Holiday -v`
 Expected: FAIL — `PawukonHolidaysBetween undefined`
 
-- [ ] **Step 3: Implementasi holidays.go**
+- [ ] **Step 3: Implement holidays.go**
 
 `internal/domain/holidays.go`:
 
@@ -763,7 +763,7 @@ package domain
 
 import "fmt"
 
-// HolidayDef: satu hari raya Pawukon = kombinasi (saptawara, pancawara, wuku).
+// HolidayDef: one Pawukon holiday = a (saptawara, pancawara, wuku) combination.
 type HolidayDef struct {
 	Name      string
 	Saptawara int
@@ -771,9 +771,9 @@ type HolidayDef struct {
 	Wuku      int
 }
 
-// HANYA definisi yang sudah baku dan diverifikasi (spec §5.3). Menambah
-// definisi (deret Tumpek, Sugihan, dsb.) WAJIB: tambahkan baris di fixture
-// scraper terlebih dahulu, buktikan tanggalnya cocok, baru masuk sini.
+// ONLY well-established, verified definitions (spec §5.3). Adding a
+// definition (the Tumpek series, Sugihan, etc.) REQUIRES: first add a row to
+// the fixture scraper, prove the dates match, and only then add it here.
 var PawukonHolidayDefs = []HolidayDef{
 	{Name: "Galungan", Saptawara: 3, Pancawara: 3, Wuku: 10},  // Buda Kliwon Dunggulan
 	{Name: "Kuningan", Saptawara: 6, Pancawara: 3, Wuku: 11},  // Saniscara Kliwon Kuningan
@@ -787,7 +787,7 @@ type Holiday struct {
 }
 
 // PawukonHolidaysBetween returns Pawukon-based holidays in [from, to].
-// O( jumlah hari × jumlah definisi ) — trivial untuk rentang horizon app.
+// O( number of days × number of definitions ) — trivial for the app's horizon.
 func PawukonHolidaysBetween(from, to Date) []Holiday {
 	var out []Holiday
 	for d := from; !d.After(to); d = d.AddDays(1) {
@@ -808,7 +808,7 @@ func (h Holiday) String() string { return fmt.Sprintf("%s (%s)", h.Name, h.Date)
 - [ ] **Step 4: Run — PASS**
 
 Run: `go test ./internal/domain/ -v`
-Expected: PASS semua termasuk fixture test. Jika fixture menyebut hari raya lain (Sugihan, Tumpek) — abaikan untuk v1; tabel diperluas di Plan 3 bersama HolidayProvider.
+Expected: all PASS, including the fixture tests. If fixtures mention other holidays (Sugihan, Tumpek) — ignore them for v1; the table is expanded in Plan 3 together with the HolidayProvider.
 
 - [ ] **Step 5: Commit**
 
@@ -820,7 +820,7 @@ git commit -m "feat(domain): pawukon holidays (galungan, kunningan, saraswati, p
 
 ---
 
-### Task 6: Tanggal reminder (offset) + rangkum API domain
+### Task 6: Reminder dates (offsets) + domain API summary
 
 **Files:**
 - Create: `internal/domain/reminder.go`
@@ -829,9 +829,9 @@ git commit -m "feat(domain): pawukon holidays (galungan, kunningan, saraswati, p
 
 **Interfaces:**
 - Consumes: `Date` (Task 1)
-- Produces: `var DefaultOffsets = []int{7, 4, 2, 1, 0}`; `func ReminderDates(occurrenceDate Date, offsets []int) ([]Date, error)` (terurut naik, dedupe, semua offset ≥ 0, maks 60); `func ValidateOffsets(offsets []int) error`.
+- Produces: `var DefaultOffsets = []int{7, 4, 2, 1, 0}`; `func ReminderDates(occurrenceDate Date, offsets []int) ([]Date, error)` (ascending, deduped, all offsets ≥ 0, max 60); `func ValidateOffsets(offsets []int) error`.
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [ ] **Step 1: Write the failing test**
 
 `internal/domain/reminder_test.go`:
 
@@ -853,25 +853,25 @@ func TestReminderDates(t *testing.T) {
 func TestReminderDatesDedupeSort(t *testing.T) {
 	got, err := ReminderDates(NewDate(2026, 6, 17), []int{2, 7, 2, 0})
 	if err != nil { t.Fatal(err) }
-	if len(got) != 3 { t.Fatalf("dapat %d tanggal, want 3 (dedupe): %v", len(got), got) }
+	if len(got) != 3 { t.Fatalf("got %d dates, want 3 (deduped): %v", len(got), got) }
 	if got[0] != NewDate(2026, 6, 10) || got[2] != NewDate(2026, 6, 17) {
-		t.Errorf("urutan salah: %v", got)
+		t.Errorf("wrong order: %v", got)
 	}
 }
 
 func TestValidateOffsets(t *testing.T) {
-	if err := ValidateOffsets([]int{-1}); err == nil { t.Error("offset negatif harus error") }
-	if err := ValidateOffsets([]int{1, 1, 500}); err == nil { t.Error("duplikat/terlalu besar harus error") }
-	if err := ValidateOffsets(DefaultOffsets); err != nil { t.Errorf("default harus valid: %v", err) }
+	if err := ValidateOffsets([]int{-1}); err == nil { t.Error("negative offset must error") }
+	if err := ValidateOffsets([]int{1, 1, 500}); err == nil { t.Error("duplicate/too large must error") }
+	if err := ValidateOffsets(DefaultOffsets); err != nil { t.Errorf("defaults must be valid: %v", err) }
 }
 ```
 
-- [ ] **Step 2: Run — GAGAL**
+- [ ] **Step 2: Run — FAIL**
 
 Run: `go test ./internal/domain/ -run Reminder -v`
 Expected: FAIL — `ReminderDates undefined`
 
-- [ ] **Step 3: Implementasi reminder.go**
+- [ ] **Step 3: Implement reminder.go**
 
 `internal/domain/reminder.go`:
 
@@ -883,10 +883,10 @@ import (
 	"sort"
 )
 
-// DefaultOffsets: H-7, H-4, H-2, H-1, H (spec §2, configurable di Settings).
+// DefaultOffsets: D-7, D-4, D-2, D-1, D (spec §2, configurable in Settings).
 var DefaultOffsets = []int{7, 4, 2, 1, 0}
 
-// ValidateOffsets: non-negatif, tanpa duplikat, ≤ 60 hari (paling jauh 2 bulan).
+// ValidateOffsets: non-negative, no duplicates, ≤ 60 days (2 months at most).
 func ValidateOffsets(offsets []int) error {
 	seen := map[int]bool{}
 	for _, o := range offsets {
@@ -901,8 +901,8 @@ func ValidateOffsets(offsets []int) error {
 	return nil
 }
 
-// ReminderDates: tanggal-tanggal reminder untuk satu occurrence —
-// occurrenceDate − offset, terurut naik, dedupe.
+// ReminderDates: the reminder dates for one occurrence —
+// occurrenceDate − offset, ascending, deduped.
 func ReminderDates(occurrenceDate Date, offsets []int) ([]Date, error) {
 	if err := ValidateOffsets(offsets); err != nil { return nil, err }
 	sorted := append([]int(nil), offsets...)
@@ -918,19 +918,19 @@ func ReminderDates(occurrenceDate Date, offsets []int) ([]Date, error) {
 `internal/domain/doc.go`:
 
 ```go
-// Package domain adalah engine kalender murni otorem: Pawukon Bali, otonan,
-// ulang tahun, anniversary, hari raya Pawukon, dan tanggal reminder.
-// DILARANG menambahkan dependensi I/O di package ini (lihat plan, Global
-// Constraints) — semua keputusan timezone dilakukan oleh layer scheduler.
+// Package domain is otorem's pure calendar engine: Balinese Pawukon, otonan,
+// birthdays, anniversaries, Pawukon holidays, and reminder dates.
+// Adding I/O dependencies to this package is FORBIDDEN (see the plan, Global
+// Constraints) — all timezone decisions are made by the scheduler layer.
 package domain
 ```
 
-- [ ] **Step 4: Run seluruh test + lint**
+- [ ] **Step 4: Run all tests + lint**
 
 Run: `gofmt -l internal/ scripts/ ; go vet ./... && go test ./internal/domain/ -v -count=1`
-Expected: kosong (format), vet bersih, semua test PASS.
+Expected: empty (formatting), clean vet, all tests PASS.
 
-- [ ] **Step 5: Commit + tag akhir plan**
+- [ ] **Step 5: Commit + final plan tag**
 
 ```bash
 git add internal/
@@ -942,8 +942,8 @@ git tag plan-1-domain-engine-done
 
 ## Definition of Done (Plan 1)
 
-- [ ] `go test ./internal/domain/ -v -count=1` hijau penuh, termasuk fixture ratusan hari nyata.
-- [ ] `go build ./...` sukses dengan `CGO_ENABLED=0`.
-- [ ] `internal/domain` tanpa import I/O (`go list -deps` dicek manual).
-- [ ] Semua task ter-commit; tag `plan-1-domain-engine-done` ada.
-- [ ] Anchor Pawukon hanya di `pawukon.go`; tabel hari raya hanya 4 definisi baku.
+- [ ] `go test ./internal/domain/ -v -count=1` fully green, including fixtures of hundreds of real days.
+- [ ] `go build ./...` succeeds with `CGO_ENABLED=0`.
+- [ ] `internal/domain` has no I/O imports (`go list -deps` checked manually).
+- [ ] All tasks committed; the tag `plan-1-domain-engine-done` exists.
+- [ ] The Pawukon anchor lives only in `pawukon.go`; the holiday table contains only the 4 standard definitions.

@@ -1,183 +1,183 @@
 # otorem
 
-**otorem** adalah pengingat swadaya (self-hosted) untuk otonan Bali berbasis Pawukon 210 hari, ulang tahun, anniversary, dan hari raya — dihitung otomatis lalu dikirim lewat Gotify, Telegram, atau email. Semuanya berjalan dari satu container: SPA sudah tertanam di dalam binary Go, database SQLite tersimpan di volume, dan akses diamankan Cloudflare Access tanpa password tambahan.
+**otorem** is a self-hosted reminder service for Balinese otonan based on the 210-day Pawukon cycle, birthdays, anniversaries, and holidays — computed automatically and delivered via Gotify, Telegram, or email. Everything runs from a single container: the SPA is embedded in the Go binary, the SQLite database lives on a volume, and access is secured through Cloudflare Access with no additional password.
 
-## Fitur
+## Features
 
-- **Otonan & pawukon** — siklus otonan 210 hari dihitung dari tanggal lahir; label memuat saptawara, pancawara, dan wuku.
-- **Jenis acara lain** — ulang tahun (termasuk 29 Feb), anniversary, dan hari raya Pawukon baku (Galungan, Kuningan, Saraswati, Pagerwesi).
-- **Hari raya nasional & Saka** — kategori bisa di-toggle; data remote di-cache di SQLite.
-- **Offset customizable** — default H-7, H-4, H-2, H-1, H+0; tiap kontak bisa punya offset sendiri.
-- **Dedupe anti dobel** — unique constraint di log notifikasi menjamin satu reminder terkirim sekali per acara/tanggal/offset/channel.
-- **Catch-up** — reminder yang terlewat selama container mati tetap dikirim (default window 24 jam) dengan label "terlambat".
-- **Multi-channel** — Gotify (self-hosted), Telegram, dan SMTP/email; config channel terenkripsi AES-256-GCM dengan `APP_SECRET`.
-- **Tes kirim** — tombol tes per channel dari halaman Channels.
-- **PWA** — manifest + service worker, installable dari HP.
-- **Kalender lintas tahun** — panah lompat ±1 tahun di kalender; data di-fetch per tahun (`/upcoming?from=&to=`, maks 400 hari) dan ±1 tahun di sekitarnya di-prefetch.
-- **Observability** — `/healthz`, `/readyz`, dan `/metrics` (Prometheus).
-- **Jam kirim & timezone** — default 08:00 dan `Asia/Makassar` (WITA), diubah dari UI Settings (mis. `Asia/Jakarta` untuk WIB).
+- **Otonan & pawukon** — the 210-day otonan cycle is computed from the date of birth; labels include saptawara, pancawara, and wuku.
+- **Other event types** — birthdays (including Feb 29), anniversaries, and standard Pawukon holidays (Galungan, Kuningan, Saraswati, Pagerwesi).
+- **National & Saka holidays** — categories can be toggled; remote data is cached in SQLite.
+- **Customizable offsets** — defaults are D-7, D-4, D-2, D-1, D+0; each contact can have its own offsets.
+- **Deduplication** — a unique constraint in the notification log guarantees each reminder is sent once per event/date/offset/channel.
+- **Catch-up** — reminders missed while the container was down are still sent (default window: 24 hours) and labeled "late".
+- **Multi-channel** — Gotify (self-hosted), Telegram, and SMTP/email; channel configs are encrypted with AES-256-GCM using `APP_SECRET`.
+- **Test send** — a per-channel test button on the Channels page.
+- **PWA** — manifest + service worker, installable from a phone.
+- **Cross-year calendar** — ±1 year navigation arrows in the calendar; data is fetched per year (`/upcoming?from=&to=`, max 400 days) and the surrounding ±1 year is prefetched.
+- **Observability** — `/healthz`, `/readyz`, and `/metrics` (Prometheus).
+- **Send time & timezone** — defaults to 08:00 and `Asia/Makassar` (WITA), configurable in the Settings UI (e.g. `Asia/Jakarta` for WIB).
 
 ## Quickstart
 
-Butuh Docker (+ Compose) **atau** Podman (+ podman-compose), dan sebuah domain yang diarahkan ke Cloudflare (untuk tunnel).
+You need Docker (+ Compose) **or** Podman (+ podman-compose), and a domain pointed at Cloudflare (for the tunnel).
 
 ```bash
-git clone <repo-anda> otorem && cd otorem
-cp .env.example .env   # edit APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS
-podman-compose up -d                 # app saja; tanpa profile bila cloudflared sudah jalan di host
-# (pengguna Docker: docker compose up -d --build; butuh tunnel in-container: tambahkan --profile cloudflared)
+git clone <your-repo> otorem && cd otorem
+cp .env.example .env   # set APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS
+podman-compose up -d                 # app only; no profile needed if cloudflared already runs on the host
+# (Docker users: docker compose up -d --build; need an in-container tunnel: add --profile cloudflared)
 ```
 
-Aplikasi hanya listen di network internal compose; akses publik lewat tunnel Cloudflare. Buka `https://otorem.domain-anda.com`.
+The application only listens on the internal compose network; public access goes through the Cloudflare tunnel. Open `https://otorem.your-domain.com`.
 
-Profil compose (semua opsional, `app` selalu ikut):
+Compose profiles (all optional, `app` is always included):
 
-| Profile | Isi | Perintah |
+| Profile | Contents | Command |
 |---|---|---|
-| `cloudflared` | tunnel in-container (butuh `TUNNEL_TOKEN`) — **skip bila cloudflared sudah jalan di host** | `docker compose --profile cloudflared up -d` |
-| `gotify` | Gotify self-hosted (`http://gotify:80`) | `docker compose --profile gotify up -d` |
-| `litestream` | replikasi SQLite ke S3/R2 | `docker compose --profile litestream up -d` |
+| `cloudflared` | in-container tunnel (requires `TUNNEL_TOKEN`) — **skip if cloudflared already runs on the host** | `docker compose --profile cloudflared up -d` |
+| `gotify` | self-hosted Gotify (`http://gotify:80`) | `docker compose --profile gotify up -d` |
+| `litestream` | SQLite replication to S3/R2 | `docker compose --profile litestream up -d` |
 
-Profil bisa digabung, mis. `docker compose --profile cloudflared --profile gotify --profile litestream up -d`.
+Profiles can be combined, e.g. `docker compose --profile cloudflared --profile gotify --profile litestream up -d`.
 
-**Cloudflared di host (skema umum):** app mem-publish port `APP_PORT` (default `8080`) ke host — arahkan tunnel cloudflared Anda ke `http://localhost:8080` (sesuaikan `APP_PORT` di `.env` bila port dipakai). Auth tetap dari **Cloudflare Access** di sisi Cloudflare (team domain + policy email), bukan dari container.
+**Cloudflared on the host (common setup):** the app publishes port `APP_PORT` (default `8080`) to the host — point your cloudflared tunnel at `http://localhost:8080` (adjust `APP_PORT` in `.env` if the port is taken). Authentication still comes from **Cloudflare Access** on the Cloudflare side (team domain + email policy), not from the container.
 
 ### Environment
 
-| Variabel | Wajib | Default | Keterangan |
+| Variable | Required | Default | Description |
 |---|---|---|---|
-| `APP_SECRET` | ya | — | Kunci AES-256-GCM config channel, minimal 16 karakter |
-| `AUTH_MODE` | ya | `cfaccess` | `cfaccess` (produksi) atau `dev` (tanpa tunnel) |
-| `CF_ACCESS_TEAM_DOMAIN` | mode cfaccess | — | `team-anda.cloudflareaccess.com` |
-| `CF_ACCESS_AUD` | mode cfaccess | — | Application Audience tag dari Access |
-| `ADMIN_EMAILS` | disarankan | — | Email admin, pisah koma; admin bisa lihat semua kontak & jalan scheduler manual |
-| `TZ` | tidak | `Asia/Makassar` | Timezone proses container (log). **Timezone jadwal & jam kirim reminder diatur di UI Settings** (default `Asia/Makassar`, ubah ke `Asia/Jakarta` untuk WIB) |
-| `DATA_DIR` | tidak | `/data` (image) | Lokasi file SQLite |
-| `ADDR` | tidak | `:8080` | Alamat listen |
-| `TUNNEL_TOKEN` | profile cloudflared | — | Token tunnel Cloudflare |
+| `APP_SECRET` | yes | — | AES-256-GCM key for channel configs, at least 16 characters |
+| `AUTH_MODE` | yes | `cfaccess` | `cfaccess` (production) or `dev` (no tunnel) |
+| `CF_ACCESS_TEAM_DOMAIN` | cfaccess mode | — | `your-team.cloudflareaccess.com` |
+| `CF_ACCESS_AUD` | cfaccess mode | — | Application Audience tag from Access |
+| `ADMIN_EMAILS` | recommended | — | Admin emails, comma-separated; admins can see all contacts and run the scheduler manually |
+| `TZ` | no | `Asia/Makassar` | Container process timezone (logs). **The schedule timezone and reminder send time are configured in the Settings UI** (default `Asia/Makassar`; change to `Asia/Jakarta` for WIB) |
+| `DATA_DIR` | no | `/data` (image) | SQLite file location |
+| `ADDR` | no | `:8080` | Listen address |
+| `TUNNEL_TOKEN` | cloudflared profile | — | Cloudflare tunnel token |
 
 ## Cloudflare Access setup
 
 1. Zero Trust → **Access** → **Applications** → **Add an application** → **Self-hosted**.
-2. Domain: `otorem.domain-anda.com` (subdomain yang dipakai tunnel).
-3. Tambah policy: Action **Allow**, Include **Emails** → email Anda (dan anggota keluarga).
-4. Catat dua nilai dari aplikasi Access:
-   - **Team domain**: `team-anda.cloudflareaccess.com` → `CF_ACCESS_TEAM_DOMAIN`
+2. Domain: `otorem.your-domain.com` (the subdomain used by the tunnel).
+3. Add a policy: Action **Allow**, Include **Emails** → your email (and family members').
+4. Note the two values from the Access application:
+   - **Team domain**: `your-team.cloudflareaccess.com` → `CF_ACCESS_TEAM_DOMAIN`
    - **Application Audience (AUD) tag** → `CF_ACCESS_AUD`
-5. Buat tunnel: Zero Trust → **Networks** → **Tunnels** → **Create a tunnel** (Cloudflared) → salin **TUNNEL_TOKEN** ke `.env`.
-6. Tambah **Public hostname** di tunnel: `otorem.domain-anda.com` → Service `http://app:8080`.
-7. Isi `.env` (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ADMIN_EMAILS`) lalu `docker compose --profile cloudflared up -d`.
+5. Create the tunnel: Zero Trust → **Networks** → **Tunnels** → **Create a tunnel** (Cloudflared) → copy **TUNNEL_TOKEN** into `.env`.
+6. Add a **Public hostname** to the tunnel: `otorem.your-domain.com` → Service `http://app:8080`.
+7. Fill in `.env` (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ADMIN_EMAILS`) and run `docker compose --profile cloudflared up -d`.
 
-Aplikasi memvalidasi JWT Cloudflare Access (JWKS di-cache); email dari klaim JWT dipakai untuk auto-provision user, dan email di `ADMIN_EMAILS` mendapat role admin.
+The application validates the Cloudflare Access JWT (JWKS is cached); the email from the JWT claim is used to auto-provision users, and emails listed in `ADMIN_EMAILS` are granted the admin role.
 
-## Dev mode (tanpa tunnel)
+## Dev mode (no tunnel)
 
-Untuk mencoba lokal tanpa Cloudflare Access:
+To try it locally without Cloudflare Access:
 
 ```bash
 AUTH_MODE=dev make run
 ```
 
-Buka `http://localhost:8080`; saat diminta, masukkan email bebas (mis. `admin@local.test`). Secara teknis mode dev membaca header `X-Dev-Email` — berguna untuk curl:
+Open `http://localhost:8080`; when prompted, enter any email (e.g. `admin@local.test`). Technically, dev mode reads the `X-Dev-Email` header — handy for curl:
 
 ```bash
 curl -H 'X-Dev-Email: admin@local.test' http://localhost:8080/api/v1/upcoming
 ```
 
-Jangan pakai `AUTH_MODE=dev` di instance yang terekspos publik.
+Do not use `AUTH_MODE=dev` on a publicly exposed instance.
 
-## Notifikasi
+## Notifications
 
-Channel dikelola dari halaman **Channels** di UI (config tersimpan terenkripsi). Tiap channel bisa dites dengan tombol **Tes kirim**.
+Channels are managed from the **Channels** page in the UI (configs are stored encrypted). Each channel can be tested with the **Test send** button.
 
-- **Gotify** — buat application di UI Gotify → salin **token**. Isi Base URL (`http://gotify:80` jika memakai profile `gotify`, atau URL Gotify Anda) dan token. Priority opsional (default 5).
-- **Telegram** — chat dengan [@BotFather](https://t.me/BotFather) → `/newbot` → salin bot token. Kirim satu pesan ke bot, lalu ambil `chat_id` dari `https://api.telegram.org/bot<TOKEN>/getUpdates` (atau lewat @userinfobot). Isi bot token + chat_id.
-- **Email (SMTP)** — disarankan Gmail app-password (`smtp.gmail.com:587`, user = alamat Gmail, password = app password 16 karakter) atau SMTP relay transaksional. Isi host, port, username, password, from, dan daftar penerima. Catatan: mengirim email langsung dari IP rumah (port 25) hampir selalu masuk spam/diblokir — selalu pakai relay.
+- **Gotify** — create an application in the Gotify UI → copy the **token**. Fill in the Base URL (`http://gotify:80` when using the `gotify` profile, or your own Gotify URL) and the token. Priority is optional (default 5).
+- **Telegram** — chat with [@BotFather](https://t.me/BotFather) → `/newbot` → copy the bot token. Send a message to the bot, then get the `chat_id` from `https://api.telegram.org/bot<TOKEN>/getUpdates` (or via @userinfobot). Fill in the bot token + chat_id.
+- **Email (SMTP)** — a Gmail app password is recommended (`smtp.gmail.com:587`, user = Gmail address, password = 16-character app password), or a transactional SMTP relay. Fill in host, port, username, password, from, and the recipient list. Note: sending email directly from a home IP (port 25) almost always lands in spam or gets blocked — always use a relay.
 
 ## Backup & restore
 
-Data utama hanya satu file: `./data/otorem.db` (SQLite mode WAL). Selama container berjalan, salin volume `./data` secara konsisten, atau pakai Litestream untuk replikasi berkelanjutan.
+The main data is a single file: `./data/otorem.db` (SQLite in WAL mode). While the container is running, copy the `./data` volume consistently, or use Litestream for continuous replication.
 
-**Litestream (opsional, disarankan):**
+**Litestream (optional, recommended):**
 
-1. Isi `deploy/litestream.yml` (path DB + URL bucket S3/R2).
-2. Isi kredensial di `.env`: `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`, dan `LITESTREAM_ENDPOINT` (untuk R2; S3 boleh dikosongkan). Container `litestream` membaca `.env` lewat `env_file`.
-3. Jalankan `docker compose --profile litestream up -d`.
+1. Fill in `deploy/litestream.yml` (DB path + S3/R2 bucket URL).
+2. Fill in credentials in `.env`: `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`, and `LITESTREAM_ENDPOINT` (for R2; can be left empty for S3). The `litestream` container reads `.env` via `env_file`.
+3. Run `docker compose --profile litestream up -d`.
 
 **Restore:**
 
 ```bash
 docker compose stop app
 docker compose --profile litestream run --rm litestream \
-  restore -o /data/otorem.db s3://bucket-anda/otorem/otorem.db
+  restore -o /data/otorem.db s3://your-bucket/otorem/otorem.db
 docker compose start app
 ```
 
-Untuk restore satu kali tanpa mengisi `.env`, berikan kredensial langsung ke `docker compose run`, mis. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/otorem.db s3://bucket-anda/otorem/otorem.db`.
+For a one-off restore without filling in `.env`, pass the credentials directly to `docker compose run`, e.g. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/otorem.db s3://your-bucket/otorem/otorem.db`.
 
-Alternatif tanpa Litestream: stop app, salin kembali `otorem.db`, start app.
+Alternative without Litestream: stop the app, copy `otorem.db` back, start the app.
 
-## Pengembangan
+## Development
 
 ```bash
 make test    # CGO_ENABLED=0 go test ./... -count=1
 make web     # npm ci + build SPA → internal/api/webroot (embed)
-make build   # build SPA + binary ke bin/otorem
-make run     # build + jalankan dev mode di :8080
-make container  # docker compose build, fallback podman-compose (Makefile)
+make build   # build SPA + binary to bin/otorem
+make run     # build + run dev mode on :8080
+make container  # docker compose build, podman-compose fallback (Makefile)
 ```
 
-Fixture pawukon di-`scrape` sekali saat dev (bukan runtime) dengan modul terpisah:
+Pawukon fixtures are scraped once at dev time (not at runtime) with a separate module:
 
 ```bash
 cd scripts/fetch_fixtures && go run . -year 2026 -out ../../testdata
 ```
 
-Data fixture © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Universitas Udayana) — dipakai sebagai fixture pengujian pribadi dan dikreditkan; **jangan dire distribusikan**. Runtime otorem tidak pernah bergantung pada situs pihak ketiga.
+Fixture data © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Universitas Udayana) — used as personal test fixtures with attribution; **do not redistribute**. otorem at runtime never depends on third-party sites.
 
-**Catatan provider hari raya remote:** provider `dayoffapi` dan `kresnasatya` memakai cache-first dengan negative-cache 10 menit — bila layanan remote sedang mati, otorem berhenti mencoba sementara dan memakai cache yang ada. Perhitungan Pawukon/otonan lokal tetap berjalan penuh; hanya hari raya nasional yang sementara kosong.
+**Remote holiday provider note:** the `dayoffapi` and `kresnasatya` providers use cache-first with a 10-minute negative cache — if the remote service is down, otorem stops trying temporarily and uses the existing cache. Local Pawukon/otonan calculation keeps working in full; only national holidays are temporarily empty.
 
-## Verifikasi Container
+## Container verification
 
-**Sudah diverifikasi dengan Podman 6.0.2 + podman-compose 1.6.0** di mesin pengembang: `podman build -t otorem:latest .` sukses (image 39,7 MB), smoke container lulus (healthz, SPA, deep-link, scheduler-run). Catatan Podman: HEALTHCHECK diabaikan pada format OCI — tambahkan `--format docker` pada `podman build` bila healthcheck diinginkan. Langkah berikut tetap relevan untuk pengguna Docker:
+**Verified with Podman 6.0.2 + podman-compose 1.6.0** on the developer's machine: `podman build -t otorem:latest .` succeeds (39.7 MB image), smoke containers pass (healthz, SPA, deep-link, scheduler-run). Podman note: HEALTHCHECK is ignored with the OCI format — add `--format docker` to `podman build` if you want the healthcheck. The following steps remain relevant for Docker users:
 
-Lingkungan pengembangan saat ini belum ada Docker, sehingga langkah berikut harus dijalankan manual di mesin yang punya Docker:
+The current development environment has no Docker, so the following steps must be run manually on a machine that does:
 
 ```bash
-cp .env.example .env   # isi APP_SECRET minimal
-docker compose config                        # validasi compose, tanpa error
-docker compose build app                     # image terbangun
+cp .env.example .env   # set at least APP_SECRET
+docker compose config                        # validate compose, no errors
+docker compose build app                     # image builds
 docker run --rm -d --name otorem-smoke -p 8081:8080 \
-  -e APP_SECRET=dev-secret-panjang-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c otorem-app:latest
+  -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c otorem-app:latest
 sleep 2
-curl -s localhost:8081/healthz               # harapan: {"ok":true}
-curl -s localhost:8081/ | head -c 120        # harapan: HTML SPA (<!doctype html> / <div id="root">)
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8081/contacts/1   # harapan: 200 (deep-link SPA)
-curl -s -H 'X-Dev-Email: a@b.c' -X POST localhost:8081/api/v1/scheduler/run   # harapan: {"sent":...,"failed":...,"missed":...}
+curl -s localhost:8081/healthz               # expect: {"ok":true}
+curl -s localhost:8081/ | head -c 120        # expect: SPA HTML (<!doctype html> / <div id="root">)
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8081/contacts/1   # expect: 200 (SPA deep-link)
+curl -s -H 'X-Dev-Email: a@b.c' -X POST localhost:8081/api/v1/scheduler/run   # expect: {"sent":...,"failed":...,"missed":...}
 docker rm -f otorem-smoke
 ```
 
-Catatan: `ADMIN_EMAILS` wajib ikut karena `/scheduler/run` hanya untuk admin. Nama image hasil `docker compose build app` mengikuti nama direktori project (mis. `otorem-app` bila repo ada di folder `otorem`); bila berbeda, sesuaikan tag atau bangun dengan `docker build -t otorem-app .`.
+Note: `ADMIN_EMAILS` must be included because `/scheduler/run` is admin-only. The image name produced by `docker compose build app` follows the project directory name (e.g. `otorem-app` if the repo is in a folder named `otorem`); if it differs, adjust the tag or build with `docker build -t otorem-app .`.
 
-Verifikasi tanpa Docker tetap bisa dilakukan lewat `make test` + `make build` + `make run` (lihat §Pengembangan).
+Verification without Docker is still possible via `make test` + `make build` + `make run` (see §Development).
 
-## Struktur proyek
+## Project structure
 
 ```
 code/
 ├── cmd/server/main.go          # wiring: config, db, router, scheduler, notifiers
 ├── internal/
-│   ├── domain/                 # PURE: pawukon, occurrence, holidays pawukon, offset
-│   ├── store/                  # SQLite: migrasi embedded, repository per tabel
+│   ├── domain/                 # PURE: pawukon, occurrence, pawukon holidays, offsets
+│   ├── store/                  # SQLite: embedded migrations, repository per table
 │   ├── notify/                 # Notifier + gotify.go, telegram.go, smtp.go
 │   ├── scheduler/              # ticker, Clock, dedupe, catch-up
-│   ├── api/                    # Gin handlers, middleware cfaccess, embed static
-│   └── calendarprov/           # HolidayProvider + impl computed/remote
-├── scripts/fetch_fixtures/     # scraper kalenderbali.org → testdata/*.csv (modul terpisah)
-├── web/                        # SPA Vite + React; hasil build → internal/api/webroot (embed)
-├── deploy/                     # litestream.yml, contoh config deploy
-├── testdata/                   # fixture CSV pawukon (kalenderbali.org, jangan dire distribusikan)
-├── Dockerfile                  # multi-stage: node build → go build → alpine (diverifikasi podman)
-├── docker-compose.yml          # app + profile cloudflared/gotify/litestream
-└── docs/superpowers/specs/     # dokumen desain
+│   ├── api/                    # Gin handlers, cfaccess middleware, embedded static
+│   └── calendarprov/           # HolidayProvider + computed/remote impls
+├── scripts/fetch_fixtures/     # kalenderbali.org scraper → testdata/*.csv (separate module)
+├── web/                        # Vite + React SPA; build output → internal/api/webroot (embed)
+├── deploy/                     # litestream.yml, example deploy config
+├── testdata/                   # pawukon CSV fixtures (kalenderbali.org, do not redistribute)
+├── Dockerfile                  # multi-stage: node build → go build → alpine (verified with podman)
+├── docker-compose.yml          # app + cloudflared/gotify/litestream profiles
+└── docs/superpowers/specs/     # design documents
 ```
