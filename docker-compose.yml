@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    networks: [internal]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: [cloudflared]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on: [app]
+    networks: [internal]
+
+  gotify:
+    image: gotify/server:latest
+    profiles: [gotify]
+    restart: unless-stopped
+    volumes:
+      - ./gotify-data:/app/data
+    networks: [internal]
+
+  litestream:
+    image: litestream/litestream:latest
+    profiles: [litestream]
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      - ./deploy/litestream.yml:/etc/litestream.yml:ro
+    depends_on: [app]
+    networks: [internal]
+
+networks:
+  internal: {}

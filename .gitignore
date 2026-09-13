@@ -1,6 +1,7 @@
 .superpowers/
 bin/
 data/
+gotify-data/
 .env
 web/node_modules/
 web/dist/

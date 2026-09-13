@@ -1,0 +1,6 @@
+# Replikasi SQLite ke object storage — isi sesuai penyedia (S3/R2).
+dbs:
+  - path: /data/otorem.db
+    replicas:
+      - url: s3://bucket-anda/otorem/otorem.db
+        # endpoint, access-key-id, secret-access-key via env LITESTREAM_*
