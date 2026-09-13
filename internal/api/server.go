@@ -47,6 +47,7 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 		c.JSON(200, gin.H{"ok": true})
 	})
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	r.NoRoute(s.spaHandler())
 
 	apiG := r.Group("/api/v1")
 	if cfg.AuthMode == config.AuthDev {
