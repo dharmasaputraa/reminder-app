@@ -13,8 +13,8 @@ var bulanIndo = [12]string{"Januari", "Februari", "Maret", "April", "Mei", "Juni
 // 0=Minggu): Redite=Minggu, Soma=Senin, Anggara=Selasa, Buda=Rabu, dst.
 var hariIndo = [7]string{"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"}
 
-// TanggalIndo: "Rabu, 17 Juni 2026" — nama hari memakai saptawara
-// (Redite=Minggu, Soma=Senin, Anggara=Selasa, Buda=Rabu, dst).
+// TanggalIndo: "Rabu, 17 Juni 2026" — nama hari Indonesia: Minggu..Sabtu,
+// nama bulan Indonesia.
 func TanggalIndo(d domain.Date) string {
 	return fmt.Sprintf("%s, %d %s %d", hariIndo[d.Weekday()], d.Day, bulanIndo[d.Month-1], d.Year)
 }
@@ -71,5 +71,9 @@ func OccurrenceMessage(contactName string, occ domain.Occurrence, daysUntil int,
 func HolidayMessage(h domain.Holiday, daysUntil int, late bool) Message {
 	title := fmt.Sprintf("%s %s %s", holidayEmoji(h.Name), h.Name, kapan(daysUntil))
 	body := fmt.Sprintf("%s jatuh pada %s.", h.Name, TanggalIndo(h.Date))
-	return Message{Title: title, Body: withLate(body, late), Priority: 5}
+	p := 5
+	if daysUntil <= 0 {
+		p = 8
+	}
+	return Message{Title: title, Body: withLate(body, late), Priority: p}
 }

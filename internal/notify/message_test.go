@@ -57,4 +57,11 @@ func TestHolidayMessage(t *testing.T) {
 	if !strings.Contains(m.Body, "Rabu, 17 Juni 2026") {
 		t.Errorf("body = %q", m.Body)
 	}
+	if m.Priority != 5 {
+		t.Errorf("10 hari lagi harus prioritas 5, dapat %d", m.Priority)
+	}
+	today := HolidayMessage(domain.Holiday{Date: domain.NewDate(2026, 6, 17), Name: "Galungan"}, 0, false)
+	if today.Priority != 8 {
+		t.Errorf("hari ini harus prioritas 8, dapat %d", today.Priority)
+	}
 }
