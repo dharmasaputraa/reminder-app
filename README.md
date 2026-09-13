@@ -121,11 +121,14 @@ Alternatif tanpa Litestream: stop app, salin kembali `otorem.db`, start app.
 
 ```bash
 make test    # CGO_ENABLED=0 go test ./... -count=1
+make dev     # backend dengan hot reload (air): rebuild + restart saat file .go berubah
 make web     # npm ci + build SPA → internal/api/webroot (embed)
 make build   # build SPA + binary ke bin/otorem
-make run     # build + jalankan dev mode di :8080
+make run     # build + jalankan dev mode di :8080 (tanpa hot reload)
 make container  # docker compose build, fallback podman-compose (Makefile)
 ```
+
+Alur dev full-stack (dua terminal): `make dev` untuk backend (air, rebuild otomatis ±1 detik) dan `cd web && npm run dev` untuk frontend (Vite HMR, proxy `/api` ke `:8080`). Air di-pin lewat `tool` directive di go.mod — tidak perlu install manual, cukup `go tool air`. Konfigurasinya di `.air.toml` (hanya `.go` non-test yang memicu rebuild; SPA tetap lewat Vite).
 
 Fixture pawukon di-`scrape` sekali saat dev (bukan runtime) dengan modul terpisah:
 

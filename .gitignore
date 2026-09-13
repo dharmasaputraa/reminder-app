@@ -8,3 +8,4 @@ web/dist/
 web/routeTree.gen.bak
 internal/api/webroot/*
 !internal/api/webroot/.gitkeep
+tmp/

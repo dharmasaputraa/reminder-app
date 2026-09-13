@@ -11,6 +11,53 @@ const KATEGORI = [
   { key: 'national', label: 'Libur nasional (API)' },
 ]
 
+/** Zona waktu Indonesia — label WIB/WITA/WIT ditampilkan di option. */
+const TZ_INDONESIA = [
+  { value: 'Asia/Jakarta', name: 'WIB' },
+  { value: 'Asia/Makassar', name: 'WITA' },
+  { value: 'Asia/Jayapura', name: 'WIT' },
+]
+
+/** Zona umum lainnya (diaspora/travel); bisa ditambah — backend menerima
+ *  semua nama IANA yang valid via time.LoadLocation. */
+const TZ_LAINNYA = [
+  'UTC',
+  'Asia/Singapore',
+  'Asia/Kuala_Lumpur',
+  'Asia/Bangkok',
+  'Asia/Dubai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Shanghai',
+  'Asia/Hong_Kong',
+  'Australia/Perth',
+  'Australia/Sydney',
+  'Europe/London',
+  'America/New_York',
+  'America/Los_Angeles',
+]
+
+/** "GMT+8" untuk sebuah zona — dihitung dari tanggal saat ini sehingga ikut
+ *  DST (mis. Sydney bergeser GMT+11 di musim panas). '' bila tak didukung. */
+function gmtOffset(tz: string): string {
+  try {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+      .formatToParts(new Date())
+      .find((x) => x.type === 'timeZoneName')
+    const v = p?.value ?? ''
+    if (!v.startsWith('GMT')) return ''
+    return v === 'GMT' ? 'GMT+0' : v
+  } catch {
+    return ''
+  }
+}
+
+function tzOptionText(tz: string, name?: string): string {
+  const off = gmtOffset(tz)
+  const suffix = [off, name].filter(Boolean).join(' · ')
+  return suffix ? `${tz} (${suffix})` : tz
+}
+
 function SettingsPage() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
@@ -54,9 +101,28 @@ function SettingsPage() {
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <label className="block text-sm">
           Timezone
-          <input value={form.timezone} onChange={(e) => set({ timezone: e.target.value })}
-            placeholder="Asia/Makassar / Asia/Jakarta"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+          <select value={form.timezone} onChange={(e) => set({ timezone: e.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm">
+            {/* nilai tersimpan yang tidak ada di list tetap tampil, tidak
+                diam-diam diganti oleh select */}
+            {!TZ_INDONESIA.some((t) => t.value === form.timezone) &&
+              !TZ_LAINNYA.includes(form.timezone) && (
+              <option value={form.timezone}>{tzOptionText(form.timezone)} — nilai tersimpan</option>
+            )}
+            <optgroup label="Indonesia">
+              {TZ_INDONESIA.map((t) => (
+                <option key={t.value} value={t.value}>{tzOptionText(t.value, t.name)}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Zona waktu lainnya">
+              {TZ_LAINNYA.map((tz) => (
+                <option key={tz} value={tz}>{tzOptionText(tz)}</option>
+              ))}
+            </optgroup>
+          </select>
+          <span className="mt-1 block text-xs text-slate-400">
+            Menentukan "hari ini" untuk kalender dan jam kirim pengingat.
+          </span>
         </label>
         <label className="block text-sm">
           Jam kirim (HH:MM)
