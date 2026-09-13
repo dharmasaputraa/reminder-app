@@ -22,7 +22,7 @@ func DefaultSettings() Settings {
 		Timezone:       "Asia/Jakarta",
 		SendTime:       "08:00",
 		CatchUpHours:   24,
-		DefaultOffsets: domain.DefaultOffsets,
+		DefaultOffsets: append([]int(nil), domain.DefaultOffsets...),
 		HolidayCategories: map[string]bool{
 			"pawukon": true, "saka": true, "national": true,
 		},
@@ -48,7 +48,7 @@ func (s *Server) LoadSettings(ctx context.Context) Settings {
 		out.CatchUpHours = stored.CatchUpHours
 	}
 	if len(stored.DefaultOffsets) > 0 {
-		out.DefaultOffsets = stored.DefaultOffsets
+		out.DefaultOffsets = append([]int(nil), stored.DefaultOffsets...)
 	}
 	if stored.HolidayCategories != nil {
 		out.HolidayCategories = stored.HolidayCategories

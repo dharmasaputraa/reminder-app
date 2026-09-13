@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // bare-metal tanpa zoneinfo: LoadLocation tetap jalan (Docker sudah pasang tzdata)
 
 	"otorem/internal/api"
 	"otorem/internal/calendarprov"

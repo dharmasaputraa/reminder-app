@@ -163,6 +163,35 @@ func TestSettingsMissingCategories(t *testing.T) {
 	}
 }
 
+func TestAddOccasionInvalidType(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
+	if w.Code != 201 {
+		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
+		`{"type":"salfok","date":"1990-05-12"}`))
+	if w.Code != 400 {
+		t.Errorf("tipe occasion ilegal harus 400, dapat %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "tipe occasion tidak valid") {
+		t.Errorf("pesan error salah: %s", w.Body.String())
+	}
+}
+
+func TestDefaultSettingsDefensiveCopy(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	ds := DefaultSettings()
+	ds.DefaultOffsets[0] = 99
+	ls := srv.LoadSettings(context.Background())
+	ls.DefaultOffsets[0] = 99
+	if domain.DefaultOffsets[0] != 7 {
+		t.Errorf("domain.DefaultOffsets termutasi via api.Settings: %v", domain.DefaultOffsets)
+	}
+}
+
 func TestSchedulerRunWithoutRunner(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()

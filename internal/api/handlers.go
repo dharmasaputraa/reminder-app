@@ -140,6 +140,12 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 	if !ok {
 		return
 	}
+	switch domain.OccurrenceType(in.Type) {
+	case domain.Birthday, domain.Otonan, domain.Anniversary:
+	default:
+		c.JSON(400, gin.H{"error": "tipe occasion tidak valid"})
+		return
+	}
 	if _, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid); err != nil {
 		respondErr(c, err)
 		return

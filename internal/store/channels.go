@@ -76,8 +76,13 @@ func (s *Store) GetChannel(ctx context.Context, ownerID, id int64) (*Channel, er
 }
 
 func (s *Store) SetChannelEnabled(ctx context.Context, ownerID, id int64, enabled bool) error {
-	r, err := s.db.ExecContext(ctx, `UPDATE channels SET enabled = ? WHERE id = ? AND owner_id = ?`,
-		boolInt(enabled), id, ownerID)
+	q := `UPDATE channels SET enabled = ? WHERE id = ?`
+	args := []any{boolInt(enabled), id}
+	if ownerID != 0 { // 0 = admin: lihat semua, konsisten dengan GetChannel
+		q += ` AND owner_id = ?`
+		args = append(args, ownerID)
+	}
+	r, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return err
 	}
@@ -88,7 +93,13 @@ func (s *Store) SetChannelEnabled(ctx context.Context, ownerID, id int64, enable
 }
 
 func (s *Store) DeleteChannel(ctx context.Context, ownerID, id int64) error {
-	r, err := s.db.ExecContext(ctx, `DELETE FROM channels WHERE id = ? AND owner_id = ?`, id, ownerID)
+	q := `DELETE FROM channels WHERE id = ?`
+	args := []any{id}
+	if ownerID != 0 { // 0 = admin: lihat semua, konsisten dengan GetChannel
+		q += ` AND owner_id = ?`
+		args = append(args, ownerID)
+	}
+	r, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return err
 	}
