@@ -101,7 +101,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <section className="flex flex-1 overflow-y-auto">
+      <section className="flex flex-1 overflow-y-auto pt-4 lg:pt-6">
         <div className="mx-auto w-full max-w-5xl px-4 lg:px-6">{children}</div>
       </section>
       {sheetOpen && (
