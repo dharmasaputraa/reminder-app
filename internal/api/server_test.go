@@ -90,6 +90,12 @@ func TestContactJSONSnakeCase(t *testing.T) {
 	if w.Code != 201 {
 		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
 	}
+	created := w.Body.String()
+	for _, want := range []string{`"occasions":[]`, `"prefs":null`} {
+		if !strings.Contains(created, want) {
+			t.Errorf("response create kontak tidak memuat %s: %s", want, created)
+		}
+	}
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
 		`{"type":"otongan","date":"1990-05-12"}`))

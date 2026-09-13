@@ -81,7 +81,7 @@ func (s *Server) handleCreateContact(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
-	c.JSON(201, ct)
+	c.JSON(201, store.ContactWithOccasions{Contact: ct, Occasions: []store.Occasion{}, Prefs: nil})
 }
 
 func (s *Server) handleGetContact(c *gin.Context) {
