@@ -33,11 +33,11 @@ export const Route = createRootRoute({
             ))}
           </nav>
         </header>
-        <main className="flex-1 p-4">
+        <div className="flex-1 p-4">
           <div className="mx-auto w-full max-w-2xl">
             <Outlet />
           </div>
-        </main>
+        </div>
       </SidebarInset>
       <Toaster />
     </SidebarProvider>
