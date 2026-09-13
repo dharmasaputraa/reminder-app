@@ -1,7 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { api, type Channel } from '../lib/api'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 export const Route = createFileRoute('/channels')({ component: Channels })
 
@@ -32,7 +57,6 @@ function Channels() {
   const [type, setType] = useState<(typeof TIPE)[number]>('gotify')
   const [name, setName] = useState('')
   const [cfg, setCfg] = useState<Record<string, string | number>>({})
-  const [testResult, setTestResult] = useState<Record<number, string>>({})
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['channels'] })
   const create = useMutation({
@@ -49,14 +73,9 @@ function Channels() {
     onSuccess: invalidate,
   })
   const test = useMutation({
-    mutationFn: async (id: number) => {
-      try { await api(`/channels/${id}/test`, { method: 'POST' }); return 'OK ✅' }
-      catch (e) { return `GAGAL: ${String(e)}` }
-    },
-    onSuccess: (msg, id) => {
-      setTestResult((prev) => ({ ...prev, [id]: msg }))
-      setTimeout(() => setTestResult((prev) => ({ ...prev, [id]: '' })), 8000)
-    },
+    mutationFn: (id: number) => api(`/channels/${id}/test`, { method: 'POST' }),
+    onSuccess: () => toast.success('Tes berhasil — notifikasi terkirim.'),
+    onError: (e) => toast.error(`Tes gagal: ${String(e)}`),
   })
 
   return (
@@ -64,45 +83,85 @@ function Channels() {
       <h1 className="text-xl font-bold">Channel Notifikasi</h1>
 
       {q.data?.channels.map((ch) => (
-        <div key={ch.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-          <span className={`h-2 w-2 rounded-full ${ch.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+        <Card key={ch.id} className="flex flex-row items-center gap-3 p-3">
+          <Badge variant={ch.enabled ? 'default' : 'secondary'}>{ch.type}</Badge>
           <div className="min-w-0 flex-1">
-            <p className="font-medium">{ch.name} <span className="text-xs uppercase text-slate-400">{ch.type}</span></p>
-            {testResult[ch.id] && <p className="text-sm text-slate-600">Tes: {testResult[ch.id]}</p>}
+            <p className="truncate font-medium">{ch.name}</p>
+            <p className="text-xs text-slate-400">{ch.enabled ? 'aktif' : 'nonaktif'}</p>
           </div>
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={ch.enabled}
-              onChange={(e) => toggle.mutate({ id: ch.id, enabled: e.target.checked })} /> aktif
+          <label className="flex items-center gap-1.5 text-sm">
+            <Switch
+              checked={ch.enabled}
+              onCheckedChange={(v) => toggle.mutate({ id: ch.id, enabled: v === true })}
+            />
+            aktif
           </label>
-          <button onClick={() => test.mutate(ch.id)} disabled={test.isPending}
-            className="rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50">Tes</button>
-          <button onClick={() => { if (confirm(`Hapus channel ${ch.name}?`)) del.mutate(ch.id) }}
-            className="text-sm text-red-600 hover:underline">hapus</button>
-        </div>
+          <Button variant="outline" size="sm" onClick={() => test.mutate(ch.id)} disabled={test.isPending}>
+            Tes
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={<Button variant="destructive" size="sm">Hapus</Button>}
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus channel {ch.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Channel tidak bisa dipakai lagi untuk mengirim pengingat.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction onClick={() => del.mutate(ch.id)}>Hapus</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </Card>
       ))}
 
-      <form className="space-y-2 rounded-xl border border-slate-200 bg-white p-4"
-        onSubmit={(e) => { e.preventDefault(); create.mutate() }}>
-        <h2 className="font-semibold">Tambah Channel</h2>
-        <div className="flex flex-wrap gap-2">
-          <select value={type} onChange={(e) => { setType(e.target.value as typeof type); setCfg({}) }}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
-            {TIPE.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama (mis. gotify-rumah)"
-            className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-        </div>
-        {FIELDS[type].map((f) => (
-          <input key={f.key} type={f.type ?? 'text'} required
-            value={cfg[f.key] ?? ''}
-            onChange={(e) => setCfg({ ...cfg, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
-            placeholder={f.label}
-            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-        ))}
-        <button disabled={!name.trim() || create.isPending}
-          className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm text-white disabled:opacity-50">Simpan</button>
-        <p className="text-xs text-slate-400">Config disimpan terenkripsi (AES-256-GCM) — tidak bisa dilihat lagi setelah disimpan.</p>
-      </form>
+      <Card>
+        <CardHeader>
+          <CardTitle>Tambah Channel</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); create.mutate() }}>
+            <div className="flex flex-wrap gap-2">
+              <Select
+                value={type}
+                onValueChange={(v) => {
+                  if (!v) return
+                  setType(v as typeof type)
+                  setCfg({})
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih tipe" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nama (mis. gotify-rumah)"
+                className="flex-1"
+              />
+            </div>
+            {FIELDS[type].map((f) => (
+              <Input key={f.key} type={f.type ?? 'text'} required
+                value={cfg[f.key] ?? ''}
+                onChange={(e) => setCfg({ ...cfg, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
+                placeholder={f.label} />
+            ))}
+            <Button type="submit" disabled={!name.trim() || create.isPending}>Simpan</Button>
+            <Alert>
+              <AlertTitle>Config disimpan terenkripsi (AES-256-GCM)</AlertTitle>
+              <AlertDescription>Tidak bisa dilihat lagi setelah disimpan.</AlertDescription>
+            </Alert>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }
