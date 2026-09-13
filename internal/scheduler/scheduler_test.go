@@ -111,6 +111,11 @@ func TestRunOnceOnTime(t *testing.T) {
 	if res.Sent != 0 || res.Missed != 0 {
 		t.Errorf("dedupe gagal: %+v", res)
 	}
+	// dedupe PRE-SEND: stub tidak boleh terpanggil ulang — scanner tiap
+	// menit tidak boleh meng-push reminder yang sama berulang kali.
+	if len(h.notif.sent) != 1 {
+		t.Errorf("stub terpanggil %d kali setelah run ke-2, harus tetap 1 (spam dobel)", len(h.notif.sent))
+	}
 }
 
 // pukul 07:00 → offset H-1 (kemarin 08:00) masih dalam window → kirim late;
@@ -181,6 +186,10 @@ func TestHolidayReminder(t *testing.T) {
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Sent != 0 {
 		t.Errorf("holiday dedupe gagal: %+v", res)
+	}
+	// dedupe PRE-SEND: total panggilan stub tetap 2 (otonan + galungan).
+	if len(h.notif.sent) != 2 {
+		t.Errorf("stub terpanggil %d kali setelah run ke-2, harus tetap 2 (spam dobel)", len(h.notif.sent))
 	}
 }
 

@@ -6,6 +6,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -260,6 +261,21 @@ func (s *Service) deliver(ctx context.Context, channels []store.Channel,
 			continue // backoff
 		}
 		e.ChannelID = ch.ID
+		// Dedupe PRE-SEND: baris dengan dedupe key sama sudah ada → jangan
+		// kirim ulang. Tanpa ini scanner per-menit meng-push ulang reminder
+		// yang sama sepanjang hari — INSERT OR IGNORE hanya menahan counter,
+		// bukan push (log dedupe terjadi SETELAH n.Send).
+		exists, err := s.St.HasNotification(ctx, e)
+		if err != nil {
+			// Fail open (disengaja): cek dedupe yang gagal tidak boleh
+			// membungkam reminder — lebih baik berisiko dobel push daripada
+			// reminder hilang. INSERT OR IGNORE di log tetap mencegah dobel
+			// catatan/counter.
+			slog.Warn("has_notification gagal, kirim saja (fail open)",
+				"channel_id", ch.ID, "err", err)
+		} else if exists {
+			continue
+		}
 		n, err := s.Resolve(ctx, ch)
 		if err != nil {
 			res.Failed++

@@ -36,6 +36,67 @@ func TestRecordNotificationDedupe(t *testing.T) {
 	}
 }
 
+func TestHasNotification(t *testing.T) {
+	s, _ := OpenInMemory()
+	defer s.Close()
+	if err := s.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
+	c, _ := s.CreateContact(ctx, u.ID, "Made", "", "")
+	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	ch, _ := s.CreateChannel(ctx, u.ID, "gotify", "rumah", []byte("enc"))
+	occID := oc.ID
+	e := NotificationEntry{OccasionID: &occID, OccurrenceDate: domain.NewDate(2026, 6, 17),
+		OffsetDays: 7, ChannelID: ch.ID, Status: "sent"}
+
+	before, err := s.HasNotification(ctx, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before {
+		t.Error("sebelum record harus false")
+	}
+	if _, err := s.RecordNotification(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.HasNotification(ctx, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after {
+		t.Error("setelah record harus true")
+	}
+
+	// channel beda → bukan duplikat
+	e2 := e
+	e2.ChannelID = ch.ID + 999
+	if got, err := s.HasNotification(ctx, e2); err != nil || got {
+		t.Errorf("channel lain harus false: got=%v err=%v", got, err)
+	}
+
+	// varian holiday key: false sebelum record, true sesudah
+	hk := "pawukon:galungan"
+	he := NotificationEntry{HolidayKey: &hk, OccurrenceDate: domain.NewDate(2026, 6, 17),
+		OffsetDays: 0, ChannelID: ch.ID, Status: "sent"}
+	if got, err := s.HasNotification(ctx, he); err != nil || got {
+		t.Errorf("holiday sebelum record harus false: got=%v err=%v", got, err)
+	}
+	if _, err := s.RecordNotification(ctx, he); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.HasNotification(ctx, he); err != nil || !got {
+		t.Errorf("holiday setelah record harus true: got=%v err=%v", got, err)
+	}
+
+	// kedua key nil → error, konsisten dengan RecordNotification
+	if _, err := s.HasNotification(ctx, NotificationEntry{
+		OccurrenceDate: domain.NewDate(2026, 6, 17), OffsetDays: 1, ChannelID: ch.ID}); err == nil {
+		t.Error("kedua key nil harus error")
+	}
+}
+
 func TestHolidayDedupeIndependent(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
