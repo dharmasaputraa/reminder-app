@@ -60,3 +60,23 @@ Kriteria berhasil:
 - Pemakaian button pada halaman sungguhan (menunggu keputusan setelah trial).
 - Komponen beUI lain (Toast Stack, dll.).
 - Tier beUI Pro (pro.beui.dev) — tidak dipakai.
+
+## Catatan pasca-trial (hasil eksekusi 2026-09-13)
+
+- Registry `@beui` ternyata **tidak kompatibel dengan shadcn CLI** (4.21.0 & 4.20.0):
+  `https://beui.dev/r/{name}` mengembalikan format custom beUI tanpa `type: registry:*`,
+  dan `/{name}.json` 404. Sesuai `llms.txt` mereka, jalur resmi memang penempatan manual
+  oleh agent. Entry `@beui` tidak didaftarkan di `components.json` (dibatalkan).
+- Install manual sukses: 8 file dari item JSON ditulis (1 di-skip: `lib/utils.ts` —
+  guard jalan, file proyek tak tersentuh), dep baru hanya `motion`.
+- Verifikasi: `npm run build` (tsc + vite) hijau; visual di browser — 8 varian Button
+  ter-render dengan token shadcn, siklus StatefulButton idle → loading → success → idle
+  terbukti (klik + tangkapan layar); Metallic shimmer dan kaskade huruf berjalan.
+  Catatan: tombol beranimasi membuat Playwright actionability-check timeout — klik perlu
+  jalur koordinat; bukan cacat komponen.
+- Demo `/demo` dihapus, `routeTree.gen.ts` kembali identik. Perubahan yang tersisa di
+  tree (tidak di-commit): `src/components/motion/**`, `src/lib/ease.ts`,
+  `src/lib/hooks/**`, `components/motion/magnetic.tsx`, `package.json`/lock (+motion),
+  catatan `web/SHADCN.md`.
+- Deviasi kecil dari desain awal: demo memakai route `/demo` terpisah (bukan blok di
+  halaman index) agar verifikasi tidak bergantung API backend.
