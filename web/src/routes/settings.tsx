@@ -1,7 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { api, type Settings } from '../lib/api'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export const Route = createFileRoute('/settings')({ component: SettingsPage })
 
@@ -10,6 +25,53 @@ const KATEGORI = [
   { key: 'saka', label: 'Hari raya Bali & Saka (API)' },
   { key: 'national', label: 'Libur nasional (API)' },
 ]
+
+/** Zona waktu Indonesia — label WIB/WITA/WIT ditampilkan di option. */
+const TZ_INDONESIA = [
+  { value: 'Asia/Jakarta', name: 'WIB' },
+  { value: 'Asia/Makassar', name: 'WITA' },
+  { value: 'Asia/Jayapura', name: 'WIT' },
+]
+
+/** Zona umum lainnya (diaspora/travel); bisa ditambah — backend menerima
+ *  semua nama IANA yang valid via time.LoadLocation. */
+const TZ_LAINNYA = [
+  'UTC',
+  'Asia/Singapore',
+  'Asia/Kuala_Lumpur',
+  'Asia/Bangkok',
+  'Asia/Dubai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Shanghai',
+  'Asia/Hong_Kong',
+  'Australia/Perth',
+  'Australia/Sydney',
+  'Europe/London',
+  'America/New_York',
+  'America/Los_Angeles',
+]
+
+/** "GMT+8" untuk sebuah zona — dihitung dari tanggal saat ini sehingga ikut
+ *  DST (mis. Sydney bergeser GMT+11 di musim panas). '' bila tak didukung. */
+function gmtOffset(tz: string): string {
+  try {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+      .formatToParts(new Date())
+      .find((x) => x.type === 'timeZoneName')
+    const v = p?.value ?? ''
+    if (!v.startsWith('GMT')) return ''
+    return v === 'GMT' ? 'GMT+0' : v
+  } catch {
+    return ''
+  }
+}
+
+function tzOptionText(tz: string, name?: string): string {
+  const off = gmtOffset(tz)
+  const suffix = [off, name].filter(Boolean).join(' · ')
+  return suffix ? `${tz} (${suffix})` : tz
+}
 
 function SettingsPage() {
   const qc = useQueryClient()
@@ -27,7 +89,11 @@ function SettingsPage() {
 
   const save = useMutation({
     mutationFn: (s: Settings) => api('/settings', { method: 'PUT', body: JSON.stringify(s) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      toast.success('Tersimpan.')
+    },
+    onError: (e) => toast.error(`Gagal menyimpan: ${String(e)}`),
   })
 
   if (!form && q.isError)
@@ -51,47 +117,77 @@ function SettingsPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Pengaturan</h1>
 
-      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <label className="block text-sm">
-          Timezone
-          <input value={form.timezone} onChange={(e) => set({ timezone: e.target.value })}
-            placeholder="Asia/Makassar / Asia/Jakarta"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-        </label>
-        <label className="block text-sm">
-          Jam kirim (HH:MM)
-          <input value={form.send_time} onChange={(e) => set({ send_time: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-        </label>
-        <label className="block text-sm">
-          Catch-up window (jam) — pengingat yang terlewat karena perangkat mati
-          <input type="number" value={form.catch_up_hours}
-            onChange={(e) => set({ catch_up_hours: Number(e.target.value) })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-        </label>
-        <label className="block text-sm">
-          Offset default (hari sebelum H, pisah koma)
-          <input value={offsetsText}
-            onChange={(e) => setOffsetsText(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
-        </label>
-        <fieldset className="space-y-1">
-          <legend className="text-sm font-medium">Kategori hari raya</legend>
-          {KATEGORI.map((k) => (
-            <label key={k.key} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.holiday_categories[k.key] ?? false}
-                onChange={(e) => set({ holiday_categories: { ...form.holiday_categories, [k.key]: e.target.checked } })} />
-              {k.label}
-            </label>
-          ))}
-        </fieldset>
-        <button onClick={saveNow} disabled={save.isPending}
-          className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
-          Simpan
-        </button>
-        {save.isError && <p className="text-sm text-red-600">{String(save.error)}</p>}
-        {save.isSuccess && <p className="text-sm text-emerald-600">Tersimpan.</p>}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Preferensi Pengingat</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Field>
+            <FieldLabel>Timezone</FieldLabel>
+            <Select value={form.timezone} onValueChange={(v) => set({ timezone: v ?? form.timezone })}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Pilih zona waktu" />
+              </SelectTrigger>
+              <SelectContent>
+                {/* nilai tersimpan yang tidak ada di list tetap tampil */}
+                {!TZ_INDONESIA.some((t) => t.value === form.timezone) &&
+                  !TZ_LAINNYA.includes(form.timezone) && (
+                  <SelectItem value={form.timezone}>{tzOptionText(form.timezone)} — nilai tersimpan</SelectItem>
+                )}
+                <SelectGroup>
+                  <SelectLabel>Indonesia</SelectLabel>
+                  {TZ_INDONESIA.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{tzOptionText(t.value, t.name)}</SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Zona waktu lainnya</SelectLabel>
+                  {TZ_LAINNYA.map((tz) => (
+                    <SelectItem key={tz} value={tz}>{tzOptionText(tz)}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <FieldDescription>Menentukan "hari ini" untuk kalender dan jam kirim pengingat.</FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="send-time">Jam kirim (HH:MM)</FieldLabel>
+            <Input id="send-time" value={form.send_time} onChange={(e) => set({ send_time: e.target.value })} />
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="catch-up">Catch-up window (jam)</FieldLabel>
+            <Input
+              id="catch-up"
+              type="number"
+              value={form.catch_up_hours}
+              onChange={(e) => set({ catch_up_hours: Number(e.target.value) })}
+            />
+            <FieldDescription>Pengingat yang terlewat karena perangkat mati.</FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="offsets">Offset default (hari sebelum H, pisah koma)</FieldLabel>
+            <Input id="offsets" value={offsetsText} onChange={(e) => setOffsetsText(e.target.value)} />
+          </Field>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Kategori hari raya</legend>
+            {KATEGORI.map((k) => (
+              <label key={k.key} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={form.holiday_categories[k.key] ?? false}
+                  onCheckedChange={(c) => set({ holiday_categories: { ...form.holiday_categories, [k.key]: c === true } })}
+                />
+                {k.label}
+              </label>
+            ))}
+          </fieldset>
+
+          <Button onClick={saveNow} disabled={save.isPending}>Simpan</Button>
+        </CardContent>
+      </Card>
 
       {me.data && (
         <p className="text-sm text-slate-500">
