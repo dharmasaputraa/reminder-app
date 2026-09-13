@@ -19,7 +19,7 @@ type Settings struct {
 
 func DefaultSettings() Settings {
 	return Settings{
-		Timezone:       "Asia/Jakarta",
+		Timezone:       "Asia/Makassar",
 		SendTime:       "08:00",
 		CatchUpHours:   24,
 		DefaultOffsets: append([]int(nil), domain.DefaultOffsets...),

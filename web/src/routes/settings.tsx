@@ -55,7 +55,7 @@ function SettingsPage() {
         <label className="block text-sm">
           Timezone
           <input value={form.timezone} onChange={(e) => set({ timezone: e.target.value })}
-            placeholder="Asia/Jakarta / Asia/Makassar"
+            placeholder="Asia/Makassar / Asia/Jakarta"
             className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
         </label>
         <label className="block text-sm">

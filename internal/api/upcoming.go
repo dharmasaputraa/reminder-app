@@ -31,17 +31,48 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 	ctx := c.Request.Context()
 	settings := s.LoadSettings(ctx)
 
-	days, err := strconv.Atoi(c.DefaultQuery("days", "30"))
-	if err != nil || days < 1 || days > 90 {
-		days = 30
-	}
 	loc, locErr := time.LoadLocation(settings.Timezone)
 	if locErr != nil {
 		loc = time.UTC
 	}
 	now := time.Now().In(loc)
 	today := domain.DateFromTime(now)
-	horizon := today.AddDays(days)
+
+	// Rentang: mode `days` (1..90 dari hari ini, default 30) atau mode
+	// `from`/`to` eksplisit (maks 400 hari) untuk kalender yang men-scan
+	// antar tahun. `to` kosong berarti setahun dari `from`.
+	rangeStart, horizon := today, today
+	if fromQ := c.Query("from"); fromQ != "" {
+		from, err := domain.ParseDate(fromQ)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "from tidak valid (harus YYYY-MM-DD)"})
+			return
+		}
+		rangeStart = from
+		horizon = from.AddDays(365)
+		if toQ := c.Query("to"); toQ != "" {
+			to, err := domain.ParseDate(toQ)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "to tidak valid (harus YYYY-MM-DD)"})
+				return
+			}
+			if to.Before(from) {
+				c.JSON(400, gin.H{"error": "range terbalik: to < from"})
+				return
+			}
+			horizon = to
+		}
+		if horizon.JDN()-rangeStart.JDN() > 400 {
+			c.JSON(400, gin.H{"error": "range maksimal 400 hari"})
+			return
+		}
+	} else {
+		days, err := strconv.Atoi(c.DefaultQuery("days", "30"))
+		if err != nil || days < 1 || days > 90 {
+			days = 30
+		}
+		horizon = today.AddDays(days)
+	}
 
 	ownerID := user.ID
 	if user.Role == "admin" {
@@ -60,7 +91,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 			offsets = cw.Prefs.Offsets
 		}
 		for _, occ := range cw.Occasions {
-			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, today, horizon)
+			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rangeStart, horizon)
 			if err != nil {
 				continue
 			}
@@ -78,7 +109,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 		}
 	}
 
-	hs, err := s.multiProvider().HolidaysBetween(ctx, today, horizon, settings.HolidayCategories)
+	hs, err := s.multiProvider().HolidaysBetween(ctx, rangeStart, horizon, settings.HolidayCategories)
 	if err != nil {
 		c.JSON(502, gin.H{"error": "provider hari raya gagal"})
 		return

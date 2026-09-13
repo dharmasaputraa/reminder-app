@@ -30,7 +30,7 @@ func newTestServer(t *testing.T, admin string) (*Server, *store.Store) {
 		t.Fatal(err)
 	}
 	cfg := config.Config{AppSecret: "super-secret-panjang-16", AuthMode: config.AuthDev,
-		AdminEmails: map[string]bool{admin: true}, TZ: "Asia/Jakarta"}
+		AdminEmails: map[string]bool{admin: true}, TZ: "Asia/Makassar"}
 	return NewServer(cfg, st, nil), st
 }
 
@@ -61,9 +61,9 @@ func TestContactFlow(t *testing.T) {
 
 	// Otonan base = today − 210 → occurrence ke-1 jatuh TEPAT hari ini; deterministik
 	// untuk window 30 hari (tanggal acak sering jatuh di luar window → flaky).
-	// Pin ke TZ server (Asia/Jakarta, sesuai DefaultSettings) — bukan TZ mesin —
+	// Pin ke TZ server (Asia/Makassar, sesuai DefaultSettings) — bukan TZ mesin —
 	// agar deterministik di semua zona waktu.
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	base := today.AddDays(-domain.PawukonCycleDays)
 	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": base.String()})
@@ -287,7 +287,7 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 
 	// Sisi konsumen: occurrence otonan tepat hari ini (base = today − 210) harus
 	// memakai reminders default global karena prefs.offsets kosong.
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
 	w = httptest.NewRecorder()
@@ -317,5 +317,65 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("occasion kontak tidak muncul di /upcoming: %s", w.Body.String())
+	}
+}
+
+func TestUpcomingDateRange(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
+	if w.Code != 201 {
+		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
+		`{"type":"birthday","date":"2003-06-03"}`))
+	if w.Code != 201 {
+		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
+	}
+
+	get := func(query string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/upcoming"+query, "admin@x.id", ""))
+		return w
+	}
+	hasBirthday := func(w *httptest.ResponseRecorder) bool {
+		if w.Code != 200 {
+			t.Fatalf("upcoming: %d %s", w.Code, w.Body.String())
+		}
+		var up struct {
+			Items []UpcomingItem `json:"items"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &up); err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range up.Items {
+			if it.Kind == "occasion" && it.Type == "birthday" && it.Date.String() == "2027-06-03" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Satu tahun penuh: ulang tahun 3 Juni 2027 harus muncul walau jatuh
+	// jauh di luar window 30 hari dari hari ini.
+	if w := get("?from=2027-01-01&to=2027-12-31"); !hasBirthday(w) {
+		t.Errorf("ulang tahun 2027-06-03 hilang dari range setahun: %s", w.Body.String())
+	}
+	// `to` opsional: default setahun dari `from`.
+	if w := get("?from=2027-06-01"); !hasBirthday(w) {
+		t.Errorf("ulang tahun 2027-06-03 hilang dari from tanpa to: %s", w.Body.String())
+	}
+	// Range terbalik → 400.
+	if w := get("?from=2027-12-31&to=2027-01-01"); w.Code != 400 {
+		t.Errorf("range terbalik harus 400, dapat %d", w.Code)
+	}
+	// Range > 400 hari → 400.
+	if w := get("?from=2027-01-01&to=2028-03-01"); w.Code != 400 {
+		t.Errorf("range >400 hari harus 400, dapat %d", w.Code)
+	}
+	// from bukan tanggal → 400.
+	if w := get("?from=bukan-tanggal"); w.Code != 400 {
+		t.Errorf("from invalid harus 400, dapat %d", w.Code)
 	}
 }

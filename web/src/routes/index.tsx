@@ -1,12 +1,26 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { addYears } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
+import { ChevronsLeftIcon, ChevronsRightIcon } from 'lucide-react'
 import { api, type UpcomingItem } from '../lib/api'
-import { EventCalendar } from '@/components/reui/event-calendar/event-calendar'
+import {
+  EventCalendar,
+  useEventCalendarNavigation,
+} from '@/components/reui/event-calendar/event-calendar'
 import { EventCalendarContent } from '@/components/reui/event-calendar/event-calendar-content'
-import { EventCalendarNav } from '@/components/reui/event-calendar/event-calendar-nav'
+import {
+  EventCalendarNav,
+  EventCalendarNavNext,
+  EventCalendarNavPrev,
+  EventCalendarNavToday,
+  EventCalendarTitle,
+  EventCalendarViewSwitcher,
+} from '@/components/reui/event-calendar/event-calendar-nav'
 import type { CalendarEvent } from '@/components/reui/event-calendar/event-calendar-types'
+import { Button } from '@/components/ui/button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export const Route = createFileRoute('/')({ component: Dashboard })
 
@@ -14,6 +28,19 @@ function useUpcoming(days = 30) {
   return useQuery({
     queryKey: ['upcoming', days],
     queryFn: () => api<{ today: string; items: UpcomingItem[] }>(`/upcoming?days=${days}`),
+  })
+}
+
+/** Satu query per tahun kalender (±1 tahun di sekitar tahun terlihat).
+ *  Payload setahun kecil (puluhan–ratusan item), jadi fetch per tahun lebih
+ *  hemat daripada per bulan dan membuat navigasi antar tahun instan. */
+function useUpcomingYears(years: number[]) {
+  return useQueries({
+    queries: years.map((y) => ({
+      queryKey: ['upcoming-year', y],
+      queryFn: () =>
+        api<{ today: string; items: UpcomingItem[] }>(`/upcoming?from=${y}-01-01&to=${y}-12-31`),
+    })),
   })
 }
 
@@ -81,6 +108,20 @@ const CALENDAR_I18N = {
   },
 }
 
+/** Tombol lompat ±1 tahun — harus dirender di dalam <EventCalendar> agar
+ *  bisa memakai context navigasinya. */
+function YearJumpButton({ dir }: { dir: -1 | 1 }) {
+  const { date, goTo } = useEventCalendarNavigation()
+  const label = dir === -1 ? 'Tahun sebelumnya' : 'Tahun berikutnya'
+  const Icon = dir === -1 ? ChevronsLeftIcon : ChevronsRightIcon
+  return (
+    <Button variant="ghost" size="icon-sm" aria-label={label} title={label}
+      onClick={() => goTo(addYears(date, dir))}>
+      <Icon className="size-4" aria-hidden="true" />
+    </Button>
+  )
+}
+
 function Dashboard() {
   const up = useUpcoming()
   const channels = useQuery({
@@ -89,7 +130,23 @@ function Dashboard() {
   })
 
   const items = up.data?.items ?? []
-  const events = useMemo(() => (up.data?.items ?? []).map(toCalendarEvent), [up.data])
+  const todayYear = up.data?.today ? Number(up.data.today.slice(0, 4)) : new Date().getFullYear()
+  // Tahun terlihat di kalender (dari navigasi); null = belum pernah navigasi.
+  const [visibleYear, setVisibleYear] = useState<number | null>(null)
+  const yearAnchor = visibleYear ?? todayYear
+  // ±1 tahun di sekitar anchor di-fetch sekaligus → lompat tahun sudah terisi
+  // sebelum diklik (prefetch), dan tiap tahun ter-cache terpisah di react-query.
+  const yearList = useMemo(
+    () => [yearAnchor - 1, yearAnchor, yearAnchor + 1],
+    [yearAnchor]
+  )
+  const yearQueries = useUpcomingYears(yearList)
+  const calendarItems = useMemo(
+    () => yearQueries.flatMap((q) => q.data?.items ?? []),
+    [yearQueries]
+  )
+  const events = useMemo(() => calendarItems.map(toCalendarEvent), [calendarItems])
+  const yearsLoading = yearQueries.some((q) => q.isLoading)
 
   if (up.isLoading) return <p className="text-slate-500">Memuat…</p>
   if (up.isError) return <p className="text-red-600">{String(up.error)}</p>
@@ -117,9 +174,26 @@ function Dashboard() {
           interactions={{ drag: false, resize: false, selectSlot: false }}
           locale={localeId}
           i18n={CALENDAR_I18N}
+          onDateChange={(d) => setVisibleYear(d.getFullYear())}
           className="h-[560px] w-full"
         >
-          <EventCalendarNav />
+          <EventCalendarNav>
+            <TooltipProvider delay={600} closeDelay={0} timeout={300}>
+              <EventCalendarNavToday />
+              <EventCalendarViewSwitcher />
+              <div className="flex items-center">
+                <YearJumpButton dir={-1} />
+                <EventCalendarNavPrev />
+                <EventCalendarNavNext />
+                <YearJumpButton dir={1} />
+              </div>
+              {/* ms-3 sets the title apart from the tight control cluster so the
+                  period reads as its own group, not another button */}
+              <EventCalendarTitle className="ms-3" />
+              {yearsLoading && <span className="ms-2 text-xs text-slate-400">memuat…</span>}
+              <div className="grow" />
+            </TooltipProvider>
+          </EventCalendarNav>
           <EventCalendarContent />
         </EventCalendar>
       </div>

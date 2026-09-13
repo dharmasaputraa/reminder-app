@@ -31,7 +31,7 @@ func Load() (Config, error) {
 		AuthMode:     envOr("AUTH_MODE", AuthCFAccess),
 		CFTeamDomain: os.Getenv("CF_ACCESS_TEAM_DOMAIN"),
 		CFAud:        os.Getenv("CF_ACCESS_AUD"),
-		TZ:           envOr("TZ", "Asia/Jakarta"),
+		TZ:           envOr("TZ", "Asia/Makassar"),
 		AdminEmails:  map[string]bool{},
 	}
 	for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {

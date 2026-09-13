@@ -13,8 +13,9 @@
 - **Multi-channel** — Gotify (self-hosted), Telegram, dan SMTP/email; config channel terenkripsi AES-256-GCM dengan `APP_SECRET`.
 - **Tes kirim** — tombol tes per channel dari halaman Channels.
 - **PWA** — manifest + service worker, installable dari HP.
+- **Kalender lintas tahun** — panah lompat ±1 tahun di kalender; data di-fetch per tahun (`/upcoming?from=&to=`, maks 400 hari) dan ±1 tahun di sekitarnya di-prefetch.
 - **Observability** — `/healthz`, `/readyz`, dan `/metrics` (Prometheus).
-- **Jam kirim & timezone** — default 08:00 dan `Asia/Jakarta`, diubah dari UI Settings (mis. `Asia/Makassar` untuk WITA).
+- **Jam kirim & timezone** — default 08:00 dan `Asia/Makassar` (WITA), diubah dari UI Settings (mis. `Asia/Jakarta` untuk WIB).
 
 ## Quickstart
 
@@ -50,7 +51,7 @@ Profil bisa digabung, mis. `docker compose --profile cloudflared --profile gotif
 | `CF_ACCESS_TEAM_DOMAIN` | mode cfaccess | — | `team-anda.cloudflareaccess.com` |
 | `CF_ACCESS_AUD` | mode cfaccess | — | Application Audience tag dari Access |
 | `ADMIN_EMAILS` | disarankan | — | Email admin, pisah koma; admin bisa lihat semua kontak & jalan scheduler manual |
-| `TZ` | tidak | `Asia/Jakarta` | Timezone proses container (log). **Timezone jadwal & jam kirim reminder diatur di UI Settings** (default `Asia/Jakarta`, ubah ke `Asia/Makassar` untuk WITA) |
+| `TZ` | tidak | `Asia/Makassar` | Timezone proses container (log). **Timezone jadwal & jam kirim reminder diatur di UI Settings** (default `Asia/Makassar`, ubah ke `Asia/Jakarta` untuk WIB) |
 | `DATA_DIR` | tidak | `/data` (image) | Lokasi file SQLite |
 | `ADDR` | tidak | `:8080` | Alamat listen |
 | `TUNNEL_TOKEN` | profile cloudflared | — | Token tunnel Cloudflare |
