@@ -56,6 +56,36 @@ func TestHolidayDedupeIndependent(t *testing.T) {
 	}
 }
 
+func TestRecordNotificationRequiresKey(t *testing.T) {
+	s, _ := OpenInMemory()
+	defer s.Close()
+	// Catatan: brief tidak memanggil Migrate(); store hasil Task 2 butuh migrasi eksplisit.
+	if err := s.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
+	ch, _ := s.CreateChannel(ctx, u.ID, "email", "cadangan", []byte("enc"))
+
+	// OccasionID dan HolidayKey keduanya nil: tidak dicakup kedua partial unique
+	// index (WHERE ... IS NOT NULL) — wajib ditolak agar dedupe tidak bocor.
+	inserted, err := s.RecordNotification(ctx, NotificationEntry{
+		OccurrenceDate: domain.NewDate(2026, 6, 17), OffsetDays: 7, ChannelID: ch.ID, Status: "sent"})
+	if err == nil {
+		t.Fatal("OccasionID dan HolidayKey keduanya nil harus error")
+	}
+	if inserted {
+		t.Error("entry tanpa key tidak boleh tercatat (inserted=false)")
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_log`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("notification_log harus kosong, dapat %d baris", n)
+	}
+}
+
 func TestSettingsRoundTrip(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
