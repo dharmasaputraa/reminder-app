@@ -11,32 +11,32 @@ import (
 )
 
 type Contact struct {
-	ID       int64
-	OwnerID  int64
-	Name     string
-	Nickname string
-	Notes    string
+	ID       int64  `json:"id"`
+	OwnerID  int64  `json:"owner_id"`
+	Name     string `json:"name"`
+	Nickname string `json:"nickname"`
+	Notes    string `json:"notes"`
 }
 
 type Occasion struct {
-	ID        int64
-	ContactID int64
-	Type      domain.OccurrenceType
-	BaseDate  domain.Date
-	Label     string
+	ID        int64                 `json:"id"`
+	ContactID int64                 `json:"contact_id"`
+	Type      domain.OccurrenceType `json:"type"`
+	BaseDate  domain.Date           `json:"base_date"`
+	Label     string                `json:"label"`
 }
 
 type ReminderPrefs struct {
-	ContactID  int64
-	Offsets    []int
-	ChannelIDs []int64
-	Enabled    bool
+	ContactID  int64   `json:"contact_id"`
+	Offsets    []int   `json:"offsets"`
+	ChannelIDs []int64 `json:"channel_ids"`
+	Enabled    bool    `json:"enabled"`
 }
 
 type ContactWithOccasions struct {
 	Contact
-	Occasions []Occasion
-	Prefs     *ReminderPrefs
+	Occasions []Occasion     `json:"occasions"`
+	Prefs     *ReminderPrefs `json:"prefs"`
 }
 
 func (s *Store) CreateContact(ctx context.Context, ownerID int64, name, nickname, notes string) (Contact, error) {

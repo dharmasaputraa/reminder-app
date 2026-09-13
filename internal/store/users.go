@@ -6,10 +6,10 @@ import (
 )
 
 type User struct {
-	ID    int64
-	Email string
-	Name  string
-	Role  string
+	ID    int64  `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	Role  string `json:"role"`
 }
 
 // GetOrCreateUser: auto-provision dari klaim email. Role hanya diset saat create.

@@ -82,6 +82,39 @@ func TestContactFlow(t *testing.T) {
 	}
 }
 
+func TestContactJSONSnakeCase(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id",
+		`{"name":"Made","nickname":"De","notes":"sepupu"}`))
+	if w.Code != 201 {
+		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
+		`{"type":"otongan","date":"1990-05-12"}`))
+	if w.Code != 201 {
+		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/1", "admin@x.id", ""))
+	if w.Code != 200 {
+		t.Fatalf("get contact: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{`"name":`, `"occasions"`, `"base_date"`, `"contact_id"`, `"prefs":null`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("response kontak tidak memuat %s: %s", want, body)
+		}
+	}
+	for _, bad := range []string{`"OwnerID"`, `"BaseDate"`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("response kontak masih PascalCase %s: %s", bad, body)
+		}
+	}
+}
+
 func TestUpcomingEmpty(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
