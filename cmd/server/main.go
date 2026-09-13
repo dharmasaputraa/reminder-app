@@ -14,6 +14,9 @@ import (
 	"otorem/internal/api"
 	"otorem/internal/calendarprov"
 	"otorem/internal/config"
+	"otorem/internal/notify"
+	"otorem/internal/scheduler"
+	"otorem/internal/secret"
 	"otorem/internal/store"
 )
 
@@ -38,8 +41,40 @@ func main() {
 		os.Exit(1)
 	}
 
-	providers := []calendarprov.Provider{calendarprov.NewComputedPawukon()}
+	key := secret.DeriveKey(cfg.AppSecret)
+	providers := []calendarprov.Provider{
+		calendarprov.NewComputedPawukon(),
+		calendarprov.NewCachedRemote(calendarprov.NewDayOffAPI(), st),
+		calendarprov.NewCachedRemote(calendarprov.NewKresna(""), st),
+	}
 	srv := api.NewServer(cfg, st, providers)
+
+	svc := &scheduler.Service{
+		St:    st,
+		Clock: scheduler.RealClock{},
+		Resolve: func(ctx context.Context, ch store.Channel) (notify.Notifier, error) {
+			return notify.NewFromChannel(ch, key)
+		},
+		Providers: providers,
+	}
+	// Snapshot builder yang sama dipakai runner adapter dan Loop — DRY.
+	buildSnapshot := func(ctx context.Context) scheduler.Snapshot {
+		set := srv.LoadSettings(ctx)
+		return scheduler.Snapshot{
+			Timezone: set.Timezone, SendTime: set.SendTime, CatchUpHours: set.CatchUpHours,
+			DefaultOffsets: set.DefaultOffsets, HolidayCategories: set.HolidayCategories,
+		}
+	}
+	srv.SetRunner(api.SchedulerRunnerFunc(func(ctx context.Context) (api.RunResult, error) {
+		res, err := svc.RunOnce(ctx, buildSnapshot(ctx))
+		return api.RunResult(res), err
+	}))
+
+	ctxLoop, cancelLoop := context.WithCancel(context.Background())
+	defer cancelLoop()
+	go svc.Loop(ctxLoop, time.Minute, func(ctx context.Context) (scheduler.Snapshot, error) {
+		return buildSnapshot(ctx), nil
+	})
 
 	httpServer := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
