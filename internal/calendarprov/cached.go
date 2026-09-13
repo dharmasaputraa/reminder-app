@@ -2,6 +2,7 @@ package calendarprov
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"otorem/internal/domain"
@@ -44,7 +45,12 @@ func (c *CachedRemote) loadYear(ctx context.Context, y int) ([]domain.Holiday, b
 	if err == nil { // stale cache ada → pakai, jangan gagalkan scheduler
 		return p.Holidays, true, nil
 	}
-	return nil, false, ferr
+	// Cache kosong + remote mati → no-op (set kosong), BUKAN error: sumber
+	// computed (pawukon) tetap jalan dan /upcoming tidak boleh 5xx hanya
+	// karena API pihak ketiga mati.
+	slog.Warn("provider remote gagal, cache kosong → lewati",
+		"provider", c.Inner.Name(), "year", y, "err", ferr)
+	return nil, false, nil
 }
 
 func (c *CachedRemote) HolidaysBetween(ctx context.Context, from, to domain.Date) ([]domain.Holiday, error) {
