@@ -16,16 +16,36 @@ function SettingsPage() {
   const q = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ email: string; role: string }>('/me') })
   const [form, setForm] = useState<Settings | null>(null)
+  const [offsetsText, setOffsetsText] = useState('')
 
-  useEffect(() => { if (q.data && !form) setForm(q.data) }, [q.data, form])
+  useEffect(() => {
+    if (q.data && !form) {
+      setForm(q.data)
+      setOffsetsText(q.data.default_offsets.join(','))
+    }
+  }, [q.data, form])
 
   const save = useMutation({
     mutationFn: (s: Settings) => api('/settings', { method: 'PUT', body: JSON.stringify(s) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   })
 
+  if (!form && q.isError)
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-bold">Pengaturan</h1>
+        <p className="text-sm text-red-600">
+          Gagal memuat pengaturan: {String(q.error)} — periksa login/dev email lalu muat ulang halaman.
+        </p>
+      </div>
+    )
   if (!form) return <p className="text-slate-500">Memuat…</p>
   const set = (patch: Partial<Settings>) => setForm({ ...form, ...patch })
+  const saveNow = () =>
+    save.mutate({
+      ...form,
+      default_offsets: offsetsText.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)),
+    })
 
   return (
     <div className="space-y-4">
@@ -51,8 +71,8 @@ function SettingsPage() {
         </label>
         <label className="block text-sm">
           Offset default (hari sebelum H, pisah koma)
-          <input value={form.default_offsets.join(',')}
-            onChange={(e) => set({ default_offsets: e.target.value.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)) })}
+          <input value={offsetsText}
+            onChange={(e) => setOffsetsText(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
         </label>
         <fieldset className="space-y-1">
@@ -65,7 +85,7 @@ function SettingsPage() {
             </label>
           ))}
         </fieldset>
-        <button onClick={() => save.mutate(form)} disabled={save.isPending}
+        <button onClick={saveNow} disabled={save.isPending}
           className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
           Simpan
         </button>
