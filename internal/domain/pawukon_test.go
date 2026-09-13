@@ -31,10 +31,10 @@ func TestPawukonCycleProperties(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		d := base.AddDays(i*3 + 11)
 		if Pawukon(d) != Pawukon(d.AddDays(PawukonCycleDays)) {
-			t.Fatalf("siklus 210 rusak pada %s", d)
+			t.Fatalf("210-day cycle broken at %s", d)
 		}
 		if saptawaraFromCycle := (CycleDay(d) - 1) % 7; saptawaraFromCycle != d.Weekday() {
-			t.Fatalf("saptawara siklus %d != weekday %d pada %s", saptawaraFromCycle, d.Weekday(), d)
+			t.Fatalf("cycle saptawara %d != weekday %d at %s", saptawaraFromCycle, d.Weekday(), d)
 		}
 	}
 }

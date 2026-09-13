@@ -40,13 +40,13 @@ func Load() (Config, error) {
 		}
 	}
 	if c.AuthMode != AuthCFAccess && c.AuthMode != AuthDev {
-		return c, fmt.Errorf("AUTH_MODE harus %q atau %q", AuthCFAccess, AuthDev)
+		return c, fmt.Errorf("AUTH_MODE must be %q or %q", AuthCFAccess, AuthDev)
 	}
 	if len(c.AppSecret) < 16 {
-		return c, errors.New("APP_SECRET wajib terisi, minimal 16 karakter (kunci AES-256-GCM)")
+		return c, errors.New("APP_SECRET is required, at least 16 characters (AES-256-GCM key)")
 	}
 	if c.AuthMode == AuthCFAccess && (c.CFTeamDomain == "" || c.CFAud == "") {
-		return c, errors.New("AUTH_MODE=cfaccess membutuhkan CF_ACCESS_TEAM_DOMAIN dan CF_ACCESS_AUD")
+		return c, errors.New("AUTH_MODE=cfaccess requires CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD")
 	}
 	return c, nil
 }

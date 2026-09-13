@@ -45,7 +45,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 	if fromQ := c.Query("from"); fromQ != "" {
 		from, err := domain.ParseDate(fromQ)
 		if err != nil {
-			c.JSON(400, gin.H{"error": "from tidak valid (harus YYYY-MM-DD)"})
+			c.JSON(400, gin.H{"error": "invalid from (must be YYYY-MM-DD)"})
 			return
 		}
 		rangeStart = from
@@ -53,17 +53,17 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 		if toQ := c.Query("to"); toQ != "" {
 			to, err := domain.ParseDate(toQ)
 			if err != nil {
-				c.JSON(400, gin.H{"error": "to tidak valid (harus YYYY-MM-DD)"})
+				c.JSON(400, gin.H{"error": "invalid to (must be YYYY-MM-DD)"})
 				return
 			}
 			if to.Before(from) {
-				c.JSON(400, gin.H{"error": "range terbalik: to < from"})
+				c.JSON(400, gin.H{"error": "inverted range: to < from"})
 				return
 			}
 			horizon = to
 		}
 		if horizon.JDN()-rangeStart.JDN() > 400 {
-			c.JSON(400, gin.H{"error": "range maksimal 400 hari"})
+			c.JSON(400, gin.H{"error": "range limited to 400 days"})
 			return
 		}
 	} else {
@@ -80,7 +80,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 	}
 	contacts, err := s.st.ListContacts(ctx, ownerID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "gagal memuat kontak"})
+		c.JSON(500, gin.H{"error": "failed to load contacts"})
 		return
 	}
 
@@ -111,7 +111,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 
 	hs, err := s.multiProvider().HolidaysBetween(ctx, rangeStart, horizon, settings.HolidayCategories)
 	if err != nil {
-		c.JSON(502, gin.H{"error": "provider hari raya gagal"})
+		c.JSON(502, gin.H{"error": "holiday provider failed"})
 		return
 	}
 	for _, h := range hs {

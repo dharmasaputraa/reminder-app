@@ -172,7 +172,7 @@ func (s *Store) DeleteContact(ctx context.Context, ownerID, contactID int64) err
 
 func (s *Store) AddOccasion(ctx context.Context, contactID int64, typ domain.OccurrenceType, base domain.Date, label string) (Occasion, error) {
 	if typ != domain.Birthday && typ != domain.Otonan && typ != domain.Anniversary {
-		return Occasion{}, fmt.Errorf("tipe occasion tidak dikenal: %q", typ)
+		return Occasion{}, fmt.Errorf("unknown occasion type: %q", typ)
 	}
 	r, err := s.db.ExecContext(ctx,
 		`INSERT INTO occasions (contact_id, type, base_date, label) VALUES (?,?,?,?)`,

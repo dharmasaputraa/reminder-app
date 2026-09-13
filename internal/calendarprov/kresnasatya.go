@@ -63,7 +63,7 @@ func (k *Kresna) fetchYear(ctx context.Context, year int) ([]domain.Holiday, err
 	for _, it := range items {
 		dt, err := time.Parse("2006-01-02", it.HolidayDate)
 		if err != nil {
-			return nil, fmt.Errorf("kresna tanggal %q: %w", it.HolidayDate, err)
+			return nil, fmt.Errorf("kresna date %q: %w", it.HolidayDate, err)
 		}
 		out = append(out, domain.Holiday{Date: domain.DateFromTime(dt), Name: it.HolidayName})
 	}

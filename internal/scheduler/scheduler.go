@@ -47,7 +47,7 @@ const failBackoff = 15 * time.Minute
 
 var notifCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "otorem_notifications_total",
-	Help: "notifikasi per status dan kind",
+	Help: "notifications by status and kind",
 }, []string{"status", "kind"})
 
 type Service struct {
@@ -255,7 +255,7 @@ func (s *Service) record(ctx context.Context, e store.NotificationEntry, res *Re
 	if err != nil {
 		// don't silently drop it: the reminder is still sent, but the log trail
 		// is missing from dedupe — warn so it shows up in observability.
-		slog.Warn("record_notification gagal", "kind", kind, "channel_id", e.ChannelID, "err", err)
+		slog.Warn("record_notification failed", "kind", kind, "channel_id", e.ChannelID, "err", err)
 		return
 	}
 	if !inserted {
@@ -283,7 +283,7 @@ func (s *Service) deliver(ctx context.Context, channels []store.Channel,
 			// silence the reminder — a double push is better than a lost
 			// reminder. INSERT OR IGNORE in the log still prevents duplicate
 			// records/counters.
-			slog.Warn("has_notification gagal, kirim saja (fail open)",
+			slog.Warn("has_notification failed, sending anyway (fail open)",
 				"channel_id", ch.ID, "err", err)
 		} else if exists {
 			continue

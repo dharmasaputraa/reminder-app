@@ -22,7 +22,7 @@ func TestTelegramSend(t *testing.T) {
 
 	tg := NewTelegram(TelegramConfig{BotToken: "BOT123", ChatID: "-10099"})
 	tg.baseURL = srv.URL
-	if err := tg.Send(context.Background(), Message{Title: "<b>Halō</b>", Body: "isi & aman"}); err != nil {
+	if err := tg.Send(context.Background(), Message{Title: "<b>Hello</b>", Body: "body & safe"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasSuffix(gotPath, "/botBOT123/sendMessage") {
@@ -31,8 +31,8 @@ func TestTelegramSend(t *testing.T) {
 	if !strings.Contains(gotBody, `"chat_id":"-10099"`) {
 		t.Errorf("body = %q", gotBody)
 	}
-	if strings.Contains(gotBody, "<b>Halō</b>") {
-		t.Errorf("HTML tidak di-escape: %q", gotBody)
+	if strings.Contains(gotBody, "<b>Hello</b>") {
+		t.Errorf("HTML not escaped: %q", gotBody)
 	}
 }
 
@@ -54,6 +54,6 @@ func TestTelegramJSONShape(t *testing.T) {
 	var m map[string]any
 	_ = json.Unmarshal([]byte(`{"chat_id":"1","text":"x","parse_mode":"HTML"}`), &m)
 	if m["parse_mode"] != "HTML" {
-		t.Fatal("sanity json gagal")
+		t.Fatal("json sanity check failed")
 	}
 }

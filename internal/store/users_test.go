@@ -21,9 +21,9 @@ func TestGetOrCreateUser(t *testing.T) {
 	if u1.Role != "admin" {
 		t.Errorf("role = %q, want admin", u1.Role)
 	}
-	u2, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi Lain", admins) // same email → no dup
+	u2, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi Other", admins) // same email → no dup
 	if u2.ID != u1.ID {
-		t.Errorf("duplikat user: %d vs %d", u1.ID, u2.ID)
+		t.Errorf("duplicate user: %d vs %d", u1.ID, u2.ID)
 	}
 	u3, _ := s.GetOrCreateUser(ctx, "citra@x.id", "Citra", admins)
 	if u3.Role != "member" {
@@ -31,6 +31,6 @@ func TestGetOrCreateUser(t *testing.T) {
 	}
 	users, _ := s.ListUsers(ctx)
 	if len(users) != 2 {
-		t.Errorf("jumlah user = %d, want 2", len(users))
+		t.Errorf("user count = %d, want 2", len(users))
 	}
 }

@@ -21,7 +21,7 @@ func TestLoopRunsAndStops(t *testing.T) {
 	select {
 	case <-called:
 	case <-time.After(2 * time.Second):
-		t.Fatal("loop tidak pernah menjalankan scan")
+		t.Fatal("loop never ran a scan")
 	}
 	cancel()
 	// there is no synchronous way to wait for exit without instrumentation — just make
@@ -55,7 +55,7 @@ func TestLoopStopsOnCancel(t *testing.T) {
 	select {
 	case <-first:
 	case <-time.After(2 * time.Second):
-		t.Fatal("loop tidak pernah menjalankan scan")
+		t.Fatal("loop never ran a scan")
 	}
 	cancel()
 	close(release)
@@ -65,6 +65,6 @@ func TestLoopStopsOnCancel(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if calls != 1 {
-		t.Errorf("loop masih jalan setelah ctx cancel: snapshot dipanggil %d kali", calls)
+		t.Errorf("loop still running after ctx cancel: snapshot called %d times", calls)
 	}
 }

@@ -21,7 +21,7 @@ func TestComputedPawukon(t *testing.T) {
 		found[h.Name] = true
 	}
 	if !found["Galungan"] || !found["Kuningan"] {
-		t.Errorf("galungan/kuningan hilang: %v", hs)
+		t.Errorf("Galungan/Kuningan missing: %v", hs)
 	}
 }
 
@@ -33,11 +33,11 @@ func TestMultiProviderFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(hs) != 0 {
-		t.Errorf("kategori off harus kosong: %v", hs)
+		t.Errorf("category off must be empty: %v", hs)
 	}
 	hs, _ = m.HolidaysBetween(context.Background(),
 		domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30), map[string]bool{"pawukon": true})
 	if len(hs) != 2 {
-		t.Errorf("kategori on: %v", hs)
+		t.Errorf("category on: %v", hs)
 	}
 }

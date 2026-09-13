@@ -22,15 +22,15 @@ func TestSPANotBuiltReturns503(t *testing.T) {
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
 	if w.Code != 503 {
-		t.Errorf("/ tanpa build webroot: %d, want 503", w.Code)
+		t.Errorf("/ without webroot build: %d, want 503", w.Code)
 	}
 	w = httptest.NewRecorder()
-	s.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/tidak-ada", nil))
+	s.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/unknown", nil))
 	if w.Code != 404 {
-		t.Errorf("/api/* tidak dikenal: %d, want 404", w.Code)
+		t.Errorf("unknown /api/*: %d, want 404", w.Code)
 	}
 	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "json") {
-		t.Errorf("/api/* tidak dikenal content-type: %q, want JSON", ct)
+		t.Errorf("unknown /api/* content-type: %q, want JSON", ct)
 	}
 }
 
@@ -60,10 +60,10 @@ func TestSPAWithBuiltWebroot(t *testing.T) {
 			t.Errorf("GET %s: %d, want %d", tc.path, w.Code, tc.code)
 		}
 		if got := w.Body.String(); !strings.Contains(got, tc.body) {
-			t.Errorf("GET %s body %q tidak memuat %q", tc.path, got, tc.body)
+			t.Errorf("GET %s body %q does not contain %q", tc.path, got, tc.body)
 		}
 		if got := w.Header().Get("Content-Type"); !strings.Contains(got, tc.ct) {
-			t.Errorf("GET %s content-type %q tidak memuat %q", tc.path, got, tc.ct)
+			t.Errorf("GET %s content-type %q does not contain %q", tc.path, got, tc.ct)
 		}
 	}
 }

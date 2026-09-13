@@ -19,7 +19,7 @@ var spaFS fs.FS = webRoot
 func (s *Server) spaHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || c.Request.URL.Path == "/metrics" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "endpoint tidak ditemukan"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "endpoint not found"})
 			return
 		}
 		rel := strings.TrimPrefix(path.Clean("/"+c.Request.URL.Path), "/")
@@ -38,7 +38,7 @@ func (s *Server) spaHandler() gin.HandlerFunc {
 		// for paths ending in /index.html, which breaks the SPA fallback.
 		b, err := fs.ReadFile(spaFS, "webroot/index.html")
 		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SPA belum di-build — jalankan 'make web'"})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SPA not built — run 'make web'"})
 			return
 		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", b)

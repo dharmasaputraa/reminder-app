@@ -58,13 +58,13 @@ func (s *Server) LoadSettings(ctx context.Context) Settings {
 
 func (s *Server) SaveSettings(ctx context.Context, in Settings) (Settings, error) {
 	if _, err := time.LoadLocation(in.Timezone); err != nil {
-		return Settings{}, fmt.Errorf("timezone tidak dikenal: %q", in.Timezone)
+		return Settings{}, fmt.Errorf("unknown timezone: %q", in.Timezone)
 	}
 	if !sendTimeRe.MatchString(in.SendTime) {
-		return Settings{}, fmt.Errorf("send_time harus HH:MM, dapat %q", in.SendTime)
+		return Settings{}, fmt.Errorf("send_time must be HH:MM, got %q", in.SendTime)
 	}
 	if in.CatchUpHours < 1 || in.CatchUpHours > 168 {
-		return Settings{}, fmt.Errorf("catch_up_hours harus 1..168")
+		return Settings{}, fmt.Errorf("catch_up_hours must be 1..168")
 	}
 	if err := domain.ValidateOffsets(in.DefaultOffsets); err != nil {
 		return Settings{}, err

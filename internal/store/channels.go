@@ -18,7 +18,7 @@ type Channel struct {
 
 func (s *Store) CreateChannel(ctx context.Context, ownerID int64, typ, name string, configEnc []byte) (Channel, error) {
 	if typ != "gotify" && typ != "telegram" && typ != "email" {
-		return Channel{}, fmt.Errorf("tipe channel tidak dikenal: %q", typ)
+		return Channel{}, fmt.Errorf("unknown channel type: %q", typ)
 	}
 	r, err := s.db.ExecContext(ctx,
 		`INSERT INTO channels (owner_id, type, name, config_enc, enabled) VALUES (?,?,?,?,1)`,

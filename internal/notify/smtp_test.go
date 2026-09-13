@@ -125,21 +125,21 @@ func TestSMTPSend(t *testing.T) {
 	port, _ := strconv.Atoi(strings.Split(f.addr, ":")[1])
 	s := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: port, From: "otorem@x.id",
 		To: []string{"budi@x.id"}}) // no auth — the fake accepts anything
-	if err := s.Send(context.Background(), Message{Title: "🎂 ultah", Body: "isi pesan"}); err != nil {
+	if err := s.Send(context.Background(), Message{Title: "🎂 birthday", Body: "message body"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(f.data, "Subject: =?utf-8?") {
-		t.Errorf("subject harus ter-encode RFC 2047: %q", f.data)
+		t.Errorf("subject must be RFC 2047 encoded: %q", f.data)
 	}
 	// body stays raw UTF-8: the emoji is only encoded in the header.
-	if !strings.Contains(f.data, "🎂 ultah") {
-		t.Errorf("emoji harus tetap mentah di body HTML: %q", f.data)
+	if !strings.Contains(f.data, "🎂 birthday") {
+		t.Errorf("emoji must stay raw in the HTML body: %q", f.data)
 	}
-	if !strings.Contains(f.data, "isi pesan") {
+	if !strings.Contains(f.data, "message body") {
 		t.Errorf("body text: %q", f.data)
 	}
 	if !strings.Contains(f.data, "multipart/alternative") {
-		t.Errorf("harus multipart: %q", f.data)
+		t.Errorf("must be multipart: %q", f.data)
 	}
 	if len(f.rcptTo) != 1 || !strings.Contains(f.rcptTo[0], "budi@x.id") {
 		t.Errorf("rcpt: %v", f.rcptTo)
@@ -152,7 +152,7 @@ func TestSMTPContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := s.Send(ctx, Message{Title: "x"}); err == nil {
-		t.Error("harus gagal")
+		t.Error("must fail")
 	}
 }
 
@@ -166,6 +166,6 @@ func TestSMTPContextCancel(t *testing.T) {
 	defer cancel()
 	err := s.Send(ctx, Message{Title: "x"})
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("harus DeadlineExceeded, dapat: %v", err)
+		t.Fatalf("must be DeadlineExceeded, got: %v", err)
 	}
 }

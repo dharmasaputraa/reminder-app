@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewFromChannel(t *testing.T) {
-	key := secret.DeriveKey("super-secret-panjang-16")
+	key := secret.DeriveKey("super-secret-long-enough-16")
 
 	enc := func(cfg string) []byte {
 		b, err := secret.Encrypt(key, []byte(cfg))
@@ -18,7 +18,7 @@ func TestNewFromChannel(t *testing.T) {
 		return b
 	}
 
-	n1, err := NewFromChannel(store.Channel{Type: "gotify", Name: "rumah",
+	n1, err := NewFromChannel(store.Channel{Type: "gotify", Name: "home",
 		ConfigEnc: enc(`{"base_url":"http://g","token":"t"}`)}, key)
 	if err != nil {
 		t.Fatal(err)
@@ -47,6 +47,6 @@ func TestNewFromChannel(t *testing.T) {
 
 	if _, err := NewFromChannel(store.Channel{Type: " fax",
 		ConfigEnc: enc(`{}`)}, key); err == nil {
-		t.Error("tipe asing harus error")
+		t.Error("unknown type must error")
 	}
 }

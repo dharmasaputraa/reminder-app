@@ -32,7 +32,7 @@ func (s *Store) Migrate() error {
 		base := strings.SplitN(strings.TrimSuffix(path.Base(e), ".sql"), "_", 2)[0]
 		v, err := strconv.Atoi(base)
 		if err != nil {
-			return fmt.Errorf("nama migrasi harus NNN_*.sql: %s", e)
+			return fmt.Errorf("migration name must be NNN_*.sql: %s", e)
 		}
 		if v <= current {
 			continue

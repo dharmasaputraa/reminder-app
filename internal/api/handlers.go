@@ -24,7 +24,7 @@ func bind[T any](c *gin.Context) (*T, bool) {
 func respondErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		c.JSON(404, gin.H{"error": "tidak ditemukan"})
+		c.JSON(404, gin.H{"error": "not found"})
 	default:
 		c.JSON(500, gin.H{"error": err.Error()})
 	}
@@ -33,7 +33,7 @@ func respondErr(c *gin.Context, err error) {
 func pathID(c *gin.Context) (int64, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id < 1 {
-		c.JSON(400, gin.H{"error": "id tidak valid"})
+		c.JSON(400, gin.H{"error": "invalid id"})
 		return 0, false
 	}
 	return id, true
@@ -73,7 +73,7 @@ func (s *Server) handleCreateContact(c *gin.Context) {
 		return
 	}
 	if in.Name == "" {
-		c.JSON(400, gin.H{"error": "nama wajib"})
+		c.JSON(400, gin.H{"error": "name is required"})
 		return
 	}
 	ct, err := s.st.CreateContact(c.Request.Context(), mustUser(c).ID, in.Name, in.Nickname, in.Notes)
@@ -143,7 +143,7 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 	switch domain.OccurrenceType(in.Type) {
 	case domain.Birthday, domain.Otonan, domain.Anniversary:
 	default:
-		c.JSON(400, gin.H{"error": "tipe occasion tidak valid"})
+		c.JSON(400, gin.H{"error": "invalid occasion type"})
 		return
 	}
 	if _, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid); err != nil {
@@ -283,7 +283,7 @@ func (s *Server) handlePatchChannel(c *gin.Context) {
 		return
 	}
 	if in.Enabled == nil {
-		c.JSON(400, gin.H{"error": "enabled wajib"})
+		c.JSON(400, gin.H{"error": "enabled is required"})
 		return
 	}
 	if err := s.st.SetChannelEnabled(c.Request.Context(), s.scope(c), id, *in.Enabled); err != nil {
@@ -310,7 +310,7 @@ func (s *Server) handleDeleteChannel(c *gin.Context) {
 func (s *Server) validateChannelConfig(typ string, raw json.RawMessage) error {
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return errors.New("config harus JSON object")
+		return errors.New("config must be a JSON object")
 	}
 	need := map[string][]string{
 		"gotify":   {"base_url", "token"},
@@ -318,11 +318,11 @@ func (s *Server) validateChannelConfig(typ string, raw json.RawMessage) error {
 		"email":    {"host", "port", "from", "to"},
 	}[typ]
 	if need == nil {
-		return errors.New("tipe channel tidak dikenal")
+		return errors.New("unknown channel type")
 	}
 	for _, k := range need {
 		if v, ok := m[k]; !ok || v == nil || v == "" {
-			return errors.New("field config '" + k + "' wajib untuk tipe " + typ)
+			return errors.New("config field '" + k + "' is required for type " + typ)
 		}
 	}
 	return nil
@@ -358,7 +358,7 @@ func (s *Server) handlePutSettings(c *gin.Context) {
 
 func (s *Server) handleListUsers(c *gin.Context) {
 	if mustUser(c).Role != "admin" {
-		c.JSON(403, gin.H{"error": "khusus admin"})
+		c.JSON(403, gin.H{"error": "admin only"})
 		return
 	}
 	users, err := s.st.ListUsers(c.Request.Context())
@@ -371,11 +371,11 @@ func (s *Server) handleListUsers(c *gin.Context) {
 
 func (s *Server) handleSchedulerRun(c *gin.Context) {
 	if mustUser(c).Role != "admin" {
-		c.JSON(403, gin.H{"error": "khusus admin"})
+		c.JSON(403, gin.H{"error": "admin only"})
 		return
 	}
 	if s.runner == nil {
-		c.JSON(503, gin.H{"error": "scheduler belum aktif"})
+		c.JSON(503, gin.H{"error": "scheduler not active"})
 		return
 	}
 	res, err := s.runner.RunOnce(c.Request.Context())

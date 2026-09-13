@@ -28,7 +28,7 @@ func TestDayOffAPIParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hs) != 1 || hs[0].Name != "Libur Nasional — Nyepi" || hs[0].Date != (domain.Date{Year: 2026, Month: 3, Day: 19}) {
+	if len(hs) != 1 || hs[0].Name != "National Holiday — Nyepi" || hs[0].Date != (domain.Date{Year: 2026, Month: 3, Day: 19}) {
 		t.Errorf("hs = %+v", hs)
 	}
 }
@@ -74,7 +74,7 @@ func TestCachedRemoteCacheFirst(t *testing.T) {
 		}
 	}
 	if calls != 1 {
-		t.Errorf("remote dipanggil %d×, want 1 (cache-first)", calls)
+		t.Errorf("remote called %d×, want 1 (cache-first)", calls)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestCachedRemoteStaleFallback(t *testing.T) {
 	}
 	stale := cachePayload{
 		FetchedAt: time.Now().Add(-48 * time.Hour),
-		Holidays:  []domain.Holiday{{Date: domain.NewDate(2026, 3, 19), Name: "Libur Nasional — Nyepi"}},
+		Holidays:  []domain.Holiday{{Date: domain.NewDate(2026, 3, 19), Name: "National Holiday — Nyepi"}},
 	}
 	if err := st.PutHolidayCache(context.Background(), 2026, "dayoffapi", stale); err != nil {
 		t.Fatal(err)
@@ -106,13 +106,13 @@ func TestCachedRemoteStaleFallback(t *testing.T) {
 
 	hs, err := c.HolidaysBetween(context.Background(), domain.NewDate(2026, 3, 10), domain.NewDate(2026, 3, 20))
 	if err != nil {
-		t.Fatalf("stale fallback harus sukses: %v", err)
+		t.Fatalf("stale fallback must succeed: %v", err)
 	}
-	if len(hs) != 1 || hs[0].Name != "Libur Nasional — Nyepi" {
+	if len(hs) != 1 || hs[0].Name != "National Holiday — Nyepi" {
 		t.Errorf("hs = %+v", hs)
 	}
 	if calls != 1 {
-		t.Errorf("refresh harus dicoba sekali, calls = %d", calls)
+		t.Errorf("refresh must be attempted once, calls = %d", calls)
 	}
 }
 
@@ -142,17 +142,17 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 	// (a) first call: the only remote attempt.
 	hs, err := c.HolidaysBetween(ctx, ran, domain.NewDate(2026, 3, 20))
 	if err != nil {
-		t.Fatalf("remote mati + cache kosong harus no-op, bukan error: %v", err)
+		t.Fatalf("remote down + empty cache must be a no-op, not an error: %v", err)
 	}
 	if len(hs) != 0 {
-		t.Errorf("hs = %+v, want kosong", hs)
+		t.Errorf("hs = %+v, want empty", hs)
 	}
 	// (a) immediate second call: backoff → no new HTTP call.
 	if _, err := c.HolidaysBetween(ctx, ran, domain.NewDate(2026, 3, 20)); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
-		t.Fatalf("calls = %d, want 1 (backoff harus menahan retry)", calls)
+		t.Fatalf("calls = %d, want 1 (backoff must hold back the retry)", calls)
 	}
 
 	// (b) backoff window passed (FailBackoff = 0) → the remote is tried again.
@@ -161,7 +161,7 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	if calls != 2 {
-		t.Errorf("calls = %d, want 2 (backoff lewat → retry)", calls)
+		t.Errorf("calls = %d, want 2 (backoff passed → retry)", calls)
 	}
 }
 
@@ -194,7 +194,7 @@ func TestCachedRemoteBackoffClearedOnSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	if calls != 1 || !c.inBackoff(2026) {
-		t.Fatalf("setelah gagal: calls=%d inBackoff=%v, want 1 & true", calls, c.inBackoff(2026))
+		t.Fatalf("after failure: calls=%d inBackoff=%v, want 1 & true", calls, c.inBackoff(2026))
 	}
 
 	healthy = true
@@ -203,10 +203,10 @@ func TestCachedRemoteBackoffClearedOnSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	if calls != 2 {
-		t.Fatalf("calls = %d, want 2 (retry setelah window dibuka)", calls)
+		t.Fatalf("calls = %d, want 2 (retry after the window opens)", calls)
 	}
 	if c.inBackoff(2026) {
-		t.Error("sukses harus menghapus fail memory (inBackoff=false)")
+		t.Error("success must clear fail memory (inBackoff=false)")
 	}
 }
 
@@ -218,9 +218,9 @@ func TestKresnaStatusCheck(t *testing.T) {
 	k := NewKresna(srv.URL)
 	_, err := k.HolidaysBetween(context.Background(), domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30))
 	if err == nil {
-		t.Fatal("404 harus menghasilkan error")
+		t.Fatal("404 must produce an error")
 	}
 	if !strings.Contains(err.Error(), "status 404") {
-		t.Errorf("err = %v, want mengandung \"status 404\"", err)
+		t.Errorf("err = %v, want it to contain \"status 404\"", err)
 	}
 }

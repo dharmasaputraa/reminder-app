@@ -16,7 +16,7 @@ func TestChannelTestSend(t *testing.T) {
 
 	// note: newTestServer also returns *store.Store; not used here.
 	s, _ := newTestServer(t, "admin@x.id")
-	body := `{"type":"gotify","name":"rumah","config":{"base_url":"` + srv.URL + `","token":"t"}}`
+	body := `{"type":"gotify","name":"home","config":{"base_url":"` + srv.URL + `","token":"t"}}`
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels", "admin@x.id", body))
 	if w.Code != 201 {
@@ -33,6 +33,6 @@ func TestChannelTestSend(t *testing.T) {
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels/999/test", "admin@x.id", ""))
 	if w.Code != 404 {
-		t.Errorf("channel hilang: %d", w.Code)
+		t.Errorf("missing channel: %d", w.Code)
 	}
 }

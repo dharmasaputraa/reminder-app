@@ -57,7 +57,7 @@ func seed(t *testing.T, st *store.Store, today domain.Date) {
 	if _, err := st.AddOccasion(ctx, c.ID, domain.Otonan, today.AddDays(-domain.PawukonCycleDays), ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.CreateChannel(ctx, u.ID, "gotify", "rumah", []byte("enc")); err != nil {
+	if _, err := st.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -102,19 +102,19 @@ func TestRunOnceOnTime(t *testing.T) {
 	if len(h.notif.sent) != 1 {
 		t.Fatalf("notif = %d", len(h.notif.sent))
 	}
-	if strings.Contains(h.notif.sent[0].Body, "terlambat") {
-		t.Error("tidak boleh late")
+	if strings.Contains(h.notif.sent[0].Body, "Sent late") {
+		t.Error("must not be late")
 	}
 
 	// 2nd run → everything is deduped
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Sent != 0 || res.Missed != 0 {
-		t.Errorf("dedupe gagal: %+v", res)
+		t.Errorf("dedupe failed: %+v", res)
 	}
 	// PRE-SEND dedupe: the stub must not be called again — the per-minute
 	// scanner must not re-push the same reminder over and over.
 	if len(h.notif.sent) != 1 {
-		t.Errorf("stub terpanggil %d kali setelah run ke-2, harus tetap 1 (spam dobel)", len(h.notif.sent))
+		t.Errorf("stub called %d times after run 2, must stay 1 (double spam)", len(h.notif.sent))
 	}
 }
 
@@ -130,8 +130,8 @@ func TestRunOnceCatchUpLate(t *testing.T) {
 	if res.Sent != 1 || res.Missed != 3 {
 		t.Fatalf("res = %+v, want Sent1 Missed3", res)
 	}
-	if !strings.Contains(h.notif.sent[0].Body, "terlambat") {
-		t.Errorf("harus late: %q", h.notif.sent[0].Body)
+	if !strings.Contains(h.notif.sent[0].Body, "Sent late") {
+		t.Errorf("must be late: %q", h.notif.sent[0].Body)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestRunOnceRetryAfterFailure(t *testing.T) {
 	h.fc.Add(time.Minute)
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Failed != 0 || res.Sent != 0 {
-		t.Errorf("backoff bocor: %+v", res)
+		t.Errorf("backoff leaked: %+v", res)
 	}
 
 	// 16 minutes later + now successful → sent
@@ -157,7 +157,7 @@ func TestRunOnceRetryAfterFailure(t *testing.T) {
 	h.notif.err = nil
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Sent != 1 {
-		t.Errorf("retry gagal: %+v", res)
+		t.Errorf("retry failed: %+v", res)
 	}
 }
 
@@ -171,7 +171,7 @@ func TestHolidayReminder(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Sent != 2 {
-		t.Fatalf("sent = %d, want 2 (otoman + galungan)", res.Sent)
+		t.Fatalf("sent = %d, want 2 (otonan + Galungan)", res.Sent)
 	}
 	found := false
 	for _, m := range h.notif.sent {
@@ -180,16 +180,16 @@ func TestHolidayReminder(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("pesan galungan tidak terkirim")
+		t.Error("Galungan message not sent")
 	}
 	// dedupe holiday
 	res, _ = h.svc.RunOnce(context.Background(), snapUTC())
 	if res.Sent != 0 {
-		t.Errorf("holiday dedupe gagal: %+v", res)
+		t.Errorf("holiday dedupe failed: %+v", res)
 	}
-	// PRE-SEND dedupe: total stub calls stay 2 (otonan + galungan).
+	// PRE-SEND dedupe: total stub calls stay 2 (otonan + Galungan).
 	if len(h.notif.sent) != 2 {
-		t.Errorf("stub terpanggil %d kali setelah run ke-2, harus tetap 2 (spam dobel)", len(h.notif.sent))
+		t.Errorf("stub called %d times after run 2, must stay 2 (double spam)", len(h.notif.sent))
 	}
 }
 
@@ -225,7 +225,7 @@ func TestRunOnceExternalLiteralNoPanicOnFail(t *testing.T) {
 	svc.Clock.(*FakeClock).Add(time.Minute)
 	res, _ = svc.RunOnce(context.Background(), snapUTC())
 	if res.Failed != 0 || res.Sent != 0 {
-		t.Errorf("backoff bocor: %+v", res)
+		t.Errorf("backoff leaked: %+v", res)
 	}
 
 	// 16 minutes later + success → sent
@@ -233,7 +233,7 @@ func TestRunOnceExternalLiteralNoPanicOnFail(t *testing.T) {
 	n.err = nil
 	res, _ = svc.RunOnce(context.Background(), snapUTC())
 	if res.Sent != 1 {
-		t.Errorf("retry gagal: %+v", res)
+		t.Errorf("retry failed: %+v", res)
 	}
 }
 

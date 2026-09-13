@@ -21,9 +21,9 @@ import {
 export const Route = createFileRoute('/settings')({ component: SettingsPage })
 
 const KATEGORI = [
-  { key: 'pawukon', label: 'Hari raya Pawukon (dihitung lokal)' },
-  { key: 'saka', label: 'Hari raya Bali & Saka (API)' },
-  { key: 'national', label: 'Libur nasional (API)' },
+  { key: 'pawukon', label: 'Pawukon holidays (computed locally)' },
+  { key: 'saka', label: 'Balinese & Saka holidays (API)' },
+  { key: 'national', label: 'National holidays (API)' },
 ]
 
 /** Indonesian time zones — WIB/WITA/WIT labels are shown in the option. */
@@ -91,21 +91,21 @@ function SettingsPage() {
     mutationFn: (s: Settings) => api('/settings', { method: 'PUT', body: JSON.stringify(s) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] })
-      toast.success('Tersimpan.')
+      toast.success('Saved.')
     },
-    onError: (e) => toast.error(`Gagal menyimpan: ${String(e)}`),
+    onError: (e) => toast.error(`Failed to save: ${String(e)}`),
   })
 
   if (!form && q.isError)
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-bold">Pengaturan</h1>
+        <h1 className="text-xl font-bold">Settings</h1>
         <p className="text-sm text-red-600">
-          Gagal memuat pengaturan: {String(q.error)} — periksa login/dev email lalu muat ulang halaman.
+          Failed to load settings: {String(q.error)} — check your login/dev email, then reload the page.
         </p>
       </div>
     )
-  if (!form) return <p className="text-slate-500">Memuat…</p>
+  if (!form) return <p className="text-slate-500">Loading…</p>
   const set = (patch: Partial<Settings>) => setForm({ ...form, ...patch })
   const saveNow = () =>
     save.mutate({
@@ -115,24 +115,24 @@ function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Pengaturan</h1>
+      <h1 className="text-xl font-bold">Settings</h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>Preferensi Pengingat</CardTitle>
+          <CardTitle>Reminder Preferences</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Field>
             <FieldLabel>Timezone</FieldLabel>
             <Select value={form.timezone} onValueChange={(v) => set({ timezone: v ?? form.timezone })}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih zona waktu" />
+                <SelectValue placeholder="Select a timezone" />
               </SelectTrigger>
               <SelectContent>
                 {/* a stored value not in the list is still shown */}
                 {!TZ_INDONESIA.some((t) => t.value === form.timezone) &&
                   !TZ_LAINNYA.includes(form.timezone) && (
-                  <SelectItem value={form.timezone}>{tzOptionText(form.timezone)} — nilai tersimpan</SelectItem>
+                  <SelectItem value={form.timezone}>{tzOptionText(form.timezone)} — stored value</SelectItem>
                 )}
                 <SelectGroup>
                   <SelectLabel>Indonesia</SelectLabel>
@@ -141,39 +141,39 @@ function SettingsPage() {
                   ))}
                 </SelectGroup>
                 <SelectGroup>
-                  <SelectLabel>Zona waktu lainnya</SelectLabel>
+                  <SelectLabel>Other timezones</SelectLabel>
                   {TZ_LAINNYA.map((tz) => (
                     <SelectItem key={tz} value={tz}>{tzOptionText(tz)}</SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <FieldDescription>Menentukan "hari ini" untuk kalender dan jam kirim pengingat.</FieldDescription>
+            <FieldDescription>Sets "today" for the calendar and the reminder send time.</FieldDescription>
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="send-time">Jam kirim (HH:MM)</FieldLabel>
+            <FieldLabel htmlFor="send-time">Send time (HH:MM)</FieldLabel>
             <Input id="send-time" value={form.send_time} onChange={(e) => set({ send_time: e.target.value })} />
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="catch-up">Catch-up window (jam)</FieldLabel>
+            <FieldLabel htmlFor="catch-up">Catch-up window (hours)</FieldLabel>
             <Input
               id="catch-up"
               type="number"
               value={form.catch_up_hours}
               onChange={(e) => set({ catch_up_hours: Number(e.target.value) })}
             />
-            <FieldDescription>Pengingat yang terlewat karena perangkat mati.</FieldDescription>
+            <FieldDescription>Reminders missed while the device was off.</FieldDescription>
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="offsets">Offset default (hari sebelum H, pisah koma)</FieldLabel>
+            <FieldLabel htmlFor="offsets">Default offsets (days before D, comma-separated)</FieldLabel>
             <Input id="offsets" value={offsetsText} onChange={(e) => setOffsetsText(e.target.value)} />
           </Field>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Kategori hari raya</legend>
+            <legend className="text-sm font-medium">Holiday categories</legend>
             {KATEGORI.map((k) => (
               <label key={k.key} className="flex items-center gap-2 text-sm">
                 <Checkbox
@@ -185,14 +185,14 @@ function SettingsPage() {
             ))}
           </fieldset>
 
-          <Button onClick={saveNow} disabled={save.isPending}>Simpan</Button>
+          <Button onClick={saveNow} disabled={save.isPending}>Save</Button>
         </CardContent>
       </Card>
 
       {me.data && (
         <p className="text-sm text-slate-500">
-          Masuk sebagai <b>{me.data.email}</b> ({me.data.role}) — mode dev via header X-Dev-Email;
-          produksi via Cloudflare Access.
+          Signed in as <b>{me.data.email}</b> ({me.data.role}) — dev mode via the X-Dev-Email header;
+          production via Cloudflare Access.
         </p>
       )}
     </div>

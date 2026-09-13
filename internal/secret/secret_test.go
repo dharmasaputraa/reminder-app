@@ -6,14 +6,14 @@ import (
 )
 
 func TestRoundTrip(t *testing.T) {
-	key := DeriveKey("super-secret-panjang-16")
-	plain := []byte(`{"token":"rahasia"}`)
+	key := DeriveKey("super-secret-long-enough-16")
+	plain := []byte(`{"token":"secret"}`)
 	blob, err := Encrypt(key, plain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Contains(blob, plain) {
-		t.Error("plaintext tidak boleh terlihat di blob")
+		t.Error("plaintext must not be visible in the blob")
 	}
 	got, err := Decrypt(key, blob)
 	if err != nil {
@@ -25,17 +25,17 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestTamperFails(t *testing.T) {
-	key := DeriveKey("super-secret-panjang-16")
+	key := DeriveKey("super-secret-long-enough-16")
 	blob, _ := Encrypt(key, []byte("data"))
 	blob[len(blob)-1] ^= 0xFF
 	if _, err := Decrypt(key, blob); err == nil {
-		t.Error("blob yang diubah harus gagal auth")
+		t.Error("tampered blob must fail auth")
 	}
 }
 
 func TestWrongKeyFails(t *testing.T) {
-	blob, _ := Encrypt(DeriveKey("kunci-satu-panjang-16"), []byte("data"))
-	if _, err := Decrypt(DeriveKey("kunci-dua-panjang-16"), blob); err == nil {
-		t.Error("kunci salah harus gagal")
+	blob, _ := Encrypt(DeriveKey("key-one-long-enough-16"), []byte("data"))
+	if _, err := Decrypt(DeriveKey("key-two-long-enough-16"), blob); err == nil {
+		t.Error("wrong key must fail")
 	}
 }

@@ -46,8 +46,8 @@ func clearEnv(t *testing.T) {
 
 func validEnv() map[string]string {
 	return map[string]string{
-		"APP_SECRET":            "super-secret-panjang-16",
-		"CF_ACCESS_TEAM_DOMAIN": "contoh.cloudflareaccess.com",
+		"APP_SECRET":            "super-secret-long-enough-16",
+		"CF_ACCESS_TEAM_DOMAIN": "example.cloudflareaccess.com",
 		"CF_ACCESS_AUD":         "abc.access",
 		"ADMIN_EMAILS":          "Admin@X.com, user@y.com",
 	}
@@ -66,27 +66,27 @@ func TestLoadValid(t *testing.T) {
 		t.Errorf("DBPath = %q", c.DBPath())
 	}
 	if !c.AdminEmails["admin@x.com"] {
-		t.Errorf("email admin harus di-lowercase: %v", c.AdminEmails)
+		t.Errorf("admin email must be lowercased: %v", c.AdminEmails)
 	}
 }
 
 func TestLoadRejectsShortSecret(t *testing.T) {
-	setEnv(t, map[string]string{"APP_SECRET": "pendek"})
+	setEnv(t, map[string]string{"APP_SECRET": "short"})
 	if _, err := Load(); err == nil {
-		t.Error("secret pendek harus error")
+		t.Error("short secret must error")
 	}
 }
 
 func TestLoadCFAccessRequiresTeamAndAud(t *testing.T) {
-	setEnv(t, map[string]string{"APP_SECRET": "super-secret-panjang-16"})
+	setEnv(t, map[string]string{"APP_SECRET": "super-secret-long-enough-16"})
 	if _, err := Load(); err == nil {
-		t.Error("cfaccess tanpa team/aud harus error")
+		t.Error("cfaccess without team/aud must error")
 	}
 }
 
 func TestLoadDevModeOK(t *testing.T) {
-	setEnv(t, map[string]string{"APP_SECRET": "super-secret-panjang-16", "AUTH_MODE": "dev"})
+	setEnv(t, map[string]string{"APP_SECRET": "super-secret-long-enough-16", "AUTH_MODE": "dev"})
 	if _, err := Load(); err != nil {
-		t.Errorf("dev mode tanpa CF env harus valid: %v", err)
+		t.Errorf("dev mode without CF env must be valid: %v", err)
 	}
 }

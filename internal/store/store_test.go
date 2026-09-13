@@ -16,7 +16,7 @@ func TestOpenInMemoryAndMigrate(t *testing.T) {
 	}
 	// idempotent
 	if err := s.Migrate(); err != nil {
-		t.Fatalf("migrate ke-2: %v", err)
+		t.Fatalf("migrate (2nd time): %v", err)
 	}
 	if err := s.Ping(context.Background()); err != nil {
 		t.Fatalf("ping: %v", err)
@@ -29,6 +29,6 @@ func TestForeignKeysActive(t *testing.T) {
 	_ = s.Migrate()
 	_, err := s.db.Exec(`INSERT INTO contacts (owner_id, name) VALUES (999, 'x')`)
 	if err == nil {
-		t.Error("FK mati — contact tanpa user harus ditolak")
+		t.Error("FK off — contact without user must be rejected")
 	}
 }

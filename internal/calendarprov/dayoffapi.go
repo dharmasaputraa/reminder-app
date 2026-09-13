@@ -53,11 +53,11 @@ func (d *DayOffAPI) fetchYear(ctx context.Context, year int) ([]domain.Holiday, 
 	for _, it := range items {
 		dt, err := time.Parse("2006-01-02", it.Tanggal)
 		if err != nil {
-			return nil, fmt.Errorf("dayoffapi tanggal %q: %w", it.Tanggal, err)
+			return nil, fmt.Errorf("dayoffapi date %q: %w", it.Tanggal, err)
 		}
-		name := "Libur Nasional — " + it.Keterangan
+		name := "National Holiday — " + it.Keterangan
 		if it.IsCutiBersama {
-			name = "Cuti Bersama — " + it.Keterangan
+			name = "Joint Leave — " + it.Keterangan
 		}
 		out = append(out, domain.Holiday{Date: domain.DateFromTime(dt), Name: name})
 	}

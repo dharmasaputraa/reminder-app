@@ -20,7 +20,7 @@ func TestGotifySend(t *testing.T) {
 	defer srv.Close()
 
 	g := NewGotify(GotifyConfig{BaseURL: srv.URL, Token: "abc123"})
-	if err := g.Send(context.Background(), Message{Title: "judul", Body: "isi", Priority: 8}); err != nil {
+	if err := g.Send(context.Background(), Message{Title: "title", Body: "body", Priority: 8}); err != nil {
 		t.Fatal(err)
 	}
 	if gotPath != "/message" {
@@ -29,7 +29,7 @@ func TestGotifySend(t *testing.T) {
 	if !strings.Contains(gotQuery, "token=abc123") {
 		t.Errorf("query = %q", gotQuery)
 	}
-	if !strings.Contains(gotBody, `"title":"judul"`) || !strings.Contains(gotBody, `"priority":8`) {
+	if !strings.Contains(gotBody, `"title":"title"`) || !strings.Contains(gotBody, `"priority":8`) {
 		t.Errorf("body = %q", gotBody)
 	}
 }
@@ -42,7 +42,7 @@ func TestGotifyErrorStatus(t *testing.T) {
 	defer srv.Close()
 	g := NewGotify(GotifyConfig{BaseURL: srv.URL, Token: "x"})
 	if err := g.Send(context.Background(), Message{Title: "t"}); err == nil || !strings.Contains(err.Error(), "401") {
-		t.Errorf("err = %v, harus 401", err)
+		t.Errorf("err = %v, must be 401", err)
 	}
 }
 
@@ -52,7 +52,7 @@ func TestGotifyPriorityFallback(t *testing.T) {
 		cfgPriority int
 		wantBody    string
 	}{
-		{"cfg kosong, default 5", 0, `"priority":5`},
+		{"empty cfg, default 5", 0, `"priority":5`},
 		{"cfg 9, msg 0", 9, `"priority":9`},
 	}
 	for _, tc := range cases {

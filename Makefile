@@ -13,11 +13,11 @@ build: web
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/otorem ./cmd/server
 
 run: build
-	APP_SECRET=dev-secret-panjang-16 AUTH_MODE=dev DATA_DIR=./data ./bin/otorem
+	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data ./bin/otorem
 
 # Hot reload: rebuild + restart otomatis saat file .go berubah (SPA via npm run dev)
 dev:
-	APP_SECRET=dev-secret-panjang-16 AUTH_MODE=dev DATA_DIR=./data go tool air
+	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data go tool air
 
 container:
 	docker compose build || podman-compose build

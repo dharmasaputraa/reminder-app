@@ -20,7 +20,7 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
-	c, err := s.CreateContact(ctx, u.ID, "Tanpa Occasion", "", "")
+	c, err := s.CreateContact(ctx, u.ID, "Without Occasion", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 	}
 	detail, _ := json.Marshal(gw)
 	if got := string(detail); !strings.Contains(got, `"occasions":[]`) || strings.Contains(got, `"occasions":null`) {
-		t.Errorf("detail kontak tanpa occasion harus \"occasions\":[], dapat %s", got)
+		t.Errorf("contact detail without occasion must be \"occasions\":[], got %s", got)
 	}
 
 	// List contains the same contact (via fill()).
@@ -42,18 +42,18 @@ func TestContactJSONOccasionsEmpty(t *testing.T) {
 	}
 	lb, _ := json.Marshal(list)
 	if got := string(lb); !strings.Contains(got, `"occasions":[]`) || strings.Contains(got, `"occasions":null`) {
-		t.Errorf("list kontak tanpa occasion harus \"occasions\":[], dapat %s", got)
+		t.Errorf("contact list without occasion must be \"occasions\":[], got %s", got)
 	}
 
 	// User with no contacts: the list is still an empty array, not null.
-	v, _ := s.GetOrCreateUser(ctx, "kosong@x.id", "Kosong", nil)
+	v, _ := s.GetOrCreateUser(ctx, "empty@x.id", "Empty", nil)
 	empty, err := s.ListContacts(ctx, v.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	eb, _ := json.Marshal(empty)
 	if string(eb) != "[]" {
-		t.Errorf("list kontak kosong harus [], dapat %s", eb)
+		t.Errorf("empty contact list must be [], got %s", eb)
 	}
 }
 
@@ -65,7 +65,7 @@ func seedContact(t *testing.T, s *Store) (User, ContactWithOccasions) {
 		t.Fatal(err)
 	}
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
-	c, err := s.CreateContact(ctx, u.ID, "Made Wijaya", "Made", "sepupu")
+	c, err := s.CreateContact(ctx, u.ID, "Made Wijaya", "Made", "cousin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,28 +93,28 @@ func TestContactCRUD(t *testing.T) {
 		t.Fatalf("occasions = %d", len(cw.Occasions))
 	}
 	if cw.Prefs == nil || len(cw.Prefs.Offsets) != 2 {
-		t.Fatalf("prefs salah: %+v", cw.Prefs)
+		t.Fatalf("wrong prefs: %+v", cw.Prefs)
 	}
 	if cw.Nickname != "Made" {
 		t.Errorf("nickname = %q", cw.Nickname)
 	}
 
-	if err := s.UpdateContact(context.Background(), u.ID, cw.ID, "Made W.", "", "catatan baru"); err != nil {
+	if err := s.UpdateContact(context.Background(), u.ID, cw.ID, "Made W.", "", "new note"); err != nil {
 		t.Fatal(err)
 	}
 	ls, _ := s.ListContacts(context.Background(), u.ID)
 	if ls[0].Name != "Made W." {
-		t.Errorf("update gagal: %q", ls[0].Name)
+		t.Errorf("update failed: %q", ls[0].Name)
 	}
 
 	// another owner cannot see it
-	v, _ := s.GetOrCreateUser(context.Background(), "lain@x.id", "Lain", nil)
+	v, _ := s.GetOrCreateUser(context.Background(), "other@x.id", "Other", nil)
 	if _, err := s.GetContact(context.Background(), v.ID, cw.ID); err == nil {
-		t.Error("akses kontak user lain harus error")
+		t.Error("accessing another user's contact must error")
 	}
 	// admin (ownerID 0) can
 	if _, err := s.GetContact(context.Background(), 0, cw.ID); err != nil {
-		t.Errorf("admin harus bisa akses: %v", err)
+		t.Errorf("admin must be able to access: %v", err)
 	}
 
 	if err := s.DeleteContact(context.Background(), u.ID, cw.ID); err != nil {
@@ -122,7 +122,7 @@ func TestContactCRUD(t *testing.T) {
 	}
 	ls, _ = s.ListContacts(context.Background(), u.ID)
 	if len(ls) != 0 {
-		t.Errorf("delete gagal: %d tersisa", len(ls))
+		t.Errorf("delete failed: %d left", len(ls))
 	}
 }
 
@@ -135,8 +135,8 @@ func TestAddOccasionValidatesType(t *testing.T) {
 	}
 	u, _ := s.GetOrCreateUser(context.Background(), "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(context.Background(), u.ID, "X", "", "")
-	if _, err := s.AddOccasion(context.Background(), c.ID, "salfok", domain.NewDate(2000, 1, 1), ""); err == nil {
-		t.Error("tipe ilegal harus ditolak")
+	if _, err := s.AddOccasion(context.Background(), c.ID, "bogus", domain.NewDate(2000, 1, 1), ""); err == nil {
+		t.Error("illegal type must be rejected")
 	}
 }
 
@@ -149,8 +149,8 @@ func TestDeleteOccasionOwnerScope(t *testing.T) {
 	}
 	a, _ := s.GetOrCreateUser(ctx, "a@x.id", "A", nil)
 	b, _ := s.GetOrCreateUser(ctx, "b@x.id", "B", nil)
-	ca, _ := s.CreateContact(ctx, a.ID, "Kontak A", "", "")
-	cb, _ := s.CreateContact(ctx, b.ID, "Kontak B", "", "")
+	ca, _ := s.CreateContact(ctx, a.ID, "Contact A", "", "")
+	cb, _ := s.CreateContact(ctx, b.ID, "Contact B", "", "")
 	oa, err := s.AddOccasion(ctx, ca.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
 	if err != nil {
 		t.Fatal(err)
@@ -162,24 +162,24 @@ func TestDeleteOccasionOwnerScope(t *testing.T) {
 
 	// owner A cannot delete B's occasion (IDOR)
 	if err := s.DeleteOccasion(ctx, a.ID, ob.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("owner A hapus occasion B harus ErrNotFound, dapat %v", err)
+		t.Errorf("owner A deleting B's occasion must be ErrNotFound, got %v", err)
 	}
 	// B's occasion is still there
 	if _, err := s.GetContact(ctx, b.ID, cb.ID); err != nil {
-		t.Fatalf("occasion B hilang: %v", err)
+		t.Fatalf("B's occasion missing: %v", err)
 	}
 
 	// owner B deletes their own occasion: allowed
 	if err := s.DeleteOccasion(ctx, b.ID, ob.ID); err != nil {
-		t.Fatalf("owner B hapus occasion sendiri gagal: %v", err)
+		t.Fatalf("owner B deleting own occasion failed: %v", err)
 	}
 	// deleting twice → ErrNotFound
 	if err := s.DeleteOccasion(ctx, b.ID, ob.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("hapus occasion yang sudah terhapus harus ErrNotFound, dapat %v", err)
+		t.Errorf("deleting an already deleted occasion must be ErrNotFound, got %v", err)
 	}
 
 	// admin (ownerID 0) can delete anyone's occasion
 	if err := s.DeleteOccasion(ctx, 0, oa.ID); err != nil {
-		t.Errorf("admin hapus occasion gagal: %v", err)
+		t.Errorf("admin deleting occasion failed: %v", err)
 	}
 }

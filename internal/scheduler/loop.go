@@ -19,11 +19,11 @@ func (s *Service) Loop(ctx context.Context, every time.Duration,
 		case <-t.C:
 			snap, err := snapshot(ctx)
 			if err != nil {
-				slog.Error("scheduler: snapshot settings gagal", "err", err)
+				slog.Error("scheduler: failed to snapshot settings", "err", err)
 				continue
 			}
 			if res, err := s.RunOnce(ctx, snap); err != nil {
-				slog.Error("scheduler: runonce gagal", "err", err)
+				slog.Error("scheduler: runonce failed", "err", err)
 			} else if res.Sent+res.Failed+res.Missed > 0 {
 				slog.Info("scheduler: scan", "sent", res.Sent, "failed", res.Failed, "missed", res.Missed)
 			}

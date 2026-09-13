@@ -29,7 +29,7 @@ func newTestServer(t *testing.T, admin string) (*Server, *store.Store) {
 	if err := st.Migrate(); err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Config{AppSecret: "super-secret-panjang-16", AuthMode: config.AuthDev,
+	cfg := config.Config{AppSecret: "super-secret-long-enough-16", AuthMode: config.AuthDev,
 		AdminEmails: map[string]bool{admin: true}, TZ: "Asia/Makassar"}
 	return NewServer(cfg, st, nil), st
 }
@@ -54,7 +54,7 @@ func TestContactFlow(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id",
-		`{"name":"Made","nickname":"De","notes":"sepupu"}`))
+		`{"name":"Made","nickname":"De","notes":"cousin"}`))
 	if w.Code != 201 {
 		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
 	}
@@ -79,7 +79,7 @@ func TestContactFlow(t *testing.T) {
 		t.Fatalf("upcoming: %d %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), `"kind":"occasion"`) || !strings.Contains(w.Body.String(), `"pawukon"`) {
-		t.Errorf("upcoming tidak memuat occasion+pawukon: %s", w.Body.String())
+		t.Errorf("upcoming does not contain occasion+pawukon: %s", w.Body.String())
 	}
 }
 
@@ -87,14 +87,14 @@ func TestContactJSONSnakeCase(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id",
-		`{"name":"Made","nickname":"De","notes":"sepupu"}`))
+		`{"name":"Made","nickname":"De","notes":"cousin"}`))
 	if w.Code != 201 {
 		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
 	}
 	created := w.Body.String()
 	for _, want := range []string{`"occasions":[]`, `"prefs":null`} {
 		if !strings.Contains(created, want) {
-			t.Errorf("response create kontak tidak memuat %s: %s", want, created)
+			t.Errorf("create contact response does not contain %s: %s", want, created)
 		}
 	}
 	w = httptest.NewRecorder()
@@ -112,12 +112,12 @@ func TestContactJSONSnakeCase(t *testing.T) {
 	body := w.Body.String()
 	for _, want := range []string{`"name":`, `"occasions"`, `"base_date"`, `"contact_id"`, `"prefs":null`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("response kontak tidak memuat %s: %s", want, body)
+			t.Errorf("contact response does not contain %s: %s", want, body)
 		}
 	}
 	for _, bad := range []string{`"OwnerID"`, `"BaseDate"`} {
 		if strings.Contains(body, bad) {
-			t.Errorf("response kontak masih PascalCase %s: %s", bad, body)
+			t.Errorf("contact response is still PascalCase %s: %s", bad, body)
 		}
 	}
 }
@@ -152,14 +152,14 @@ func TestChannelConfigNeverLeaked(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels", "admin@x.id",
-		`{"type":"gotify","name":"rumah","config":{"base_url":"https://g.x.id","token":"TOKET-RAHASIA"}}`))
+		`{"type":"gotify","name":"home","config":{"base_url":"https://g.x.id","token":"SECRET-TOKEN"}}`))
 	if w.Code != 201 {
 		t.Fatalf("create channel: %d %s", w.Code, w.Body.String())
 	}
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/channels", "admin@x.id", ""))
-	if strings.Contains(w.Body.String(), "TOKET-RAHASIA") {
-		t.Error("config channel bocor di response!")
+	if strings.Contains(w.Body.String(), "SECRET-TOKEN") {
+		t.Error("channel config leaked in the response!")
 	}
 }
 
@@ -173,9 +173,9 @@ func TestSettingsValidate(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
-		`{"timezone":"Tidak/Ada","send_time":"07:30","catch_up_hours":12,"default_offsets":[1],"holiday_categories":{}}`))
+		`{"timezone":"Not/AZone","send_time":"07:30","catch_up_hours":12,"default_offsets":[1],"holiday_categories":{}}`))
 	if w.Code != 400 {
-		t.Errorf("tz invalid harus 400: %d", w.Code)
+		t.Errorf("invalid tz must be 400: %d", w.Code)
 	}
 }
 
@@ -187,7 +187,7 @@ func TestSettingsMissingCategories(t *testing.T) {
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
 		`{"timezone":"Asia/Jakarta","send_time":"08:00","catch_up_hours":24,"default_offsets":[7,4,2,1,0]}`))
 	if w.Code != 200 {
-		t.Fatalf("put tanpa holiday_categories: %d %s", w.Code, w.Body.String())
+		t.Fatalf("put without holiday_categories: %d %s", w.Code, w.Body.String())
 	}
 	var got Settings
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
@@ -196,9 +196,9 @@ func TestSettingsMissingCategories(t *testing.T) {
 	for _, cat := range []string{"pawukon", "saka", "national"} {
 		v, ok := got.HolidayCategories[cat]
 		if !ok {
-			t.Errorf("kategori %q tidak ada di response", cat)
+			t.Errorf("category %q missing from response", cat)
 		} else if v {
-			t.Errorf("kategori %q harus false (tidak dikirim), dapat %v", cat, v)
+			t.Errorf("category %q must be false (not sent), got %v", cat, v)
 		}
 	}
 }
@@ -212,12 +212,12 @@ func TestAddOccasionInvalidType(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
-		`{"type":"salfok","date":"1990-05-12"}`))
+		`{"type":"bogus","date":"1990-05-12"}`))
 	if w.Code != 400 {
-		t.Errorf("tipe occasion ilegal harus 400, dapat %d %s", w.Code, w.Body.String())
+		t.Errorf("illegal occasion type must be 400, got %d %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "tipe occasion tidak valid") {
-		t.Errorf("pesan error salah: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "invalid occasion type") {
+		t.Errorf("wrong error message: %s", w.Body.String())
 	}
 }
 
@@ -228,7 +228,7 @@ func TestDefaultSettingsDefensiveCopy(t *testing.T) {
 	ls := srv.LoadSettings(context.Background())
 	ls.DefaultOffsets[0] = 99
 	if domain.DefaultOffsets[0] != 7 {
-		t.Errorf("domain.DefaultOffsets termutasi via api.Settings: %v", domain.DefaultOffsets)
+		t.Errorf("domain.DefaultOffsets mutated via api.Settings: %v", domain.DefaultOffsets)
 	}
 }
 
@@ -237,7 +237,7 @@ func TestSchedulerRunWithoutRunner(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/scheduler/run", "admin@x.id", ""))
 	if w.Code != 503 {
-		t.Errorf("tanpa runner: %d", w.Code)
+		t.Errorf("without runner: %d", w.Code)
 	}
 	_ = context.Background()
 }
@@ -259,7 +259,7 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/1/prefs", "admin@x.id",
 		`{"offsets":[],"channel_ids":[],"enabled":true}`))
 	if w.Code != 200 {
-		t.Fatalf("put prefs offsets kosong: %d %s", w.Code, w.Body.String())
+		t.Fatalf("put prefs with empty offsets: %d %s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
@@ -273,16 +273,16 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Prefs == nil {
-		t.Fatalf("prefs hilang setelah reset: %s", body)
+		t.Fatalf("prefs missing after reset: %s", body)
 	}
 	if !got.Prefs.Enabled {
-		t.Errorf("enabled harus tetap true: %+v", *got.Prefs)
+		t.Errorf("enabled must stay true: %+v", *got.Prefs)
 	}
 	if len(got.Prefs.Offsets) != 0 {
-		t.Errorf("offsets harus kosong (reset ke default), dapat %v", got.Prefs.Offsets)
+		t.Errorf("offsets must be empty (reset to default), got %v", got.Prefs.Offsets)
 	}
 	if !strings.Contains(body, `"offsets":[]`) {
-		t.Errorf(`prefs harus memuat "offsets":[] (bukan null/hilang): %s`, body)
+		t.Errorf(`prefs must contain "offsets":[] (not null/missing): %s`, body)
 	}
 
 	// Consumer side: an otonan occurrence exactly today (base = today − 210) must
@@ -311,12 +311,12 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 		if it.Kind == "occasion" && it.ContactID == 1 {
 			found = true
 			if !reflect.DeepEqual(it.Reminders, domain.DefaultOffsets) {
-				t.Errorf("reminders harus default global %v, dapat %v", domain.DefaultOffsets, it.Reminders)
+				t.Errorf("reminders must be the global default %v, got %v", domain.DefaultOffsets, it.Reminders)
 			}
 		}
 	}
 	if !found {
-		t.Errorf("occasion kontak tidak muncul di /upcoming: %s", w.Body.String())
+		t.Errorf("contact occasion did not appear in /upcoming: %s", w.Body.String())
 	}
 }
 
@@ -360,22 +360,22 @@ func TestUpcomingDateRange(t *testing.T) {
 	// Full year: the June 3, 2027 birthday must appear even though it falls
 	// far outside the 30-day window from today.
 	if w := get("?from=2027-01-01&to=2027-12-31"); !hasBirthday(w) {
-		t.Errorf("ulang tahun 2027-06-03 hilang dari range setahun: %s", w.Body.String())
+		t.Errorf("birthday 2027-06-03 missing from the one-year range: %s", w.Body.String())
 	}
 	// `to` is optional: defaults to one year from `from`.
 	if w := get("?from=2027-06-01"); !hasBirthday(w) {
-		t.Errorf("ulang tahun 2027-06-03 hilang dari from tanpa to: %s", w.Body.String())
+		t.Errorf("birthday 2027-06-03 missing from from without to: %s", w.Body.String())
 	}
 	// Reversed range → 400.
 	if w := get("?from=2027-12-31&to=2027-01-01"); w.Code != 400 {
-		t.Errorf("range terbalik harus 400, dapat %d", w.Code)
+		t.Errorf("inverted range must be 400, got %d", w.Code)
 	}
 	// Range > 400 days → 400.
 	if w := get("?from=2027-01-01&to=2028-03-01"); w.Code != 400 {
-		t.Errorf("range >400 hari harus 400, dapat %d", w.Code)
+		t.Errorf("range >400 days must be 400, got %d", w.Code)
 	}
 	// from is not a date → 400.
-	if w := get("?from=bukan-tanggal"); w.Code != 400 {
-		t.Errorf("from invalid harus 400, dapat %d", w.Code)
+	if w := get("?from=not-a-date"); w.Code != 400 {
+		t.Errorf("invalid from must be 400, got %d", w.Code)
 	}
 }

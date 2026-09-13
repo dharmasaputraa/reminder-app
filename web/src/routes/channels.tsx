@@ -34,20 +34,20 @@ const TIPE = ['gotify', 'telegram', 'email'] as const
 
 const FIELDS: Record<string, { key: string; label: string; type?: string }[]> = {
   gotify: [
-    { key: 'base_url', label: 'Base URL Gotify' },
-    { key: 'token', label: 'Token App' },
+    { key: 'base_url', label: 'Gotify Base URL' },
+    { key: 'token', label: 'App Token' },
   ],
   telegram: [
-    { key: 'bot_token', label: 'Bot Token (dari @BotFather)' },
-    { key: 'chat_id', label: 'Chat ID (user/grup)' },
+    { key: 'bot_token', label: 'Bot Token (from @BotFather)' },
+    { key: 'chat_id', label: 'Chat ID (user/group)' },
   ],
   email: [
     { key: 'host', label: 'SMTP Host' },
     { key: 'port', label: 'Port', type: 'number' },
     { key: 'username', label: 'Username' },
     { key: 'password', label: 'Password', type: 'password' },
-    { key: 'from', label: 'Alamat pengirim' },
-    { key: 'to', label: 'Kepada (pisah koma)' },
+    { key: 'from', label: 'Sender address' },
+    { key: 'to', label: 'To (comma-separated)' },
   ],
 }
 
@@ -74,45 +74,45 @@ function Channels() {
   })
   const test = useMutation({
     mutationFn: (id: number) => api(`/channels/${id}/test`, { method: 'POST' }),
-    onSuccess: () => toast.success('Tes berhasil — notifikasi terkirim.'),
-    onError: (e) => toast.error(`Tes gagal: ${String(e)}`),
+    onSuccess: () => toast.success('Test succeeded — notification sent.'),
+    onError: (e) => toast.error(`Test failed: ${String(e)}`),
   })
 
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold">Channel Notifikasi</h1>
+      <h1 className="text-xl font-bold">Notification Channels</h1>
 
       {q.data?.channels.map((ch) => (
         <Card key={ch.id} className="flex flex-row items-center gap-3 p-3">
           <Badge variant={ch.enabled ? 'default' : 'secondary'}>{ch.type}</Badge>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{ch.name}</p>
-            <p className="text-xs text-slate-400">{ch.enabled ? 'aktif' : 'nonaktif'}</p>
+            <p className="text-xs text-slate-400">{ch.enabled ? 'active' : 'inactive'}</p>
           </div>
           <label className="flex items-center gap-1.5 text-sm">
             <Switch
               checked={ch.enabled}
               onCheckedChange={(v) => toggle.mutate({ id: ch.id, enabled: v === true })}
             />
-            aktif
+            active
           </label>
           <Button variant="outline" size="sm" onClick={() => test.mutate(ch.id)} disabled={test.isPending}>
-            Tes
+            Test
           </Button>
           <AlertDialog>
             <AlertDialogTrigger
-              render={<Button variant="destructive" size="sm">Hapus</Button>}
+              render={<Button variant="destructive" size="sm">Delete</Button>}
             />
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Hapus channel {ch.name}?</AlertDialogTitle>
+                <AlertDialogTitle>Delete channel {ch.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Channel tidak bisa dipakai lagi untuk mengirim pengingat.
+                  This channel can no longer be used to send reminders.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Batal</AlertDialogCancel>
-                <AlertDialogAction onClick={() => del.mutate(ch.id)}>Hapus</AlertDialogAction>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => del.mutate(ch.id)}>Delete</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -121,7 +121,7 @@ function Channels() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Tambah Channel</CardTitle>
+          <CardTitle>Add Channel</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); create.mutate() }}>
@@ -135,7 +135,7 @@ function Channels() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih tipe" />
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
                   {TIPE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -144,7 +144,7 @@ function Channels() {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Nama (mis. gotify-rumah)"
+                placeholder="Name (e.g. gotify-home)"
                 className="flex-1"
               />
             </div>
@@ -154,10 +154,10 @@ function Channels() {
                 onChange={(e) => setCfg({ ...cfg, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
                 placeholder={f.label} />
             ))}
-            <Button type="submit" disabled={!name.trim() || create.isPending}>Simpan</Button>
+            <Button type="submit" disabled={!name.trim() || create.isPending}>Save</Button>
             <Alert>
-              <AlertTitle>Config disimpan terenkripsi (AES-256-GCM)</AlertTitle>
-              <AlertDescription>Tidak bisa dilihat lagi setelah disimpan.</AlertDescription>
+              <AlertTitle>Config is stored encrypted (AES-256-GCM)</AlertTitle>
+              <AlertDescription>It cannot be viewed again after saving.</AlertDescription>
             </Alert>
           </form>
         </CardContent>

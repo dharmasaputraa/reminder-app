@@ -107,7 +107,7 @@ func (c *CachedRemote) loadYear(ctx context.Context, y int) ([]domain.Holiday, b
 	// Empty cache + remote down → no-op (empty set), NOT an error: computed
 	// sources (pawukon) keep working and /upcoming must not 5xx just because
 	// a third-party API is down.
-	slog.Warn("provider remote gagal, cache kosong → lewati",
+	slog.Warn("remote provider failed, cache empty → skipping",
 		"provider", c.Inner.Name(), "year", y, "err", ferr)
 	return nil, false, nil
 }

@@ -36,8 +36,8 @@ import { Switch } from '@/components/ui/switch'
 export const Route = createFileRoute('/contacts/$id')({ component: ContactDetail })
 
 const TIPE: { value: string; label: string }[] = [
-  { value: 'otongan', label: 'Otonan (Pawukon 210 hari)' },
-  { value: 'birthday', label: 'Ulang tahun' },
+  { value: 'otongan', label: 'Otonan (210-day Pawukon)' },
+  { value: 'birthday', label: 'Birthday' },
   { value: 'anniversary', label: 'Anniversary' },
 ]
 
@@ -86,14 +86,14 @@ function ContactDetail() {
   const savePrefs = useMutation({
     mutationFn: (body: Record<string, unknown>) => api(`/contacts/${id}/prefs`, { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: invalidate,
-    onError: (e) => toast.error(`Gagal menyimpan preferensi: ${String(e)}`),
+    onError: (e) => toast.error(`Failed to save preferences: ${String(e)}`),
   })
   const delContact = useMutation({
     mutationFn: () => api(`/contacts/${id}`, { method: 'DELETE' }),
     onSuccess: () => nav({ to: '/contacts' }),
   })
 
-  if (contact.isLoading) return <p className="text-slate-500">Memuat…</p>
+  if (contact.isLoading) return <p className="text-slate-500">Loading…</p>
   if (contact.isError) return <p className="text-red-600">{String(contact.error)}</p>
   const c = contact.data!
 
@@ -103,18 +103,18 @@ function ContactDetail() {
         <h1 className="text-xl font-bold">{c.name}</h1>
         <AlertDialog>
           <AlertDialogTrigger
-            render={<Button variant="destructive" size="sm">Hapus kontak</Button>}
+            render={<Button variant="destructive" size="sm">Delete contact</Button>}
           />
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Hapus {c.name}?</AlertDialogTitle>
+              <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Semua occasion dan preferensi pengingat kontak ini ikut terhapus.
+                All occasions and reminder preferences for this contact will be deleted too.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Batal</AlertDialogCancel>
-              <AlertDialogAction onClick={() => delContact.mutate()}>Hapus</AlertDialogAction>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => delContact.mutate()}>Delete</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -132,17 +132,17 @@ function ContactDetail() {
                 {o.base_date}
               </span>
               <AlertDialog>
-                <AlertDialogTrigger render={<Button variant="destructive" size="sm">Hapus</Button>} />
+                <AlertDialogTrigger render={<Button variant="destructive" size="sm">Delete</Button>} />
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Hapus occasion ini?</AlertDialogTitle>
+                    <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      {o.type} {o.base_date} akan dihapus permanen.
+                      {o.type} {o.base_date} will be permanently deleted.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Batal</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Hapus</AlertDialogAction>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -157,7 +157,7 @@ function ContactDetail() {
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Pilih tipe" />
+                <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
                 {TIPE.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -168,7 +168,7 @@ function ContactDetail() {
                 render={
                   <Button variant="outline" className="justify-start font-normal">
                     <CalendarIcon className="size-4" />
-                    {dateObj ? format(dateObj, 'yyyy-MM-dd') : 'Pilih tanggal'}
+                    {dateObj ? format(dateObj, 'yyyy-MM-dd') : 'Pick a date'}
                   </Button>
                 }
               />
@@ -186,29 +186,29 @@ function ContactDetail() {
                 />
               </PopoverContent>
             </Popover>
-            <Button disabled={!date || addOcc.isPending} onClick={() => addOcc.mutate()}>Tambah</Button>
+            <Button disabled={!date || addOcc.isPending} onClick={() => addOcc.mutate()}>Add</Button>
           </div>
           {pawukon && <p className="mt-2 text-sm text-emerald-700">🛕 {pawukon}</p>}
           {type === 'birthday' && date.endsWith('-02-29') && (
-            <p className="mt-2 text-xs text-slate-500">29 Feb di tahun non-kabisat diperingati 1 Maret.</p>
+            <p className="mt-2 text-xs text-slate-500">Feb 29 in non-leap years is observed on March 1.</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Preferensi Pengingat</CardTitle>
+          <CardTitle>Reminder Preferences</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="mb-2 text-sm text-slate-500">
-            Default global: {(settings.data?.default_offsets ?? []).map((n) => `H-${n}`).join(', ')} · jam kirim {settings.data?.send_time}
+            Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Input value={offsets} onChange={(e) => setOffsets(e.target.value)} placeholder="offset, mis. 7,4,2,1,0 (kosong = default)"
+            <Input value={offsets} onChange={(e) => setOffsets(e.target.value)} placeholder="offsets, e.g. 7,4,2,1,0 (empty = default)"
               className="flex-1" />
             <label className="flex items-center gap-1.5 text-sm">
               <Switch checked={enabled} onCheckedChange={(v) => setEnabled(v === true)} />
-              aktif
+              active
             </label>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -234,7 +234,7 @@ function ContactDetail() {
               enabled,
             })}
           >
-            Simpan preferensi
+            Save preferences
           </Button>
         </CardContent>
       </Card>

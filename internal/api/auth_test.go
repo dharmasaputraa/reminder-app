@@ -86,7 +86,7 @@ func TestCFAccessMiddleware(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/who", nil))
 	if w.Code != 401 {
-		t.Errorf("tanpa jwt: %d", w.Code)
+		t.Errorf("no jwt: %d", w.Code)
 	}
 
 	// valid token → provisions admin
@@ -106,7 +106,7 @@ func TestCFAccessMiddleware(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != 401 {
-		t.Errorf("aud salah: %d", w.Code)
+		t.Errorf("wrong aud: %d", w.Code)
 	}
 
 	// expired → 401
@@ -132,14 +132,14 @@ func TestDevAuth(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/who", nil))
 	if w.Code != 401 {
-		t.Errorf("tanpa header: %d", w.Code)
+		t.Errorf("without header: %d", w.Code)
 	}
 	req := httptest.NewRequest("GET", "/who", nil)
 	req.Header.Set("X-Dev-Email", "dev@x.id")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != 200 {
-		t.Errorf("dengan header: %d %s", w.Code, w.Body.String())
+		t.Errorf("with header: %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -155,6 +155,6 @@ func TestNewCFAccessInitFails(t *testing.T) {
 		AdminEmails:  map[string]bool{},
 	}
 	if _, err := NewCFAccess(context.Background(), cfg, &stubProvisioner{users: map[string]store.User{}}); err == nil {
-		t.Fatal("fetch awal JWKS gagal, NewCFAccess harus mengembalikan error")
+		t.Fatal("initial JWKS fetch fails, NewCFAccess must return an error")
 	}
 }

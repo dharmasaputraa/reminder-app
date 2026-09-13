@@ -25,14 +25,14 @@ func TestDateJSONRoundTrip(t *testing.T) {
 		t.Errorf("ParseDate: %v", err)
 	}
 	if _, err := ParseDate("17-06-2026"); err == nil {
-		t.Error("format salah harus error")
+		t.Error("wrong format must error")
 	}
 }
 
 func TestParseDateStrict(t *testing.T) {
 	for _, s := range []string{"2026-06-17junk", "2026-06-17T10:00", "2026-6-17", "2026-02-30", "17-06-2026"} {
 		if _, err := ParseDate(s); err == nil {
-			t.Errorf("ParseDate(%q) harus error", s)
+			t.Errorf("ParseDate(%q) must error", s)
 		}
 	}
 }

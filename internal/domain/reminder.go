@@ -14,10 +14,10 @@ func ValidateOffsets(offsets []int) error {
 	seen := map[int]bool{}
 	for _, o := range offsets {
 		if o < 0 || o > 60 {
-			return fmt.Errorf("offset %d di luar 0..60", o)
+			return fmt.Errorf("offset %d out of range 0..60", o)
 		}
 		if seen[o] {
-			return fmt.Errorf("offset %d duplikat", o)
+			return fmt.Errorf("duplicate offset %d", o)
 		}
 		seen[o] = true
 	}

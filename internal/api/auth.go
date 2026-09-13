@@ -25,7 +25,7 @@ func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisione
 	return func(c *gin.Context) {
 		raw := strings.TrimSpace(c.GetHeader("Cf-Access-Jwt-Assertion"))
 		if raw == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token Cloudflare Access tidak ada"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Cloudflare Access token"})
 			return
 		}
 		parsed, err := jwt.Parse(raw, kf,
@@ -34,23 +34,23 @@ func NewCFAccessFromKeyfunc(kf jwt.Keyfunc, aud string, provision UserProvisione
 			jwt.WithExpirationRequired(),
 		)
 		if err != nil || !parsed.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("token tidak valid: %v", err)})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("invalid token: %v", err)})
 			return
 		}
 		claims, ok := parsed.Claims.(jwt.MapClaims)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "klaim tidak terbaca"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unreadable claims"})
 			return
 		}
 		email, _ := claims["email"].(string)
 		name, _ := claims["name"].(string)
 		if email == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "klaim email kosong — pastikan Access policy menyertakan email"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "empty email claim — make sure the Access policy includes an email"})
 			return
 		}
 		u, err := provision.GetOrCreateUser(c.Request.Context(), email, name, adminEmails)
 		if err != nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": "provision user gagal"})
+			c.AbortWithStatusJSON(500, gin.H{"error": "failed to provision user"})
 			return
 		}
 		c.Set("user", u)
@@ -80,12 +80,12 @@ func devAuthMiddleware(provision UserProvisioner, adminEmails map[string]bool) g
 	return func(c *gin.Context) {
 		email := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Dev-Email")))
 		if email == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "mode dev: header X-Dev-Email wajib"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "dev mode: X-Dev-Email header required"})
 			return
 		}
 		u, err := provision.GetOrCreateUser(c.Request.Context(), email, email, adminEmails)
 		if err != nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": "provision user gagal"})
+			c.AbortWithStatusJSON(500, gin.H{"error": "failed to provision user"})
 			return
 		}
 		c.Set("user", u)

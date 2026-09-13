@@ -44,11 +44,11 @@ func TestHolidayCacheRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if dst["fetched_at"] != newer["fetched_at"] {
-		t.Errorf("upsert gagal: dst = %v", dst)
+		t.Errorf("upsert failed: dst = %v", dst)
 	}
 
 	// different (year, source) keys do not interfere with each other
 	if err := st.GetHolidayCache(ctx, 2026, "kresnasatya", &dst); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("source lain: err = %v, want ErrNotFound", err)
+		t.Fatalf("other source: err = %v, want ErrNotFound", err)
 	}
 }

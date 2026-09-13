@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { addYears } from 'date-fns'
-import { id as localeId } from 'date-fns/locale'
 import { ChevronsLeftIcon, ChevronsRightIcon } from 'lucide-react'
 import { api, type UpcomingItem } from '../lib/api'
 import {
@@ -91,24 +90,24 @@ function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<{ kind: Upc
 
 const CALENDAR_I18N = {
   labels: {
-    today: 'Hari ini',
-    previous: 'Sebelumnya',
-    next: 'Berikutnya',
-    allDay: 'Sepanjang hari',
-    more: (count: number) => `+${count} lagi`,
-    noEvents: 'Tidak ada acara',
-    loading: 'Memuat…',
-    event: 'acara',
-    events: (count: number) => `${count} acara`,
-    selectView: 'Pilih tampilan',
+    today: 'Today',
+    previous: 'Previous',
+    next: 'Next',
+    allDay: 'All day',
+    more: (count: number) => `+${count} more`,
+    noEvents: 'No events',
+    loading: 'Loading…',
+    event: 'event',
+    events: (count: number) => `${count} events`,
+    selectView: 'Switch view',
   },
   viewNames: {
-    month: 'Bulan',
-    week: 'Minggu',
-    day: 'Hari',
-    days: (count: number) => `${count} hari`,
+    month: 'Month',
+    week: 'Week',
+    day: 'Day',
+    days: (count: number) => `${count} days`,
     agenda: 'Agenda',
-    resource: 'Sumber daya',
+    resource: 'Resource',
   },
 }
 
@@ -116,7 +115,7 @@ const CALENDAR_I18N = {
  *  use its navigation context. */
 function YearJumpButton({ dir }: { dir: -1 | 1 }) {
   const { date, goTo } = useEventCalendarNavigation()
-  const label = dir === -1 ? 'Tahun sebelumnya' : 'Tahun berikutnya'
+  const label = dir === -1 ? 'Previous year' : 'Next year'
   const Icon = dir === -1 ? ChevronsLeftIcon : ChevronsRightIcon
   return (
     <Button variant="ghost" size="icon-sm" aria-label={label} title={label}
@@ -166,16 +165,16 @@ function Dashboard() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">30 Hari ke Depan</h1>
-        <Link to="/contacts" className="text-sm text-indigo-600 hover:underline">Kelola Kontak</Link>
+        <h1 className="text-xl font-bold">Next 30 Days</h1>
+        <Link to="/contacts" className="text-sm text-indigo-600 hover:underline">Manage Contacts</Link>
       </div>
 
       {channels.data && channels.data.channels.length === 0 && (
         <Alert>
-          <AlertTitle>Belum ada channel notifikasi</AlertTitle>
+          <AlertTitle>No notification channels yet</AlertTitle>
           <AlertDescription>
-            Tambah dulu supaya pengingat benar-benar terkirim —{' '}
-            <Link to="/channels" className="underline">tambah channel</Link>
+            Add one so reminders actually get delivered —{' '}
+            <Link to="/channels" className="underline">add channel</Link>
           </AlertDescription>
         </Alert>
       )}
@@ -188,7 +187,6 @@ function Dashboard() {
           defaultDate={up.data?.today ? localMidnight(up.data.today) : new Date()}
           weekStartsOn={1}
           interactions={{ drag: false, resize: false, selectSlot: false }}
-          locale={localeId}
           i18n={CALENDAR_I18N}
           onDateChange={(d) => setVisibleYear(d.getFullYear())}
           className="h-[560px] w-full"
@@ -206,7 +204,7 @@ function Dashboard() {
               {/* ms-3 sets the title apart from the tight control cluster so the
                   period reads as its own group, not another button */}
               <EventCalendarTitle className="ms-3" />
-              {yearsLoading && <span className="ms-2 text-xs text-slate-400">memuat…</span>}
+              {yearsLoading && <span className="ms-2 text-xs text-slate-400">loading…</span>}
               <div className="grow" />
             </TooltipProvider>
           </EventCalendarNav>
@@ -216,25 +214,25 @@ function Dashboard() {
 
       <div className="space-y-3">
         {items.length === 0 && (
-          <p className="text-slate-500">Tidak ada acara dalam 30 hari ke depan.</p>
+          <p className="text-slate-500">No events in the next 30 days.</p>
         )}
 
         {items.map((it: UpcomingItem, i: number) => (
           <Card key={`${it.kind}-${it.occasion_id ?? it.title}-${i}`}
             className="flex-row items-center gap-3 p-3">
             <Badge className={`h-11 w-11 rounded-full text-xs font-bold ${urgencyClass(it.days_until)}`}>
-              {it.days_until <= 0 ? 'HARI H' : `H-${it.days_until}`}
+              {it.days_until <= 0 ? 'TODAY' : `D-${it.days_until}`}
             </Badge>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{it.title}</p>
               <p className="truncate text-sm text-slate-500">
-                {it.kind === 'holiday' ? 'Hari raya' : it.contact_name} · {it.date}
+                {it.kind === 'holiday' ? 'Holiday' : it.contact_name} · {it.date}
                 {it.pawukon ? ` · ${it.pawukon}` : ''}
               </p>
             </div>
             <div className="hidden shrink-0 gap-1 sm:flex">
               {it.reminders?.map((r) => (
-                <Badge key={r} variant="secondary">H-{r}</Badge>
+                <Badge key={r} variant="secondary">D-{r}</Badge>
               ))}
             </div>
           </Card>

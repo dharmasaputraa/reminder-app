@@ -34,14 +34,14 @@ func Decrypt(key, blob []byte) ([]byte, error) {
 		return nil, err
 	}
 	if len(blob) < gcm.NonceSize() {
-		return nil, errors.New("blob terlalu pendek")
+		return nil, errors.New("blob too short")
 	}
 	return gcm.Open(nil, blob[:gcm.NonceSize()], blob[gcm.NonceSize():], nil)
 }
 
 func gcm(key []byte) (cipher.AEAD, error) {
 	if len(key) != 32 {
-		return nil, fmt.Errorf("kunci harus 32 byte, dapat %d", len(key))
+		return nil, fmt.Errorf("key must be 32 bytes, got %d", len(key))
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {

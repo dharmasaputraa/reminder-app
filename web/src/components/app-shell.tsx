@@ -10,9 +10,9 @@ const NAV_SECTIONS = [
     section: 'Reminder',
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/contacts', label: 'Kontak', icon: Users },
-      { to: '/channels', label: 'Channel', icon: Radio },
-      { to: '/settings', label: 'Pengaturan', icon: Settings },
+      { to: '/contacts', label: 'Contacts', icon: Users },
+      { to: '/channels', label: 'Channels', icon: Radio },
+      { to: '/settings', label: 'Settings', icon: Settings },
     ],
   },
 ] as const

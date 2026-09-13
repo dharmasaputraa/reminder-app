@@ -23,7 +23,7 @@ type Occurrence struct {
 // NextOccurrence returns the next occurrence on or after `from`.
 func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error) {
 	if base == (Date{}) || base.JDN() <= 0 {
-		return Occurrence{}, fmt.Errorf("base date kosong")
+		return Occurrence{}, fmt.Errorf("empty base date")
 	}
 	switch typ {
 	case Otonan:
@@ -37,7 +37,7 @@ func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error
 		}
 		occ := base.AddDays(n * PawukonCycleDays)
 		return Occurrence{Date: occ, Type: Otonan, Number: n,
-			Label: fmt.Sprintf("Otonan ke-%d — %s", n, Pawukon(occ).Label())}, nil
+			Label: fmt.Sprintf("Otonan #%d — %s", n, Pawukon(occ).Label())}, nil
 	case Birthday, Anniversary:
 		// Contract: "next occurrence on or after from". If base > from+1 year,
 		// the next occurrence is base itself — check the lower bound year
@@ -52,9 +52,9 @@ func NextOccurrence(base Date, typ OccurrenceType, from Date) (Occurrence, error
 			return Occurrence{Date: occ, Type: typ, Number: occ.Year - base.Year,
 				Label: yearlyLabel(base, occ, typ)}, nil
 		}
-		return Occurrence{}, fmt.Errorf("occurrence tidak ditemukan dalam 2 tahun: base=%s from=%s", base, from)
+		return Occurrence{}, fmt.Errorf("occurrence not found within 2 years: base=%s from=%s", base, from)
 	default:
-		return Occurrence{}, fmt.Errorf("tipe occurrence tidak dikenal: %q", typ)
+		return Occurrence{}, fmt.Errorf("unknown occurrence type: %q", typ)
 	}
 }
 
@@ -68,15 +68,15 @@ func yearlyDate(base Date, y int) Date {
 
 func yearlyLabel(base, occ Date, typ OccurrenceType) string {
 	if typ == Birthday {
-		return fmt.Sprintf("Ulang tahun ke-%d", occ.Year-base.Year)
+		return fmt.Sprintf("Birthday #%d", occ.Year-base.Year)
 	}
-	return fmt.Sprintf("Anniversary ke-%d", occ.Year-base.Year)
+	return fmt.Sprintf("Anniversary #%d", occ.Year-base.Year)
 }
 
 // OccurrencesBetween returns all occurrences with from ≤ Date ≤ to.
 func OccurrencesBetween(base Date, typ OccurrenceType, from, to Date) ([]Occurrence, error) {
 	if to.Before(from) {
-		return nil, fmt.Errorf("range terbalik: %s > %s", from, to)
+		return nil, fmt.Errorf("inverted range: %s > %s", from, to)
 	}
 	var out []Occurrence
 	if typ == Otonan {
@@ -97,7 +97,7 @@ func OccurrencesBetween(base Date, typ OccurrenceType, from, to Date) ([]Occurre
 				break
 			}
 			out = append(out, Occurrence{Date: occDate, Type: Otonan, Number: n,
-				Label: fmt.Sprintf("Otonan ke-%d — %s", n, Pawukon(occDate).Label())})
+				Label: fmt.Sprintf("Otonan #%d — %s", n, Pawukon(occDate).Label())})
 			n++
 		}
 		return out, nil

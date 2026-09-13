@@ -39,7 +39,7 @@ func TestWeekday(t *testing.T) {
 func TestAddDaysRoundTrip(t *testing.T) {
 	d := NewDate(2026, 2, 28)
 	if got := d.AddDays(1); got != NewDate(2026, 3, 1) { // 2026 is not a leap year
-		t.Errorf("AddDays(1) dari 2026-02-28 = %s, want 2026-03-01", got)
+		t.Errorf("AddDays(1) from 2026-02-28 = %s, want 2026-03-01", got)
 	}
 	if got := d.AddDays(2).AddDays(-2); got != d {
 		t.Errorf("round trip: got %s, want %s", got, d)

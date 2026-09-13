@@ -17,7 +17,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body) headers.set('Content-Type', 'application/json')
   const res = await fetch(`/api/v1${path}`, { ...init, headers })
   if (res.status === 401 && !email) {
-    const entered = window.prompt('Mode dev: masukkan email Anda (admin jika terdaftar di ADMIN_EMAILS)')
+    const entered = window.prompt('Dev mode: enter your email (admin if listed in ADMIN_EMAILS)')
     if (entered) {
       localStorage.setItem(devEmailKey, entered.trim().toLowerCase())
       return api<T>(path, init)

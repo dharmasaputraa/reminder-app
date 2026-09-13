@@ -12,7 +12,7 @@ import (
 func NewFromChannel(ch store.Channel, key []byte) (Notifier, error) {
 	plain, err := secret.Decrypt(key, ch.ConfigEnc)
 	if err != nil {
-		return nil, fmt.Errorf("dekripsi config channel %q: %w", ch.Name, err)
+		return nil, fmt.Errorf("decrypt channel config %q: %w", ch.Name, err)
 	}
 	switch ch.Type {
 	case "gotify":
@@ -34,6 +34,6 @@ func NewFromChannel(ch store.Channel, key []byte) (Notifier, error) {
 		}
 		return NewSMTP(c), nil
 	default:
-		return nil, fmt.Errorf("tipe channel tidak dikenal: %q", ch.Type)
+		return nil, fmt.Errorf("unknown channel type: %q", ch.Type)
 	}
 }

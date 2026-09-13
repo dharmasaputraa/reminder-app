@@ -9,10 +9,10 @@ func TestGalunganKuningan2026(t *testing.T) {
 		got[h.Date] = h.Name
 	}
 	if got[NewDate(2026, 6, 17)] != "Galungan" {
-		t.Errorf("Galungan 2026-06-17 tidak ada: %v", got)
+		t.Errorf("Galungan 2026-06-17 missing: %v", got)
 	}
 	if got[NewDate(2026, 6, 27)] != "Kuningan" {
-		t.Errorf("Kuningan 2026-06-27 tidak ada: %v", got)
+		t.Errorf("Kuningan 2026-06-27 missing: %v", got)
 	}
 }
 
@@ -21,7 +21,7 @@ func TestGalunganKuningan2026(t *testing.T) {
 func TestOneCycleExactHolidays(t *testing.T) {
 	hs := PawukonHolidaysBetween(NewDate(2026, 4, 5), NewDate(2026, 4, 5).AddDays(209))
 	if len(hs) != 4 {
-		t.Fatalf("dapat %d hari raya, want 4: %+v", len(hs), hs)
+		t.Fatalf("got %d holidays, want 4: %+v", len(hs), hs)
 	}
 	names := map[string]bool{}
 	for _, h := range hs {
@@ -29,7 +29,7 @@ func TestOneCycleExactHolidays(t *testing.T) {
 	}
 	for _, want := range []string{"Galungan", "Kuningan", "Saraswati", "Pagerwesi"} {
 		if !names[want] {
-			t.Errorf("hilang %s dalam 1 siklus", want)
+			t.Errorf("missing %s in one cycle", want)
 		}
 	}
 }

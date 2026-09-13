@@ -22,10 +22,10 @@ func TestReminderDatesDedupeSort(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 3 {
-		t.Fatalf("dapat %d tanggal, want 3 (dedupe): %v", len(got), got)
+		t.Fatalf("got %d dates, want 3 (dedupe): %v", len(got), got)
 	}
 	if got[0] != NewDate(2026, 6, 10) || got[2] != NewDate(2026, 6, 17) {
-		t.Errorf("urutan salah: %v", got)
+		t.Errorf("wrong order: %v", got)
 	}
 }
 
@@ -35,18 +35,18 @@ func TestReminderDatesYearBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0] != NewDate(2025, 12, 25) {
-		t.Errorf("H-7 dari 1 Jan = %v, want [2025-12-25]", got)
+		t.Errorf("D-7 from Jan 1 = %v, want [2025-12-25]", got)
 	}
 }
 
 func TestValidateOffsets(t *testing.T) {
 	if err := ValidateOffsets([]int{-1}); err == nil {
-		t.Error("offset negatif harus error")
+		t.Error("negative offset must error")
 	}
 	if err := ValidateOffsets([]int{1, 1, 500}); err == nil {
-		t.Error("duplikat/terlalu besar harus error")
+		t.Error("duplicate/too large must error")
 	}
 	if err := ValidateOffsets(DefaultOffsets); err != nil {
-		t.Errorf("default harus valid: %v", err)
+		t.Errorf("defaults must be valid: %v", err)
 	}
 }

@@ -23,7 +23,7 @@ func (s *Server) handleChannelTest(c *gin.Context) {
 		return
 	}
 	if err := n.Test(c.Request.Context()); err != nil {
-		c.JSON(502, gin.H{"error": "kirim tes gagal: " + err.Error()})
+		c.JSON(502, gin.H{"error": "test send failed: " + err.Error()})
 		return
 	}
 	c.JSON(200, gin.H{"ok": true})

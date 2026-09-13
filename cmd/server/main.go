@@ -23,21 +23,21 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("config tidak valid", "err", err)
+		slog.Error("invalid config", "err", err)
 		os.Exit(1)
 	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
-		slog.Error("gagal buat data dir", "dir", cfg.DataDir, "err", err)
+		slog.Error("failed to create data dir", "dir", cfg.DataDir, "err", err)
 		os.Exit(1)
 	}
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
-		slog.Error("gagal buka db", "path", cfg.DBPath(), "err", err)
+		slog.Error("failed to open db", "path", cfg.DBPath(), "err", err)
 		os.Exit(1)
 	}
 	defer st.Close()
 	if err := st.Migrate(); err != nil {
-		slog.Error("migrasi gagal", "err", err)
+		slog.Error("migration failed", "err", err)
 		os.Exit(1)
 	}
 
@@ -78,7 +78,7 @@ func main() {
 
 	httpServer := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
-		slog.Info("otorem jalan", "addr", cfg.Addr, "auth", cfg.AuthMode)
+		slog.Info("otorem running", "addr", cfg.Addr, "auth", cfg.AuthMode)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("http server", "err", err)
 			os.Exit(1)

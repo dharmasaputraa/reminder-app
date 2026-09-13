@@ -41,7 +41,7 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 		if err := st.Ping(ctx); err != nil {
-			c.JSON(503, gin.H{"error": "db tidak siap"})
+			c.JSON(503, gin.H{"error": "db not ready"})
 			return
 		}
 		c.JSON(200, gin.H{"ok": true})
@@ -55,7 +55,7 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 	} else {
 		mw, err := NewCFAccess(context.Background(), cfg, st)
 		if err != nil {
-			slog.Error("cfaccess init gagal", "err", err)
+			slog.Error("cfaccess init failed", "err", err)
 			panic(err)
 		}
 		apiG.Use(mw)

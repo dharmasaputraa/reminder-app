@@ -25,7 +25,7 @@ type NotificationEntry struct {
 // BEFORE sending (prevents double pushes), not as a replacement for INSERT OR IGNORE.
 func (s *Store) HasNotification(ctx context.Context, e NotificationEntry) (bool, error) {
 	if e.OccasionID == nil && e.HolidayKey == nil {
-		return false, fmt.Errorf("notification entry harus punya OccasionID atau HolidayKey")
+		return false, fmt.Errorf("notification entry must have OccasionID or HolidayKey")
 	}
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_log
@@ -45,7 +45,7 @@ func (s *Store) HasNotification(ctx context.Context, e NotificationEntry) (bool,
 // partial unique indexes (WHERE ... IS NOT NULL) and break the dedupe guarantee.
 func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (bool, error) {
 	if e.OccasionID == nil && e.HolidayKey == nil {
-		return false, fmt.Errorf("notification entry harus punya OccasionID atau HolidayKey")
+		return false, fmt.Errorf("notification entry must have OccasionID or HolidayKey")
 	}
 	r, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO notification_log
 		(occasion_id, holiday_key, occurrence_date, offset_days, channel_id, status, error)
