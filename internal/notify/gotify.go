@@ -33,8 +33,12 @@ func NewGotify(cfg GotifyConfig) *Gotify {
 func (g *Gotify) Name() string { return "gotify" }
 
 func (g *Gotify) Send(ctx context.Context, msg Message) error {
+	priority := msg.Priority
+	if priority == 0 {
+		priority = g.cfg.Priority
+	}
 	payload, err := json.Marshal(map[string]any{
-		"title": msg.Title, "message": msg.Body, "priority": msg.Priority,
+		"title": msg.Title, "message": msg.Body, "priority": priority,
 	})
 	if err != nil {
 		return err

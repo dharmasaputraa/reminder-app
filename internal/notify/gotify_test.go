@@ -45,3 +45,33 @@ func TestGotifyErrorStatus(t *testing.T) {
 		t.Errorf("err = %v, harus 401", err)
 	}
 }
+
+func TestGotifyPriorityFallback(t *testing.T) {
+	cases := []struct {
+		name        string
+		cfgPriority int
+		wantBody    string
+	}{
+		{"cfg kosong, default 5", 0, `"priority":5`},
+		{"cfg 9, msg 0", 9, `"priority":9`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotBody string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				gotBody = string(b)
+				w.WriteHeader(200)
+			}))
+			defer srv.Close()
+
+			g := NewGotify(GotifyConfig{BaseURL: srv.URL, Token: "t", Priority: tc.cfgPriority})
+			if err := g.Send(context.Background(), Message{Title: "x"}); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(gotBody, tc.wantBody) {
+				t.Errorf("body = %q, want %s", gotBody, tc.wantBody)
+			}
+		})
+	}
+}
