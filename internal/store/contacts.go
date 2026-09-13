@@ -64,7 +64,7 @@ func (s *Store) ListContacts(ctx context.Context, ownerID int64) ([]ContactWithO
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ContactWithOccasions
+	out := []ContactWithOccasions{}
 	for rows.Next() {
 		var c ContactWithOccasions
 		if err := rows.Scan(&c.ID, &c.OwnerID, &c.Name, &c.Nickname, &c.Notes); err != nil {
@@ -106,6 +106,8 @@ func (s *Store) fill(ctx context.Context, c *ContactWithOccasions) error {
 		return err
 	}
 	defer rows.Close()
+	// Kontrak SPA: occasions selalu array (bukan null) meski kosong.
+	c.Occasions = []Occasion{}
 	for rows.Next() {
 		var o Occasion
 		var base string

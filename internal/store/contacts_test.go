@@ -2,11 +2,60 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"otorem/internal/domain"
 )
+
+// Kontrak SPA: GET kontak selalu membawa array occasions; `null` membuat
+// `c.occasions.map/length` di halaman kontak melempar TypeError.
+func TestContactJSONOccasionsEmpty(t *testing.T) {
+	s, _ := OpenInMemory()
+	defer s.Close()
+	ctx := context.Background()
+	if err := s.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
+	c, err := s.CreateContact(ctx, u.ID, "Tanpa Occasion", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Detail kontak tanpa occasion.
+	gw, err := s.GetContact(ctx, u.ID, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, _ := json.Marshal(gw)
+	if got := string(detail); !strings.Contains(got, `"occasions":[]`) || strings.Contains(got, `"occasions":null`) {
+		t.Errorf("detail kontak tanpa occasion harus \"occasions\":[], dapat %s", got)
+	}
+
+	// List memuat kontak yang sama (lewat fill()).
+	list, err := s.ListContacts(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb, _ := json.Marshal(list)
+	if got := string(lb); !strings.Contains(got, `"occasions":[]`) || strings.Contains(got, `"occasions":null`) {
+		t.Errorf("list kontak tanpa occasion harus \"occasions\":[], dapat %s", got)
+	}
+
+	// User tanpa kontak: daftar tetap array kosong, bukan null.
+	v, _ := s.GetOrCreateUser(ctx, "kosong@x.id", "Kosong", nil)
+	empty, err := s.ListContacts(ctx, v.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eb, _ := json.Marshal(empty)
+	if string(eb) != "[]" {
+		t.Errorf("list kontak kosong harus [], dapat %s", eb)
+	}
+}
 
 func seedContact(t *testing.T, s *Store) (User, ContactWithOccasions) {
 	t.Helper()
