@@ -31,11 +31,36 @@
 
 ```bash
 cd code && npm create vite@latest web -- --template react-ts
-cd web && npm i @tanstack/react-router @tanstack/react-query && npm i -D @tanstack/router-plugin @tailwindcss/vite tailwindcss
+cd web && npm i @tanstack/react-router @tanstack/react-query && npm i -D @tanstack/router-plugin @tailwindcss/vite tailwindcss @types/node
 rm -f src/App.css src/App.tsx src/assets/react.svg
 ```
 
-- [ ] **Step 2: Konfigurasi Vite (router plugin + tailwind + proxy)**
+- [ ] **Step 1b: shadcn base untuk komponen reUI (event calendar Task 3)**
+
+shadcn perlu path alias + tsconfig sebelum `init`:
+
+`tsconfig.json` + `tsconfig.app.json` — tambahkan di `compilerOptions`:
+
+```json
+"baseUrl": ".",
+"paths": { "@/*": ["./src/*"] }
+```
+
+`vite.config.ts` — resolve alias (merge dengan config Step 2):
+
+```ts
+import path from "path"
+// resolve: { alias: { "@": path.resolve(__dirname, "./src") } }
+```
+
+Lalu:
+
+```bash
+npx shadcn@latest init -y -b neutral   # deteksi Vite + Tailwind v4; terima default
+```
+Expected: `components.json` terbentuk, `src/lib/utils.ts` (helper `cn`) ada. Jika init menimpa `src/index.css` — susun ulang agar `@import "tailwindcss";` tetap ada (blok tema shadcn di bawahnya itu normal).
+
+- [ ] **Step 2: Konfigurasi Vite (router plugin + tailwind + proxy + alias)**
 
 `web/vite.config.ts`:
 
@@ -44,9 +69,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
+import path from "path"
 
 export default defineConfig({
   plugins: [TanStackRouterVite(), react(), tailwindcss()],
+  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: { proxy: { '/api': 'http://localhost:8080' } },
 })
 ```
@@ -339,6 +366,23 @@ function Dashboard() {
   )
 }
 ```
+
+- [ ] **Step 1b: Event calendar reUI di Dashboard**
+
+Sumber komponen: https://reui.io/components/event-calendar — gratis/open (MIT-style, kode dicopy ke proyek), pasang via shadcn CLI (butuh Step 1b Task 1):
+
+```bash
+npx shadcn@latest add @reui/c-event-calendar-3
+```
+
+(CLI otomatis meng-install dependensi komponen + base components shadcn yang dibutuhkan. Jika varian `c-event-calendar-3` terlalu berat untuk read-only, boleh pakai varian event-calendar paling sederhana yang menampilkan events di view bulan + agenda — lihat daftar varian di halaman sumber.)
+
+Integrasi di `routes/index.tsx`:
+- Pindai komponen hasil generate untuk tipe `Event`-nya (umumnya `{ id, title, start, end, ... }` dengan `Date`), lalu map dari `UpcomingItem`:
+  `start = end = new Date(it.date + "T00:00:00")` (local midnight — hindari offset UTC), `title = it.title` (emoji sudah termasuk), simpan `kind` untuk styling.
+- Styling per kind: hari raya vs occasion beda variant/warna (pakai properti yang tersedia di komponen — jika tidak ada API styling per event, render `title` dengan prefix `🛕`/`📅` yang sudah ada dan biarkan default).
+- View default: bulan; agenda/timeline list Task 3 tetap tampil DI BAWAH kalender (badge H-n + chips reminder tidak ada padanan di kalender).
+- JANGAN mengedit isi komponen reUI yang di-generate; bungkus/props saja. Simpan di `src/components/event-calendar/` (hasil CLI).
 
 - [ ] **Step 2: Verifikasi visual (dev server + API dev mode)**
 
