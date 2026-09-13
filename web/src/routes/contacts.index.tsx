@@ -34,7 +34,7 @@ function Contacts() {
       </form>
       {q.data?.contacts.map((c) => (
         <Link key={c.id} to="/contacts/$id" params={{ id: String(c.id) }} className="block">
-          <Card className="flex-row items-center gap-3 p-3 transition-colors hover:border-indigo-300">
+          <Card className="flex-row items-center gap-3 p-3 transition-colors hover:ring-indigo-300">
             <Avatar>
               <AvatarFallback>{initials(c.name)}</AvatarFallback>
             </Avatar>

@@ -49,7 +49,7 @@ function useUpcomingYears(years: number[]) {
 }
 
 function urgencyClass(days: number): string {
-  if (days <= 0) return 'bg-destructive text-destructive-foreground'
+  if (days <= 0) return 'bg-destructive text-white'
   if (days <= 3) return 'bg-warning text-warning-foreground'
   if (days <= 7) return 'bg-amber-400 text-amber-950'
   return 'bg-muted text-muted-foreground'
