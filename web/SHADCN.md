@@ -1,0 +1,3 @@
+- `init` memakai shadcn@3.8.5 (CLI 4.x menolak `-b neutral` — flag `-b` kini berarti library komponen).
+- Registry `@reui` dikonfigurasi manual di `components.json` → `https://reui.io/r/{style}/{name}.json`.
+- Resolve `add @reui/...` diuji: `npx shadcn@3.8.5 view @reui/c-event-calendar-3` sukses (tanpa install).
