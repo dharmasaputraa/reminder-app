@@ -113,6 +113,12 @@ func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasi
 func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Lazy-init: Service biasanya dibangun via struct literal dari luar
+	// package (main.go) yang tidak bisa mengisi field unexported failUntil —
+	// tanpa ini, send gagal pertama = panic nil-map di dalam mutex → scan mati.
+	if s.failUntil == nil {
+		s.failUntil = make(map[int64]time.Time)
+	}
 	var res Result
 
 	loc, err := time.LoadLocation(snap.Timezone)
@@ -246,7 +252,13 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 
 func (s *Service) record(ctx context.Context, e store.NotificationEntry, res *Result, kind string) {
 	inserted, err := s.St.RecordNotification(ctx, e)
-	if err != nil || !inserted {
+	if err != nil {
+		// jangan diam-diam buang: reminder tetap terkirim, tapi jejak log
+		// hilang dari dedupe — warning agar terlihat di observability.
+		slog.Warn("record_notification gagal", "kind", kind, "channel_id", e.ChannelID, "err", err)
+		return
+	}
+	if !inserted {
 		return
 	}
 	res.Missed++

@@ -193,6 +193,50 @@ func TestHolidayReminder(t *testing.T) {
 	}
 }
 
+// Service dibangun persis seperti main.go (Plan 3 Task 9): struct literal
+// dari luar package — field unexported failUntil tidak bisa diinisialisasi,
+// jadi wajib lazy-init di RunOnce; send gagal pertama tidak boleh panic
+// nil-map dan mematikan scan loop.
+func TestRunOnceExternalLiteralNoPanicOnFail(t *testing.T) {
+	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
+	st, err := store.OpenInMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	seed(t, st, domain.DateFromTime(now))
+	n := &stubNotifier{err: context.DeadlineExceeded}
+	svc := &Service{St: st, Clock: &FakeClock{T: now}, // TANPA failUntil — nol map
+		Providers: []calendarprov.Provider{&stubProvider{}},
+		Resolve:   func(_ context.Context, ch store.Channel) (notify.Notifier, error) { return n, nil }}
+
+	res, err := svc.RunOnce(context.Background(), snapUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed != 1 {
+		t.Fatalf("failed = %d", res.Failed)
+	}
+
+	// 1 menit kemudian: masih dalam backoff → tidak ada attempt
+	svc.Clock.(*FakeClock).Add(time.Minute)
+	res, _ = svc.RunOnce(context.Background(), snapUTC())
+	if res.Failed != 0 || res.Sent != 0 {
+		t.Errorf("backoff bocor: %+v", res)
+	}
+
+	// 16 menit kemudian + sukses → sent
+	svc.Clock.(*FakeClock).Add(16 * time.Minute)
+	n.err = nil
+	res, _ = svc.RunOnce(context.Background(), snapUTC())
+	if res.Sent != 1 {
+		t.Errorf("retry gagal: %+v", res)
+	}
+}
+
 func TestHolidayKey(t *testing.T) {
 	got := HolidayKey("pawukon", domain.Holiday{Name: "Batu Kuning"})
 	if got != "pawukon:batu-kuning" {
