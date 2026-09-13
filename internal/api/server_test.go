@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -239,4 +240,82 @@ func TestSchedulerRunWithoutRunner(t *testing.T) {
 		t.Errorf("tanpa runner: %d", w.Code)
 	}
 	_ = context.Background()
+}
+
+// offsets:[] adalah sinyal RESET ke default global (bukan "biarkan nilai lama"):
+// handleSetPrefs mengganti p.Offsets dengan slice kosong dan ValidateOffsets([]) lolos,
+// jadi [] harus TERSIMPAN (bukan null/di-drop). Konsumen — internal/api/upcoming.go dan
+// internal/scheduler/scheduler.go — memperlakukan len(Offsets)==0 sebagai
+// "pakai DefaultOffsets"; test ini mengunci kedua sisi kontrak tersebut.
+func TestPrefsOffsetsResetToDefault(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
+	if w.Code != 201 {
+		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/1/prefs", "admin@x.id",
+		`{"offsets":[],"channel_ids":[],"enabled":true}`))
+	if w.Code != 200 {
+		t.Fatalf("put prefs offsets kosong: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/1", "admin@x.id", ""))
+	if w.Code != 200 {
+		t.Fatalf("get contact: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	var got store.ContactWithOccasions
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Prefs == nil {
+		t.Fatalf("prefs hilang setelah reset: %s", body)
+	}
+	if !got.Prefs.Enabled {
+		t.Errorf("enabled harus tetap true: %+v", *got.Prefs)
+	}
+	if len(got.Prefs.Offsets) != 0 {
+		t.Errorf("offsets harus kosong (reset ke default), dapat %v", got.Prefs.Offsets)
+	}
+	if !strings.Contains(body, `"offsets":[]`) {
+		t.Errorf(`prefs harus memuat "offsets":[] (bukan null/hilang): %s`, body)
+	}
+
+	// Sisi konsumen: occurrence otonan tepat hari ini (base = today − 210) harus
+	// memakai reminders default global karena prefs.offsets kosong.
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	today := domain.DateFromTime(time.Now().In(loc))
+	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
+	if w.Code != 201 {
+		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/upcoming?days=30", "admin@x.id", ""))
+	if w.Code != 200 {
+		t.Fatalf("upcoming: %d %s", w.Code, w.Body.String())
+	}
+	var up struct {
+		Items []UpcomingItem `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &up); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, it := range up.Items {
+		if it.Kind == "occasion" && it.ContactID == 1 {
+			found = true
+			if !reflect.DeepEqual(it.Reminders, domain.DefaultOffsets) {
+				t.Errorf("reminders harus default global %v, dapat %v", domain.DefaultOffsets, it.Reminders)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("occasion kontak tidak muncul di /upcoming: %s", w.Body.String())
+	}
 }

@@ -97,7 +97,7 @@ Data utama hanya satu file: `./data/otorem.db` (SQLite mode WAL). Selama contain
 **Litestream (opsional, disarankan):**
 
 1. Isi `deploy/litestream.yml` (path DB + URL bucket S3/R2).
-2. Set env kredensial di shell/compose (`LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`, `LITESTREAM_ENDPOINT` untuk R2).
+2. Isi kredensial di `.env`: `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`, dan `LITESTREAM_ENDPOINT` (untuk R2; S3 boleh dikosongkan). Container `litestream` membaca `.env` lewat `env_file`.
 3. Jalankan `docker compose --profile litestream up -d`.
 
 **Restore:**
@@ -108,6 +108,8 @@ docker compose --profile litestream run --rm litestream \
   restore -o /data/otorem.db s3://bucket-anda/otorem/otorem.db
 docker compose start app
 ```
+
+Untuk restore satu kali tanpa mengisi `.env`, berikan kredensial langsung ke `docker compose run`, mis. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/otorem.db s3://bucket-anda/otorem/otorem.db`.
 
 Alternatif tanpa Litestream: stop app, salin kembali `otorem.db`, start app.
 
