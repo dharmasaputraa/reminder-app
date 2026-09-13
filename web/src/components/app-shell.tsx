@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ChevronDown, Menu, X } from 'lucide-react'
+import { ChevronDown, LayoutDashboard, Menu, Radio, Settings, Users, X } from 'lucide-react'
 import { api } from '@/lib/api'
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/contacts', label: 'Kontak' },
-  { to: '/channels', label: 'Channel' },
-  { to: '/settings', label: 'Pengaturan' },
+const NAV_SECTIONS = [
+  {
+    section: 'Autoreminder',
+    items: [
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/contacts', label: 'Kontak', icon: Users },
+      { to: '/channels', label: 'Channel', icon: Radio },
+      { to: '/settings', label: 'Pengaturan', icon: Settings },
+    ],
+  },
 ] as const
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -35,15 +40,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <b>otorem</b>
           </Link>
           <nav className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV_ITEMS.map((item) => (
+            {NAV_SECTIONS.map((navSection) => (
               <Link
-                key={item.to}
-                to={item.to}
-                activeOptions={{ exact: item.to === '/' }}
+                key={navSection.section}
+                to={navSection.items[0].to}
+                activeOptions={{ exact: navSection.items[0].to === '/' }}
                 activeProps={{ className: 'bg-muted' }}
                 className="flex h-9 items-center rounded-md px-2.5 text-sm font-medium hover:bg-muted"
               >
-                {item.label}
+                {navSection.section}
               </Link>
             ))}
           </nav>
@@ -66,6 +71,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           </div>
+        </div>
+        <div className="flex h-10 items-center gap-1 border-b bg-muted/30 px-4 lg:px-6">
+          {NAV_SECTIONS[0].items.map((item) => {
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                activeOptions={{ exact: item.to === '/' }}
+                activeProps={{ className: 'bg-accent text-accent-foreground' }}
+                className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm hover:bg-muted"
+              >
+                <Icon className="size-4" />
+                {item.label}
+              </Link>
+            )
+          })}
         </div>
       </header>
       <section className="flex flex-1 overflow-y-auto p-4 lg:p-6">
@@ -93,17 +115,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <nav className="mt-12 space-y-2">
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setSheetOpen(false)}
-                  activeOptions={{ exact: item.to === '/' }}
-                  activeProps={{ className: 'bg-muted' }}
-                  className="flex h-9 items-center gap-2 rounded-md px-2 text-sm"
-                >
-                  {item.label}
-                </Link>
+              {NAV_SECTIONS.map((navSection) => (
+                <div key={navSection.section}>
+                  <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">
+                    {navSection.section.toUpperCase()}
+                  </p>
+                  <div>
+                    {navSection.items.map((item) => {
+                      const Icon = item.icon
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setSheetOpen(false)}
+                          activeOptions={{ exact: item.to === '/' }}
+                          activeProps={{ className: 'bg-muted' }}
+                          className="flex h-9 items-center gap-2 rounded-md px-2 text-sm"
+                        >
+                          <Icon className="size-4" />
+                          {item.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
               ))}
             </nav>
           </aside>
