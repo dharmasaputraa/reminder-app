@@ -29,6 +29,16 @@ func TestReminderDatesDedupeSort(t *testing.T) {
 	}
 }
 
+func TestReminderDatesYearBoundary(t *testing.T) {
+	got, err := ReminderDates(NewDate(2026, 1, 1), []int{7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != NewDate(2025, 12, 25) {
+		t.Errorf("H-7 dari 1 Jan = %v, want [2025-12-25]", got)
+	}
+}
+
 func TestValidateOffsets(t *testing.T) {
 	if err := ValidateOffsets([]int{-1}); err == nil {
 		t.Error("offset negatif harus error")

@@ -13,6 +13,7 @@ type HolidayDef struct {
 // HANYA definisi yang sudah baku dan diverifikasi (spec §5.3). Menambah
 // definisi (deret Tumpek, Sugihan, dsb.) WAJIB: tambahkan baris di fixture
 // scraper terlebih dahulu, buktikan tanggalnya cocok, baru masuk sini.
+// PawukonHolidayDefs: JANGAN dimutasi; pemanggil harus menyalin dulu bila ingin mengubah (package-global).
 var PawukonHolidayDefs = []HolidayDef{
 	{Name: "Galungan", Saptawara: 3, Pancawara: 3, Wuku: 10},  // Buda Kliwon Dunggulan
 	{Name: "Kuningan", Saptawara: 6, Pancawara: 3, Wuku: 11},  // Saniscara Kliwon Kuningan

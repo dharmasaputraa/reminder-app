@@ -6,6 +6,7 @@ import (
 )
 
 // DefaultOffsets: H-7, H-4, H-2, H-1, H (spec §2, configurable di Settings).
+// DefaultOffsets: JANGAN dimutasi; pemanggil harus menyalin dulu bila ingin mengubah (package-global).
 var DefaultOffsets = []int{7, 4, 2, 1, 0}
 
 // ValidateOffsets: non-negatif, tanpa duplikat, ≤ 60 hari (paling jauh 2 bulan).
