@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
+	"otorem/internal/config"
 	"otorem/internal/store"
 )
 
@@ -139,5 +140,21 @@ func TestDevAuth(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != 200 {
 		t.Errorf("dengan header: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNewCFAccessInitFails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	cfg := config.Config{
+		CFTeamDomain: strings.TrimPrefix(srv.URL, "http://"),
+		CFAud:        "aud-x",
+		AdminEmails:  map[string]bool{},
+	}
+	if _, err := NewCFAccess(context.Background(), cfg, &stubProvisioner{users: map[string]store.User{}}); err == nil {
+		t.Fatal("fetch awal JWKS gagal, NewCFAccess harus mengembalikan error")
 	}
 }

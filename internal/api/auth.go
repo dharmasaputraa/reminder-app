@@ -63,9 +63,11 @@ func NewCFAccess(ctx context.Context, cfg config.Config, provision UserProvision
 	jwksURL := fmt.Sprintf("https://%s/cdn-cgi/access/certs", cfg.CFTeamDomain)
 	// keyfunc v3.8.2: NewRemote/NewRemoteConfig sudah dihapus — padanannya
 	// NewDefaultOverrideCtx (URL tunggal) + KeyfuncCtx untuk jwt.Keyfunc.
+	noErrFirst := false // fetch awal JWKS gagal = error (fail fast saat init)
 	kfi, err := keyfunc.NewDefaultOverrideCtx(ctx, []string{jwksURL}, keyfunc.Override{
-		Client:          &http.Client{Timeout: 10 * time.Second},
-		RefreshInterval: time.Hour,
+		Client:                    &http.Client{Timeout: 10 * time.Second},
+		RefreshInterval:           time.Hour,
+		NoErrorReturnFirstHTTPReq: &noErrFirst,
 	})
 	if err != nil {
 		return nil, err
