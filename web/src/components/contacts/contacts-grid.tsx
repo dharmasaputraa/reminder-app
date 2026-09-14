@@ -189,6 +189,7 @@ export function ContactsGrid({
         enableHiding: true,
         enableResizing: false,
         size: 190,
+        meta: { headerTitle: 'Next reminder' },
       },
       {
         id: 'occasions',
@@ -207,6 +208,7 @@ export function ContactsGrid({
         enableHiding: true,
         enableResizing: false,
         size: 240,
+        meta: { headerTitle: 'Occasions' },
       },
       {
         id: 'status',
@@ -222,6 +224,7 @@ export function ContactsGrid({
         enableHiding: true,
         enableResizing: false,
         size: 100,
+        meta: { headerTitle: 'Status' },
       },
       {
         id: 'notes',
@@ -240,6 +243,7 @@ export function ContactsGrid({
         enableHiding: true,
         enableResizing: false,
         size: 160,
+        meta: { headerTitle: 'Notes' },
       },
       {
         id: 'actions',
@@ -260,7 +264,7 @@ export function ContactsGrid({
     data: filtered,
     pageCount: Math.max(1, Math.ceil(filtered.length / pagination.pageSize)),
     getRowId: (row: ContactRow) => String(row.id),
-    state: { pagination, sorting },
+    state: { pagination, sorting, columnVisibility: { notes: false } },
     onPaginationChange: setPagination,
     onSortingChange: setSorting,
   })

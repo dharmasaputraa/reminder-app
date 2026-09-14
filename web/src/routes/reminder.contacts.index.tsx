@@ -35,7 +35,7 @@ function Contacts() {
   const contacts = useQuery({ queryKey: ['contacts'], queryFn: () => api<{ contacts: Contact[] }>('/contacts') })
   const next = useNextReminderMap()
 
-  const selectedId = c && c !== 'new' ? Number(c) : undefined
+  const selectedId = typeof c === 'number' ? c : undefined
 
   /** Spec history contract: docked selection REPLACES (browsing rows leaves
    *  one history entry); below lg a row is ordinary navigation to the page. */
@@ -44,7 +44,7 @@ function Contacts() {
       nav({ to: '/reminder/contacts/$id', params: { id: String(id) } })
       return
     }
-    nav({ search: (prev: ContactsSearch) => ({ ...prev, c: String(id) }), replace: true })
+    nav({ search: (prev: ContactsSearch) => ({ ...prev, c: id }), replace: true })
   }
 
   const openCreate = () => {
@@ -103,7 +103,7 @@ function Contacts() {
           className="border-border shrink-0 overflow-hidden border-t lg:mt-0 lg:w-96 lg:border-t-0 lg:border-s xl:w-[28rem]"
         >
           <div className="h-full overflow-y-auto p-4">
-            <ContactDetailContent contactId={c === 'new' ? 'new' : Number(c)} variant="docked" />
+            <ContactDetailContent contactId={c === 'new' ? 'new' : c} variant="docked" />
           </div>
         </aside>
       )}

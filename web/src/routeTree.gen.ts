@@ -15,6 +15,7 @@ import { Route as ReminderChannelsRouteImport } from './routes/reminder.channels
 import { Route as ReminderSettingsRouteImport } from './routes/reminder.settings'
 import { Route as ReminderContactsIndexRouteImport } from './routes/reminder.contacts.index'
 import { Route as ReminderContactsIdRouteImport } from './routes/reminder.contacts.$id'
+import { Route as ReminderContactsNewRouteImport } from './routes/reminder.contacts.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +47,11 @@ const ReminderContactsIdRoute = ReminderContactsIdRouteImport.update({
   path: '/reminder/contacts/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReminderContactsNewRoute = ReminderContactsNewRouteImport.update({
+  id: '/reminder/contacts/new',
+  path: '/reminder/contacts/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/reminder/settings': typeof ReminderSettingsRoute
   '/reminder/': typeof ReminderIndexRoute
   '/reminder/contacts/$id': typeof ReminderContactsIdRoute
+  '/reminder/contacts/new': typeof ReminderContactsNewRoute
   '/reminder/contacts/': typeof ReminderContactsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/reminder/settings': typeof ReminderSettingsRoute
   '/reminder': typeof ReminderIndexRoute
   '/reminder/contacts/$id': typeof ReminderContactsIdRoute
+  '/reminder/contacts/new': typeof ReminderContactsNewRoute
   '/reminder/contacts': typeof ReminderContactsIndexRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/reminder/settings': typeof ReminderSettingsRoute
   '/reminder/': typeof ReminderIndexRoute
   '/reminder/contacts/$id': typeof ReminderContactsIdRoute
+  '/reminder/contacts/new': typeof ReminderContactsNewRoute
   '/reminder/contacts/': typeof ReminderContactsIndexRoute
 }
 export interface FileRouteTypes {
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | '/reminder/settings'
     | '/reminder/'
     | '/reminder/contacts/$id'
+    | '/reminder/contacts/new'
     | '/reminder/contacts/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/reminder/settings'
     | '/reminder'
     | '/reminder/contacts/$id'
+    | '/reminder/contacts/new'
     | '/reminder/contacts'
   id:
     | '__root__'
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | '/reminder/settings'
     | '/reminder/'
     | '/reminder/contacts/$id'
+    | '/reminder/contacts/new'
     | '/reminder/contacts/'
   fileRoutesById: FileRoutesById
 }
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   ReminderSettingsRoute: typeof ReminderSettingsRoute
   ReminderIndexRoute: typeof ReminderIndexRoute
   ReminderContactsIdRoute: typeof ReminderContactsIdRoute
+  ReminderContactsNewRoute: typeof ReminderContactsNewRoute
   ReminderContactsIndexRoute: typeof ReminderContactsIndexRoute
 }
 
@@ -152,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReminderContactsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reminder/contacts/new': {
+      id: '/reminder/contacts/new'
+      path: '/reminder/contacts/new'
+      fullPath: '/reminder/contacts/new'
+      preLoaderRoute: typeof ReminderContactsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReminderSettingsRoute: ReminderSettingsRoute,
   ReminderIndexRoute: ReminderIndexRoute,
   ReminderContactsIdRoute: ReminderContactsIdRoute,
+  ReminderContactsNewRoute: ReminderContactsNewRoute,
   ReminderContactsIndexRoute: ReminderContactsIndexRoute,
 }
 export const routeTree = rootRouteImport

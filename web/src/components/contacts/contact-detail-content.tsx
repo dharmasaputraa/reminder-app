@@ -125,18 +125,18 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
         : api<{ ok: boolean }>(`/contacts/${id}`, { method: 'PATCH', body })
     },
     onSuccess: (saved) => {
-      const savedId = 'id' in saved ? String(saved.id) : id
-      if (isNew) {
+      const savedId = 'id' in saved ? saved.id : null
+      if (isNew && savedId != null) {
         // Spec: after create, replace so no `new` URL stays in history.
         if (variant === 'docked')
           nav({ to: '/reminder/contacts', search: { c: savedId }, replace: true })
-        else nav({ to: '/reminder/contacts/$id', params: { id: savedId }, replace: true })
+        else nav({ to: '/reminder/contacts/$id', params: { id: String(savedId) }, replace: true })
         toast.success('Contact created')
-      } else {
+        qc.invalidateQueries({ queryKey: ['contact', String(savedId)] })
+      } else if (!isNew) {
         toast.success('Contact updated')
       }
       qc.invalidateQueries({ queryKey: ['contacts'] })
-      qc.invalidateQueries({ queryKey: ['contact', savedId] })
     },
     onError: (e) => toast.error(`Failed to save contact: ${String(e)}`),
   })
@@ -160,6 +160,9 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
       // Spec: docked drops ?c (replace); fullscreen goes back to the list.
       if (variant === 'docked') nav({ to: '/reminder/contacts', search: {}, replace: true })
       else nav({ to: '/reminder/contacts', replace: true })
+      // The grid (and next-reminder column) must drop the deleted contact.
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      qc.invalidateQueries({ queryKey: ['upcoming'] })
     },
     onError: (e) => toast.error(`Failed to delete contact: ${String(e)}`),
   })
@@ -227,9 +230,9 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
               aria-label="Back to list"
               onClick={() =>
                 nav(
-                  isNew
+                  contactId === 'new'
                     ? { to: '/reminder/contacts', replace: true }
-                    : { to: '/reminder/contacts', search: { c: id }, replace: true },
+                    : { to: '/reminder/contacts', search: { c: contactId }, replace: true },
                 )
               }
             >
