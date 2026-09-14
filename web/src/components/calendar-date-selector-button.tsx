@@ -14,6 +14,7 @@ import {
  */
 export function CalendarDateSelectorButton() {
   const { goTo } = useEventCalendarNavigation()
+  const thisYear = new Date().getFullYear()
   return (
     <DateSelectorPopover
       value={undefined}
@@ -23,7 +24,15 @@ export function CalendarDateSelectorButton() {
       }}
       placeholder="Go to date"
       label="Go to date"
-      minYear={1900}
+      // Year list reaches back to 1800 (same bound as the contact occasion
+      // picker); typed years inherit it through the selector's min/maxYear.
+      minYear={1800}
+      maxYear={thisYear + 15}
+      // The calendar needs month precision; the Day tab stays available for
+      // exact-day jumps, but picking a month does not force a drill-down.
+      periodTypes={['day', 'month', 'year']}
+      align="end"
+      showFilterTypes={false}
     />
   )
 }

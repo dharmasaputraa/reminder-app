@@ -5,8 +5,6 @@ import { api, type UpcomingItem } from '../lib/api'
 import { pageTitle } from '../lib/page-title'
 import {
   CalendarSettingsButton,
-  CALENDAR_LOCALES,
-  CALENDAR_TIME_ZONES,
   DEFAULT_CALENDAR_SETTINGS,
   type CalendarSettings,
 } from '@/components/calendar-settings-button'
@@ -76,23 +74,13 @@ const KIND_COLOR: Record<UpcomingItem['kind'], string> = {
   holiday: 'var(--color-amber-500)',
 }
 
-/** API titles are emoji-free (emoji live only in the notify path), so the
- *  calendar carries its own kind marker. */
-function calendarEmoji(it: UpcomingItem): string {
-  if (it.kind === 'holiday') return '📅'
-  if (it.type === 'otongan') return '🛕'
-  if (it.type === 'birthday') return '🎂'
-  return '🎊'
-}
-
 /** UpcomingItem → reUI CalendarEvent: date-only, so start = end (local midnight).
  *  The whole item rides along in `data` for the click dialogs. */
 function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<UpcomingItem> {
   const start = localMidnight(it.date)
-  const emoji = calendarEmoji(it)
   return {
     id: `${it.kind}-${it.occasion_id ?? it.contact_id ?? 'event'}-${it.date}-${i}`,
-    title: it.title.startsWith(emoji) ? it.title : `${emoji} ${it.title}`,
+    title: it.title,
     start,
     end: new Date(start),
     allDay: true,
@@ -108,11 +96,10 @@ function Dashboard() {
     queryFn: () => api<{ channels: unknown[] }>('/channels'),
   })
 
-  const items = up.data?.items ?? []
   const todayYear = up.data?.today ? Number(up.data.today.slice(0, 4)) : new Date().getFullYear()
-  // Visible year in the calendar (from navigation); null = never navigated.
-  const [visibleYear, setVisibleYear] = useState<number | null>(null)
-  const yearAnchor = visibleYear ?? todayYear
+  // Visible calendar month (from navigation); null = never navigated (today).
+  const [visibleDate, setVisibleDate] = useState<Date | null>(null)
+  const yearAnchor = visibleDate?.getFullYear() ?? todayYear
   // ±1 year around the anchor is fetched at once → year jumps are already filled
   // before being clicked (prefetch), and each year is cached separately in react-query.
   const yearList = useMemo(
@@ -127,6 +114,21 @@ function Dashboard() {
   const events = useMemo(() => calendarItems.map(toCalendarEvent), [calendarItems])
   const yearsLoading = yearQueries.some((q) => q.isLoading)
 
+  // The list under the calendar shows the events of the month currently
+  // displayed on the calendar (holidays included), sorted by date.
+  const visibleMonth = visibleDate ?? (up.data?.today ? localMidnight(up.data.today) : new Date())
+  const monthEvents = useMemo(
+    () =>
+      events
+        .filter(
+          (e) =>
+            e.start.getFullYear() === visibleMonth.getFullYear() &&
+            e.start.getMonth() === visibleMonth.getMonth()
+        )
+        .sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [events, visibleMonth]
+  )
+
   // Calendar settings panel (c-event-calendar-1 pattern): one resettable
   // object flowing into <EventCalendar> as controlled props.
   const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_CALENDAR_SETTINGS)
@@ -136,12 +138,6 @@ function Dashboard() {
   // internals tab only where those options are visible.
   const [view, setView] = useState<CalendarView>('month')
   const isTimeGridView = view !== 'month' && view !== 'agenda'
-
-  const activeLocale =
-    CALENDAR_LOCALES.find((entry) => entry.id === settings.localeId) ?? CALENDAR_LOCALES[0]
-  const activeTimeZone =
-    CALENDAR_TIME_ZONES.find((entry) => entry.id === settings.timeZoneId) ??
-    CALENDAR_TIME_ZONES[0]
 
   // Click targets: an empty date cell → the day's full view; an event chip →
   // its detail modal (preventDefault opts out of the built-in selection).
@@ -176,29 +172,24 @@ function Dashboard() {
         </Alert>
       )}
 
-      <div className="overflow-hidden rounded-xl border bg-card" dir={activeLocale.dir}>
+      <div className="overflow-hidden rounded-xl border bg-card">
         <EventCalendar
           events={events}
           defaultView="month"
           views={['month', 'agenda']}
           onViewChange={setView}
           defaultDate={up.data?.today ? localMidnight(up.data.today) : new Date()}
-          locale={activeLocale.locale}
-          i18n={activeLocale.i18n}
-          timeZone={activeTimeZone.value}
           viewSettings={settings.viewSettings}
           onViewSettingsChange={(viewSettings) => patch({ viewSettings })}
-          interactions={settings.interactions}
-          onInteractionsChange={(interactions) => patch({ interactions })}
+          interactions={{ drag: false, resize: false, selectSlot: false }}
           weekStartsOn={settings.weekStartsOn}
           dayStartHour={settings.dayStartHour}
           dayEndHour={settings.dayEndHour}
           interval={settings.interval}
           snapDuration={settings.snapDuration}
           eventTooltip={settings.eventTooltip}
-          showDayAddButton={settings.showDayAddButton}
           offDays
-          onDateChange={(d) => setVisibleYear(d.getFullYear())}
+          onDateChange={(d) => setVisibleDate(d)}
           onSlotClick={(slot) => setDayDialogDate(slot.date)}
           onEventClick={(occurrence, e) => {
             e.preventDefault()
@@ -211,7 +202,6 @@ function Dashboard() {
               <TooltipProvider delay={600} closeDelay={0} timeout={300}>
                 <EventCalendarNavToday />
                 <EventCalendarViewSwitcher />
-                <CalendarDateSelectorButton />
                 <div className="flex items-center">
                   <EventCalendarNavPrev />
                   <EventCalendarNavNext />
@@ -224,6 +214,7 @@ function Dashboard() {
               </TooltipProvider>
             </EventCalendarNav>
             <EventCalendarToolbar>
+              <CalendarDateSelectorButton />
               <CalendarSettingsButton
                 settings={settings}
                 onPatch={patch}
@@ -236,30 +227,33 @@ function Dashboard() {
       </div>
 
       <div className="space-y-3">
-        {items.length === 0 && (
-          <p className="text-muted-foreground">No events in the next 30 days.</p>
+        {monthEvents.length === 0 && (
+          <p className="text-muted-foreground">No event at this month.</p>
         )}
 
-        {items.map((it: UpcomingItem, i: number) => (
-          <Card key={`${it.kind}-${it.occasion_id ?? it.title}-${i}`}
-            className="flex-row items-center gap-3 p-3">
-            <Badge className={`h-11 w-11 rounded-full text-xs font-bold ${urgencyClass(it.days_until)}`}>
-              {it.days_until <= 0 ? 'TODAY' : `D-${it.days_until}`}
-            </Badge>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{it.title}</p>
-              <p className="truncate text-sm text-muted-foreground">
-                {it.kind === 'holiday' ? 'Holiday' : it.contact_name} · {it.date}
-                {it.pawukon ? ` · ${it.pawukon}` : ''}
-              </p>
-            </div>
-            <div className="hidden shrink-0 gap-1 sm:flex">
-              {it.reminders?.map((r) => (
-                <Badge key={r} variant="secondary">D-{r}</Badge>
-              ))}
-            </div>
-          </Card>
-        ))}
+        {monthEvents.map((e) => {
+          const it = e.data
+          if (!it) return null
+          return (
+            <Card key={e.id} className="flex-row items-center gap-3 p-3">
+              <Badge className={`h-11 w-11 rounded-full text-xs font-bold ${urgencyClass(it.days_until)}`}>
+                {it.days_until <= 0 ? 'TODAY' : `D-${it.days_until}`}
+              </Badge>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{it.title}</p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {it.kind === 'holiday' ? 'Holiday' : it.contact_name} · {it.date}
+                  {it.pawukon ? ` · ${it.pawukon}` : ''}
+                </p>
+              </div>
+              <div className="hidden shrink-0 gap-1 sm:flex">
+                {it.reminders?.map((r) => (
+                  <Badge key={r} variant="secondary">D-{r}</Badge>
+                ))}
+              </div>
+            </Card>
+          )
+        })}
       </div>
 
       <DayEventsDialog

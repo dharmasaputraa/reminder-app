@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import {
   DateSelector,
   formatDateValue,
+  type DateSelectorPeriodType,
   type DateSelectorValue,
 } from "@/components/reui/date-selector"
 
@@ -49,11 +50,17 @@ export function DateSelectorPopover({
   onApply,
   placeholder = "Select a date",
   label,
-  inputHint = "Try: 2025, Q4, 05/10/2025",
+  inputHint: inputHintProp,
   minYear,
   maxYear,
   weekStartsOn,
   className = "w-56 justify-start",
+  align = "start",
+  showFilterTypes = true,
+  allowRange = true,
+  periodTypes,
+  monthCascadesToDay = false,
+  dayDateFormat = "dd/MM/yyyy",
 }: {
   value: DateSelectorValue | undefined
   onApply: (value: DateSelectorValue | undefined) => void
@@ -64,13 +71,29 @@ export function DateSelectorPopover({
   maxYear?: number
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
   className?: string
+  align?: "start" | "end" | "center"
+  showFilterTypes?: boolean
+  allowRange?: boolean
+  periodTypes?: DateSelectorPeriodType[]
+  /** After picking a month, jump straight to the Day tab (pick-a-date flows). */
+  monthCascadesToDay?: boolean
+  /** Day format for the inner input and the trigger label. */
+  dayDateFormat?: string
 }) {
   const [open, setOpen] = useState(false)
   const [internalValue, setInternalValue] = useState<
     DateSelectorValue | undefined
   >(value)
 
-  const formattedValue = value ? formatDateValue(value) : ""
+  // The hint must not advertise shorthand for a disabled period tab: "Q4"
+  // only helps when the Quarter tab exists.
+  const inputHint =
+    inputHintProp ??
+    (!periodTypes || periodTypes.includes("quarter")
+      ? "Try: 2025, Q4, 05/10/2025"
+      : "Try: 2025, 05/10/2025")
+
+  const formattedValue = value ? formatDateValue(value, undefined, dayDateFormat) : ""
   const displayText = formattedValue || placeholder
 
   useEffect(() => {
@@ -99,17 +122,21 @@ export function DateSelectorPopover({
           </Button>
         }
       />
-      <PopoverContent className="w-auto gap-3 p-0" align="start" sideOffset={4}>
+      <PopoverContent className="w-auto gap-3 p-0" align={align} sideOffset={4}>
         <div className="p-3">
           <DateSelector
             value={internalValue}
             onChange={setInternalValue}
-            allowRange={true}
+            allowRange={allowRange}
+            periodTypes={periodTypes}
+            monthCascadesToDay={monthCascadesToDay}
             label={label}
             inputHint={inputHint}
             minYear={minYear}
             maxYear={maxYear}
             weekStartsOn={weekStartsOn}
+            showFilterTypes={showFilterTypes}
+            dayDateFormat={dayDateFormat}
           />
         </div>
         <Separator className="p-0" />

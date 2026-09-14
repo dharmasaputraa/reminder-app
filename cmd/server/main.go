@@ -21,6 +21,7 @@ import (
 )
 
 func main() {
+	config.LoadDotEnv(".env")
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("invalid config", "err", err)
@@ -42,6 +43,9 @@ func main() {
 	}
 
 	key := secret.DeriveKey(cfg.AppSecret)
+	if _, err := api.SeedDevTelegram(context.Background(), st, key, cfg); err != nil {
+		slog.Error("dev telegram seed", "err", err)
+	}
 	providers := []calendarprov.Provider{
 		calendarprov.NewComputedPawukon(),
 		calendarprov.NewCachedRemote(calendarprov.NewDayOffAPI(), st),
@@ -63,6 +67,7 @@ func main() {
 		return scheduler.Snapshot{
 			Timezone: set.Timezone, SendTime: set.SendTime, CatchUpHours: set.CatchUpHours,
 			DefaultOffsets: set.DefaultOffsets, HolidayCategories: set.HolidayCategories,
+			HolidayOffsets: set.HolidayOffsets,
 		}
 	}
 	srv.SetRunner(api.SchedulerRunnerFunc(func(ctx context.Context) (api.RunResult, error) {

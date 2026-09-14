@@ -1,9 +1,4 @@
-import type { Locale } from "date-fns"
-import { de, es, fr, ja, ar } from "date-fns/locale"
-
-import type { EventCalendarI18nOverrides } from "@/components/reui/event-calendar/event-calendar-i18n"
 import type {
-  EventCalendarInteractions,
   EventCalendarViewSettings,
 } from "@/components/reui/event-calendar/event-calendar-types"
 import { Button } from "@/components/ui/button"
@@ -31,26 +26,22 @@ import { Settings2Icon } from "lucide-react"
 
 /**
  * Calendar settings panel, from the reUI `c-event-calendar-1` example:
- * View / Time grid / Behavior / Region tabs plus "Reset to defaults".
+ * View / Time grid / Behavior tabs plus "Reset to defaults".
  * The state lives with the consumer, which feeds it back into
  * <EventCalendar> as controlled props.
  */
 export interface CalendarSettings {
   viewSettings: EventCalendarViewSettings
-  interactions: EventCalendarInteractions
   weekStartsOn: 0 | 1
   dayStartHour: number
   dayEndHour: number
   interval: number
   snapDuration: number
   eventTooltip: boolean
-  showDayAddButton: boolean
-  localeId: string
-  timeZoneId: string
 }
 
 /** Defaults follow the dashboard's current behavior (Monday week start,
- *  pointer interactions off — events are server-derived). */
+ *  pointer interactions stay off — events are server-derived). */
 export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
   viewSettings: {
     weekends: true,
@@ -58,168 +49,13 @@ export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
     nowIndicator: true,
     offDays: false,
   },
-  interactions: { drag: false, resize: false, selectSlot: false },
   weekStartsOn: 1,
   dayStartHour: 0,
   dayEndHour: 24,
   interval: 60,
   snapDuration: 15,
   eventTooltip: false,
-  showDayAddButton: false,
-  localeId: "en",
-  timeZoneId: "local",
 }
-
-/**
- * i18n presets - each language ships a date-fns `locale` (localizes every
- * formatted date: weekday headers, month title, time gutter) plus an `i18n`
- * override map for the static UI strings the locale can't reach (Today, view
- * names, "+N more"). Arabic also flips the whole calendar to right-to-left.
- * English is the built-in default, so it leaves both undefined.
- */
-export interface CalendarLocale {
-  id: string
-  /** Native language name, shown in the picker. */
-  label: string
-  locale: Locale | undefined
-  dir: "ltr" | "rtl"
-  i18n: EventCalendarI18nOverrides | undefined
-}
-
-export const CALENDAR_LOCALES: CalendarLocale[] = [
-  {
-    id: "en",
-    label: "English",
-    locale: undefined,
-    dir: "ltr",
-    i18n: undefined,
-  },
-  {
-    id: "de",
-    label: "Deutsch",
-    locale: de,
-    dir: "ltr",
-    i18n: {
-      labels: {
-        today: "Heute",
-        allDay: "Ganztägig",
-        noEvents: "Keine Termine",
-        more: (count) => `+${count} weitere`,
-      },
-      viewNames: {
-        month: "Monat",
-        week: "Woche",
-        day: "Tag",
-        days: (count) => `${count} Tage`,
-        agenda: "Agenda",
-        resource: "Zeitraster",
-      },
-    },
-  },
-  {
-    id: "fr",
-    label: "Français",
-    locale: fr,
-    dir: "ltr",
-    i18n: {
-      labels: {
-        today: "Aujourd'hui",
-        allDay: "Journée entière",
-        noEvents: "Aucun événement",
-        more: (count) => `+${count} autres`,
-      },
-      viewNames: {
-        month: "Mois",
-        week: "Semaine",
-        day: "Jour",
-        days: (count) => `${count} jours`,
-        agenda: "Agenda",
-        resource: "Grille horaire",
-      },
-    },
-  },
-  {
-    id: "es",
-    label: "Español",
-    locale: es,
-    dir: "ltr",
-    i18n: {
-      labels: {
-        today: "Hoy",
-        allDay: "Todo el día",
-        noEvents: "Sin eventos",
-        more: (count) => `+${count} más`,
-      },
-      viewNames: {
-        month: "Mes",
-        week: "Semana",
-        day: "Día",
-        days: (count) => `${count} días`,
-        agenda: "Agenda",
-        resource: "Cuadrícula",
-      },
-    },
-  },
-  {
-    id: "ja",
-    label: "日本語",
-    locale: ja,
-    dir: "ltr",
-    i18n: {
-      labels: {
-        today: "今日",
-        allDay: "終日",
-        noEvents: "予定なし",
-        more: (count) => `他${count}件`,
-      },
-      viewNames: {
-        month: "月",
-        week: "週",
-        day: "日",
-        days: (count) => `${count}日間`,
-        agenda: "予定",
-        resource: "タイムグリッド",
-      },
-    },
-  },
-  {
-    id: "ar",
-    label: "العربية",
-    locale: ar,
-    dir: "rtl",
-    i18n: {
-      labels: {
-        today: "اليوم",
-        allDay: "طوال اليوم",
-        noEvents: "لا توجد أحداث",
-        more: (count) => `+${count} المزيد`,
-      },
-      viewNames: {
-        month: "شهر",
-        week: "أسبوع",
-        day: "يوم",
-        days: (count) => `${count} أيام`,
-        agenda: "جدول الأعمال",
-        resource: "شبكة زمنية",
-      },
-    },
-  },
-]
-
-/** Display time zones - all event math and rendering happen in the chosen
- *  zone, so switching it visibly shifts every event's clock time. */
-export const CALENDAR_TIME_ZONES: Array<{
-  id: string
-  label: string
-  value?: string
-}> = [
-  { id: "local", label: "Browser" },
-  { id: "jakarta", label: "Jakarta", value: "Asia/Jakarta" },
-  { id: "ny", label: "New York", value: "America/New_York" },
-  { id: "london", label: "London", value: "Europe/London" },
-  { id: "tokyo", label: "Tokyo", value: "Asia/Tokyo" },
-  { id: "kolkata", label: "Kolkata", value: "Asia/Kolkata" },
-]
 
 function SettingsSwitch({
   id,
@@ -283,49 +119,6 @@ function SettingsSelect({
   )
 }
 
-/** String-keyed sibling of SettingsSelect, for the language/time-zone pickers. */
-function SettingsTextSelect({
-  id,
-  label,
-  value,
-  options,
-  onValueChange,
-}: {
-  id: string
-  label: string
-  value: string
-  options: Array<{ value: string; label: string }>
-  onValueChange: (value: string) => void
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <Label htmlFor={id} className="font-normal">
-        {label}
-      </Label>
-      <Select value={value} onValueChange={(next) => {
-        // Base UI emits null when a selection clears; the settings selects
-        // always keep a value, so a null is ignored.
-        if (next !== null) onValueChange(next)
-      }}>
-        <SelectTrigger id={id} size="sm" className="w-36">
-          {/* Base UI's Value renders the raw value string by default; the
-              selected option's label reads better for every control here. */}
-          <SelectValue>
-            {options.find((option) => option.value === value)?.label}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
-
 export function CalendarSettingsButton({
   settings,
   onPatch,
@@ -338,9 +131,10 @@ export function CalendarSettingsButton({
 }) {
   return (
     <Popover>
-      <PopoverTrigger render={<Button variant="outline" size="sm" />}>
+      <PopoverTrigger
+        render={<Button variant="outline" size="icon-sm" aria-label="Settings" />}
+      >
         <Settings2Icon className="size-4" aria-hidden="true" />
-        Settings
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-80">
         <Tabs defaultValue="view">
@@ -357,9 +151,6 @@ export function CalendarSettingsButton({
             )}
             <TabsTrigger value="behavior" className="flex-1">
               Behavior
-            </TabsTrigger>
-            <TabsTrigger value="region" className="flex-1">
-              Region
             </TabsTrigger>
           </TabsList>
           <TabsContent value="view" className="flex flex-col gap-3">
@@ -413,14 +204,6 @@ export function CalendarSettingsButton({
                     offDays,
                   },
                 })
-              }
-            />
-            <SettingsSwitch
-              id="ec-set-day-add"
-              label="Day add button"
-              checked={settings.showDayAddButton}
-              onCheckedChange={(showDayAddButton) =>
-                onPatch({ showDayAddButton })
               }
             />
             {/* week start shapes month and week grids alike, so it lives here
@@ -485,74 +268,11 @@ export function CalendarSettingsButton({
           </TabsContent>
           <TabsContent value="behavior" className="flex flex-col gap-3">
             <SettingsSwitch
-              id="ec-set-drag"
-              label="Drag to move"
-              checked={settings.interactions.drag}
-              onCheckedChange={(drag) =>
-                onPatch({
-                  interactions: { ...settings.interactions, drag },
-                })
-              }
-            />
-            <SettingsSwitch
-              id="ec-set-resize"
-              label="Drag to resize"
-              checked={settings.interactions.resize}
-              onCheckedChange={(resize) =>
-                onPatch({
-                  interactions: {
-                    ...settings.interactions,
-                    resize,
-                  },
-                })
-              }
-            />
-            <SettingsSwitch
-              id="ec-set-select-slot"
-              label="Drag to create"
-              checked={settings.interactions.selectSlot}
-              onCheckedChange={(selectSlot) =>
-                onPatch({
-                  interactions: {
-                    ...settings.interactions,
-                    selectSlot,
-                  },
-                })
-              }
-            />
-            <SettingsSwitch
               id="ec-set-tooltip"
               label="Event tooltips"
               checked={settings.eventTooltip}
               onCheckedChange={(eventTooltip) => onPatch({ eventTooltip })}
             />
-          </TabsContent>
-          <TabsContent value="region" className="flex flex-col gap-3">
-            <SettingsTextSelect
-              id="ec-set-language"
-              label="Language"
-              value={settings.localeId}
-              options={CALENDAR_LOCALES.map((entry) => ({
-                value: entry.id,
-                label: entry.label,
-              }))}
-              onValueChange={(localeId) => onPatch({ localeId })}
-            />
-            <SettingsTextSelect
-              id="ec-set-timezone"
-              label="Time zone"
-              value={settings.timeZoneId}
-              options={CALENDAR_TIME_ZONES.map((entry) => ({
-                value: entry.id,
-                label: entry.label,
-              }))}
-              onValueChange={(timeZoneId) => onPatch({ timeZoneId })}
-            />
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Language switches the date-fns locale and every UI label. Time
-              zone shifts all event times. Arabic also flips the calendar to
-              right-to-left.
-            </p>
           </TabsContent>
         </Tabs>
         <Button

@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import {
@@ -245,6 +246,9 @@ interface UseDateSelectorOptions {
   minYear?: number
   maxYear?: number
   periodTypes?: DateSelectorPeriodType[]
+  /** After picking a month, jump straight to the Day tab (pick-a-date flows).
+   *  Without it the month pick only re-anchors the day calendar. */
+  monthCascadesToDay?: boolean
 }
 
 export function useDateSelector({
@@ -259,6 +263,7 @@ export function useDateSelector({
   minYear,
   maxYear,
   periodTypes,
+  monthCascadesToDay = false,
 }: UseDateSelectorOptions) {
   const currentYear = baseYear ?? new Date().getFullYear()
 
@@ -401,14 +406,26 @@ export function useDateSelector({
         }
       } else {
         setSelectedYear(year)
-        if (periodType === "month") setSelectedMonth(value)
+        if (periodType === "month") {
+          setSelectedMonth(value)
+          // Re-anchor the day picker on the chosen month, so a Month pick
+          // doubles as navigation for picking an exact day. When opted in,
+          // also cascade straight to the Day tab.
+          setCalendarMonth(new Date(year, value, 1))
+          if (
+            monthCascadesToDay &&
+            (!periodTypes || periodTypes.includes("day"))
+          ) {
+            setPeriodType("day")
+          }
+        }
         if (periodType === "quarter") setSelectedQuarter(value)
         if (periodType === "half-year") setSelectedHalfYear(value)
         setRangeStart(undefined)
         setRangeEnd(undefined)
       }
     },
-    [filterType, allowRange, rangeStart, rangeEnd, periodType]
+    [filterType, allowRange, rangeStart, rangeEnd, periodType, periodTypes, monthCascadesToDay]
   )
 
   const handleYearSelect = useCallback(
@@ -428,11 +445,15 @@ export function useDateSelector({
         }
       } else {
         setSelectedYear(year)
+        // Cascade down: a Year pick lands on that year's month grid (and
+        // month keeps cascading to day), so the tabs drill down instead of
+        // dead-ending.
+        if (!periodTypes || periodTypes.includes("month")) setPeriodType("month")
         setRangeStart(undefined)
         setRangeEnd(undefined)
       }
     },
-    [filterType, allowRange, rangeStart, rangeEnd]
+    [filterType, allowRange, rangeStart, rangeEnd, periodTypes]
   )
 
   const handlePeriodTypeChange = useCallback(
@@ -891,7 +912,7 @@ function DateSelectorPeriodGrid({
   return (
     <div className={cn("w-full space-y-6", className)}>
       {years.map((year) => (
-        <div key={year}>
+        <div key={year} data-year={year}>
           <div className="text-muted-foreground mb-3 text-sm font-medium">
             {year}
           </div>
@@ -969,6 +990,7 @@ function DateSelectorYearList({
         return (
           <Button
             key={year}
+            data-year={year}
             size="sm"
             variant={
               isSelected || isRangeStart || isRangeEnd ? "default" : "outline"
@@ -998,6 +1020,11 @@ export interface DateSelectorProps {
   defaultPeriodType?: DateSelectorPeriodType
   defaultFilterType?: DateSelectorFilterType
   presetMode?: DateSelectorFilterType
+  /** Hide the is/before/after/between operator toggle (e.g. for a plain
+   *  go-to-date picker where operators make no sense). */
+  showFilterTypes?: boolean
+  /** After picking a month, jump straight to the Day tab (pick-a-date flows). */
+  monthCascadesToDay?: boolean
   showInput?: boolean
   showTwoMonths?: boolean
   label?: string
@@ -1021,6 +1048,8 @@ export function DateSelector({
   defaultPeriodType = "day",
   defaultFilterType = "is",
   presetMode,
+  showFilterTypes = true,
+  monthCascadesToDay = false,
   showInput = true,
   showTwoMonths = true,
   label,
@@ -1052,6 +1081,7 @@ export function DateSelector({
     minYear,
     maxYear,
     periodTypes,
+    monthCascadesToDay,
   })
 
   const {
@@ -1084,6 +1114,32 @@ export function DateSelector({
   const displayValue = formatDateValue(currentValue, mergedI18n, dayDateFormat)
   const [inputValue, setInputValue] = useState(displayValue)
   const [isInputFocused, setIsInputFocused] = useState(false)
+
+  // Anchor the period lists on the current (or selected) year: the viewport
+  // opens with that year at the top, earlier years sit above it (scroll up),
+  // later ones below (scroll down). Runs after paint — the ScrollArea remounts
+  // when the period tab changes and needs a settled layout to scroll.
+  const listRef = useRef<HTMLDivElement>(null)
+  const anchorYear = selectedYear ?? baseYear ?? new Date().getFullYear()
+  useEffect(() => {
+    if (periodType === "day") return
+    const raf = requestAnimationFrame(() => {
+      const root = listRef.current
+      if (!root) return
+      const viewport = root.querySelector<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]'
+      )
+      const target = root.querySelector<HTMLElement>(
+        `[data-year="${anchorYear}"]`
+      )
+      if (!viewport || !target) return
+      viewport.scrollTop =
+        target.getBoundingClientRect().top -
+        viewport.getBoundingClientRect().top +
+        viewport.scrollTop
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [periodType, anchorYear])
 
   // Sync input value when displayValue changes (but not when user is typing)
   useEffect(() => {
@@ -1121,11 +1177,20 @@ export function DateSelector({
 
       const trimmed = text.trim()
 
+      // Typed input only resolves for period types whose tab is enabled:
+      // typing "Q4" while the Quarter tab is hidden must not jump anywhere.
+      const isPeriodEnabled = (period: DateSelectorPeriodType) =>
+        !periodTypes || periodTypes.includes(period)
+
+      // Typed years share the year list's bounds
+      const isYearInBounds = (year: number) =>
+        year >= minYear && year <= maxYear
+
       // Try parsing as year (e.g., "2025")
       const yearMatch = trimmed.match(/^\d{4}$/)
-      if (yearMatch) {
+      if (yearMatch && isPeriodEnabled("year")) {
         const year = parseInt(yearMatch[0])
-        if (year >= 1900 && year <= 2100) {
+        if (isYearInBounds(year)) {
           return {
             period: "year",
             operator: presetMode ?? filterType,
@@ -1135,41 +1200,45 @@ export function DateSelector({
       }
 
       // Try parsing as quarter (e.g., "Q4", "Q1 2025")
-      const quarterMatch = trimmed.match(/^Q([1-4])(?:\s+(\d{4}))?$/i)
-      if (quarterMatch) {
-        const quarter = parseInt(quarterMatch[1]) - 1
-        const year = quarterMatch[2]
-          ? parseInt(quarterMatch[2])
-          : new Date().getFullYear()
-        if (year >= 1900 && year <= 2100) {
-          return {
-            period: "quarter",
-            operator: presetMode ?? filterType,
-            year,
-            quarter,
+      if (isPeriodEnabled("quarter")) {
+        const quarterMatch = trimmed.match(/^Q([1-4])(?:\s+(\d{4}))?$/i)
+        if (quarterMatch) {
+          const quarter = parseInt(quarterMatch[1]) - 1
+          const year = quarterMatch[2]
+            ? parseInt(quarterMatch[2])
+            : new Date().getFullYear()
+          if (isYearInBounds(year)) {
+            return {
+              period: "quarter",
+              operator: presetMode ?? filterType,
+              year,
+              quarter,
+            }
           }
         }
       }
 
       // Try parsing as date using computed formats
-      for (const dateFormat of dateFormats) {
-        try {
-          const parsed = parse(trimmed, dateFormat, new Date())
-          if (!isNaN(parsed.getTime())) {
-            return {
-              period: "day",
-              operator: presetMode ?? filterType,
-              startDate: parsed,
+      if (isPeriodEnabled("day")) {
+        for (const dateFormat of dateFormats) {
+          try {
+            const parsed = parse(trimmed, dateFormat, new Date())
+            if (!isNaN(parsed.getTime())) {
+              return {
+                period: "day",
+                operator: presetMode ?? filterType,
+                startDate: parsed,
+              }
             }
+          } catch {
+            // Continue to next format
           }
-        } catch {
-          // Continue to next format
         }
       }
 
       return null
     },
-    [filterType, presetMode, dateFormats]
+    [filterType, presetMode, dateFormats, periodTypes, minYear, maxYear]
   )
 
   const handleInputChange = useCallback(
@@ -1205,12 +1274,14 @@ export function DateSelector({
               {label}
             </h3>
           )}
-          <DateSelectorFilterToggle
-            value={filterType}
-            onChange={setFilterType}
-            showBetween={allowRange}
-            presetMode={presetMode}
-          />
+          {showFilterTypes && (
+            <DateSelectorFilterToggle
+              value={filterType}
+              onChange={setFilterType}
+              showBetween={allowRange}
+              presetMode={presetMode}
+            />
+          )}
         </div>
         {showInput && (
           <div className="relative">
@@ -1267,7 +1338,7 @@ export function DateSelector({
             />
           </div>
         ) : (
-          <div className="-mr-3 w-full">
+          <div className="-mr-3 w-full" ref={listRef}>
             <ScrollArea key={periodType} className="h-[200px] w-full pe-3">
               {periodType === "month" && (
                 <DateSelectorPeriodGrid

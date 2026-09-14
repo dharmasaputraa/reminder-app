@@ -30,6 +30,20 @@ func (s *Store) CreateChannel(ctx context.Context, ownerID int64, typ, name stri
 	return Channel{ID: id, OwnerID: ownerID, Type: typ, Name: name, ConfigEnc: configEnc, Enabled: true}, nil
 }
 
+// UpdateChannelConfig replaces the owner and stored credentials of a channel.
+func (s *Store) UpdateChannelConfig(ctx context.Context, id, ownerID int64, configEnc []byte) error {
+	r, err := s.db.ExecContext(ctx,
+		`UPDATE channels SET owner_id = ?, config_enc = ? WHERE id = ?`,
+		ownerID, configEnc, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListChannels(ctx context.Context, ownerID int64) ([]Channel, error) {
 	q := `SELECT id, owner_id, type, name, config_enc, enabled FROM channels`
 	args := []any{}

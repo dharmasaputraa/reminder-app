@@ -37,6 +37,9 @@ type Snapshot struct {
 	CatchUpHours      int
 	DefaultOffsets    []int
 	HolidayCategories map[string]bool
+	// Per holiday source (pawukon/saka/national) reminder offsets. Empty/nil
+	// for a category falls back to DefaultOffsets.
+	HolidayOffsets map[string][]int
 }
 
 type Resolver func(ctx context.Context, ch store.Channel) (notify.Notifier, error)
@@ -139,10 +142,23 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	today := domain.DateFromTime(now)
 
 	maxOff := maxOffset(snap.DefaultOffsets)
+	// Holiday sources can remind further out than the default offsets — widen
+	// the scan window to cover the widest enabled category.
+	holidayMaxOff := maxOff
+	for _, p := range s.Providers {
+		if !snap.HolidayCategories[p.Category()] {
+			continue
+		}
+		if offs := snap.HolidayOffsets[p.Category()]; len(offs) > 0 {
+			if m := maxOffset(offs); m > holidayMaxOff {
+				holidayMaxOff = m
+			}
+		}
+	}
 	catchUpDays := (snap.CatchUpHours + 23) / 24
 	lookback := maxOff + catchUpDays + 2
 	from := today.AddDays(-lookback)
-	to := today.AddDays(maxOff + 2)
+	horizon := today.AddDays(holidayMaxOff + 2)
 
 	// ---- occasions ----
 	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: all contacts
@@ -196,14 +212,20 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		if !snap.HolidayCategories[p.Category()] {
 			continue
 		}
-		hs, err := p.HolidaysBetween(ctx, from, to)
+		// Per-category offsets; a category without its own list falls back to
+		// the global default offsets (pre-customization behavior).
+		offs := snap.HolidayOffsets[p.Category()]
+		if len(offs) == 0 {
+			offs = snap.DefaultOffsets
+		}
+		hs, err := p.HolidaysBetween(ctx, from, horizon)
 		if err != nil {
 			// remote provider failed → skip; computed pawukon keeps working
 			continue
 		}
 		for _, h := range hs {
 			hkey := HolidayKey(p.Category(), h)
-			for _, off := range snap.DefaultOffsets {
+			for _, off := range offs {
 				rDate := h.Date.AddDays(-off)
 				sendAt := time.Date(rDate.Year, time.Month(rDate.Month), rDate.Day, sendHH, sendMM, 0, 0, loc)
 				if sendAt.After(now) {

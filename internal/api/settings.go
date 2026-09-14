@@ -10,11 +10,12 @@ import (
 )
 
 type Settings struct {
-	Timezone          string          `json:"timezone"`
-	SendTime          string          `json:"send_time"`
-	CatchUpHours      int             `json:"catch_up_hours"`
-	DefaultOffsets    []int           `json:"default_offsets"`
-	HolidayCategories map[string]bool `json:"holiday_categories"`
+	Timezone          string              `json:"timezone"`
+	SendTime          string              `json:"send_time"`
+	CatchUpHours      int                 `json:"catch_up_hours"`
+	DefaultOffsets    []int               `json:"default_offsets"`
+	HolidayCategories map[string]bool     `json:"holiday_categories"`
+	HolidayOffsets    map[string][]int    `json:"holiday_offsets"`
 }
 
 func DefaultSettings() Settings {
@@ -26,6 +27,8 @@ func DefaultSettings() Settings {
 		HolidayCategories: map[string]bool{
 			"pawukon": true, "saka": true, "national": true,
 		},
+		// Empty per-category lists fall back to DefaultOffsets at scheduling time.
+		HolidayOffsets: map[string][]int{},
 	}
 }
 
@@ -53,6 +56,9 @@ func (s *Server) LoadSettings(ctx context.Context) Settings {
 	if stored.HolidayCategories != nil {
 		out.HolidayCategories = stored.HolidayCategories
 	}
+	if stored.HolidayOffsets != nil {
+		out.HolidayOffsets = stored.HolidayOffsets
+	}
 	return out
 }
 
@@ -75,6 +81,14 @@ func (s *Server) SaveSettings(ctx context.Context, in Settings) (Settings, error
 	for _, cat := range []string{"pawukon", "saka", "national"} {
 		if _, ok := in.HolidayCategories[cat]; !ok {
 			in.HolidayCategories[cat] = false
+		}
+	}
+	if in.HolidayOffsets == nil {
+		in.HolidayOffsets = map[string][]int{}
+	}
+	for cat, offs := range in.HolidayOffsets {
+		if err := domain.ValidateOffsets(offs); err != nil {
+			return Settings{}, fmt.Errorf("holiday_offsets[%q]: %w", cat, err)
 		}
 	}
 	if err := s.st.PutSettingJSON(ctx, "settings", in); err != nil {

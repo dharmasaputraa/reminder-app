@@ -44,4 +44,5 @@ export interface Channel { id: number; type: string; name: string; enabled: bool
 export interface Settings {
   timezone: string; send_time: string; catch_up_hours: number
   default_offsets: number[]; holiday_categories: Record<string, boolean>
+  holiday_offsets: Record<string, number[]>
 }
