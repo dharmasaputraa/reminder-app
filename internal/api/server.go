@@ -71,6 +71,7 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 	apiG.DELETE("/occasions/:id", s.handleDeleteOccasion)
 	apiG.PUT("/contacts/:id/prefs", s.handleSetPrefs)
 	apiG.GET("/upcoming", s.handleUpcoming)
+	apiG.POST("/upcoming/notify", s.handleUpcomingNotify)
 	apiG.GET("/pawukon", s.handlePawukon)
 	apiG.GET("/channels", s.handleListChannels)
 	apiG.POST("/channels", s.handleCreateChannel)

@@ -31,6 +31,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ChevronRight } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
@@ -148,7 +149,7 @@ function Dashboard() {
     return (
       <div className="space-y-3">
         <Skeleton className="h-8 w-56" />
-        <Skeleton className="h-[560px] w-full rounded-xl" />
+        <Skeleton className="h-[720px] w-full rounded-xl" />
         <Skeleton className="h-16 w-full rounded-xl" />
         <Skeleton className="h-16 w-full rounded-xl" />
       </div>
@@ -195,7 +196,11 @@ function Dashboard() {
             e.preventDefault()
             if (occurrence.event.data) setDetailItem(occurrence.event.data)
           }}
-          className="h-[560px] w-full"
+          // Two event rows per cell, "+N more" beyond that; the calendar height
+          // below is sized so 2 lanes + the "+N more" chip + the day number fit
+          // even in a 6-week month.
+          maxEventsPerCell={2}
+          className="h-[720px] w-full"
         >
           <div className="flex flex-wrap items-center gap-2 pe-2">
             <EventCalendarNav className="min-w-0 flex-1">
@@ -234,8 +239,22 @@ function Dashboard() {
         {monthEvents.map((e) => {
           const it = e.data
           if (!it) return null
+          const open = () => setDetailItem(it)
           return (
-            <Card key={e.id} className="flex-row items-center gap-3 p-3">
+            <Card
+              key={e.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open ${it.title}`}
+              onClick={open}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault()
+                  open()
+                }
+              }}
+              className="flex-row items-center gap-3 p-3 text-left transition-colors outline-none cursor-pointer hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
               <Badge className={`h-11 w-11 rounded-full text-xs font-bold ${urgencyClass(it.days_until)}`}>
                 {it.days_until <= 0 ? 'TODAY' : `D-${it.days_until}`}
               </Badge>
@@ -251,6 +270,7 @@ function Dashboard() {
                   <Badge key={r} variant="secondary">D-{r}</Badge>
                 ))}
               </div>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </Card>
           )
         })}
