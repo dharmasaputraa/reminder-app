@@ -66,7 +66,7 @@ func TestContactFlow(t *testing.T) {
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	base := today.AddDays(-domain.PawukonCycleDays)
-	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": base.String()})
+	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": base.String()})
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
 	if w.Code != 201 {
@@ -99,7 +99,7 @@ func TestContactJSONSnakeCase(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
-		`{"type":"otongan","date":"1990-05-12"}`))
+		`{"type":"otonan","date":"1990-05-12"}`))
 	if w.Code != 201 {
 		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
 	}
@@ -289,7 +289,7 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	// use the global default reminders because prefs.offsets is empty.
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
-	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
+	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
 	if w.Code != 201 {

@@ -19,7 +19,7 @@ CREATE INDEX idx_contacts_owner ON contacts(owner_id);
 CREATE TABLE occasions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('birthday','otongan','anniversary')),
+  type TEXT NOT NULL CHECK (type IN ('birthday','otonan','anniversary')),
   base_date TEXT NOT NULL,
   label TEXT NOT NULL DEFAULT ''
 );

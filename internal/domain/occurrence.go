@@ -6,7 +6,7 @@ type OccurrenceType string
 
 const (
 	Birthday    OccurrenceType = "birthday"
-	Otonan      OccurrenceType = "otongan"
+	Otonan      OccurrenceType = "otonan"
 	Anniversary OccurrenceType = "anniversary"
 )
 
