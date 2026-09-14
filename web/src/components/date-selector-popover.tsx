@@ -55,6 +55,7 @@ export function DateSelectorPopover({
   maxYear,
   weekStartsOn,
   className = "w-56 justify-start",
+  labelClassName,
   align = "start",
   showFilterTypes = true,
   allowRange = true,
@@ -71,6 +72,9 @@ export function DateSelectorPopover({
   maxYear?: number
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
   className?: string
+  /** Class for the trigger label span — lets a consumer hide the text on
+   *  small screens and keep the calendar icon only. */
+  labelClassName?: string
   align?: "start" | "end" | "center"
   showFilterTypes?: boolean
   allowRange?: boolean
@@ -118,7 +122,7 @@ export function DateSelectorPopover({
         render={
           <Button variant="outline" className={className}>
             <CalendarIcon />
-            {displayText}
+            <span className={labelClassName}>{displayText}</span>
           </Button>
         }
       />

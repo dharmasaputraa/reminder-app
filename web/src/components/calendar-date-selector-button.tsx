@@ -12,11 +12,19 @@ import {
  * Apply anchors the calendar on that period's first day. Must be rendered
  * inside <EventCalendar> so it can use the navigation context.
  */
-export function CalendarDateSelectorButton() {
+export function CalendarDateSelectorButton({
+  className,
+  labelClassName,
+}: {
+  className?: string
+  labelClassName?: string
+} = {}) {
   const { goTo } = useEventCalendarNavigation()
   const thisYear = new Date().getFullYear()
   return (
     <DateSelectorPopover
+      className={className}
+      labelClassName={labelClassName}
       value={undefined}
       onApply={(value) => {
         const target = dateSelectorValueToDate(value)

@@ -95,7 +95,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <div className="border-b bg-muted/30">
+        {/* md+ only: the mobile sheet sidebar already carries these links */}
+        <div className="hidden border-b bg-muted/30 md:block">
           <div className="mx-auto flex h-10 w-full max-w-5xl items-center gap-1 px-4 lg:max-w-[1400px] lg:px-6">
             {NAV_SECTIONS[0].items.map((item) => {
               const Icon = item.icon

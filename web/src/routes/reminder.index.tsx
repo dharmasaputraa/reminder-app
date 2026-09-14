@@ -355,28 +355,36 @@ function Dashboard() {
             maxEventsPerCell={2}
             className="h-[720px] w-full"
           >
-            <div className="flex flex-wrap items-center gap-2 pe-2">
+            {/* Below sm the controls stack into two deliberate rows — navigation
+                on top, period/utility beneath — instead of an arbitrary wrap;
+                sm+ keeps the single wrapping row. */}
+            <div className="flex flex-col gap-2 pe-2 sm:flex-row sm:flex-wrap sm:items-center">
               <EventCalendarNav className="min-w-0 flex-1">
                 <TooltipProvider delay={600} closeDelay={0} timeout={300}>
                   <EventCalendarNavToday />
-                  {/* the side agenda owns the agenda at lg, so its switcher
-                      would be a dead end there */}
-                  <div className="lg:hidden">
-                    <EventCalendarViewSwitcher />
-                  </div>
                   <div className="flex items-center">
                     <EventCalendarNavPrev />
                     <EventCalendarNavNext />
                   </div>
                   {/* ms-3 sets the title apart from the tight control cluster so the
                       period reads as its own group, not another button */}
-                  <EventCalendarTitle className="ms-3" />
+                  <EventCalendarTitle className="ms-1 min-w-0 sm:ms-3" />
                   {yearsLoading && <span className="ms-2 text-xs text-muted-foreground">loading…</span>}
                   <div className="grow" />
                 </TooltipProvider>
               </EventCalendarNav>
               <EventCalendarToolbar>
-                <CalendarDateSelectorButton />
+                {/* the side agenda owns the agenda at lg, so its switcher would be
+                    a dead end there; on phones it leads the utility row */}
+                <div className="grow sm:grow-0 lg:hidden">
+                  <EventCalendarViewSwitcher />
+                </div>
+                {/* icon-only on phones: the calendar glyph reads fine and the
+                    label would crowd the row */}
+                <CalendarDateSelectorButton
+                  className="size-9 justify-center px-0 sm:size-auto sm:px-3"
+                  labelClassName="hidden sm:inline"
+                />
                 <CalendarSettingsButton
                   settings={settings}
                   onPatch={patch}
