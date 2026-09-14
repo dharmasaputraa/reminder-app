@@ -127,16 +127,21 @@ function Dashboard() {
   const todayYear = up.data?.today ? Number(up.data.today.slice(0, 4)) : new Date().getFullYear()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
-  // Visible calendar month, owned by the URL (`?month=`); null = no param yet,
-  // so the calendar stays uncontrolled and shows today.
+  // Visible calendar month, owned by the URL (`?month=`); null = no param yet.
+  // The calendar is remounted at this month's 1st whenever it changes (key=
+  // below) and stays uncontrolled inside a month so agenda stepping works.
   const visibleDate = search.month ? localMidnight(`${search.month}-01`) : null
   // Replace-navigation: browsing months rewrites one history entry instead of
-  // piling one up per month (spec: month replace, event push).
-  const setMonthParam = (d: Date) =>
+  // piling one up per month (spec: month replace, event push). A step within
+  // the same month is left to the calendar's internal state (no-op here).
+  const setMonthParam = (d: Date) => {
+    const month = format(d, 'yyyy-MM')
+    if (month === search.month) return
     navigate({
-      search: (prev: ReminderSearch) => ({ ...prev, month: format(d, 'yyyy-MM') }),
+      search: (prev: ReminderSearch) => ({ ...prev, month }),
       replace: true,
     })
+  }
   const yearAnchor = visibleDate?.getFullYear() ?? todayYear
   // ±1 year around the anchor is fetched at once → year jumps are already filled
   // before being clicked (prefetch), and each year is cached separately in react-query.
@@ -263,8 +268,9 @@ function Dashboard() {
             view={isLg ? 'month' : view}
             views={['month', 'agenda']}
             onViewChange={setView}
-            date={visibleDate ?? undefined}
-            defaultDate={up.data?.today ? localMidnight(up.data.today) : new Date()}
+            // Uncontrolled within a month; key remounts at its 1st when the URL month changes.
+            key={search.month ?? 'today'}
+            defaultDate={visibleDate ?? (up.data?.today ? localMidnight(up.data.today) : new Date())}
             viewSettings={settings.viewSettings}
             onViewSettingsChange={(viewSettings) => patch({ viewSettings })}
             interactions={{ drag: false, resize: false, selectSlot: false }}
