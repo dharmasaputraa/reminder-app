@@ -33,18 +33,96 @@ func TestDayOffAPIParse(t *testing.T) {
 	}
 }
 
+const hariliburFixture = `[{"holiday_date":"2026-12-25","holiday_name":"Hari Raya Natal","is_national_holiday":true},
+	{"holiday_date":"2026-10-31","holiday_name":"Hari Saraswati","is_national_holiday":false}]`
+
 func TestKresnaParseWrapped(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `{"data":[{"holiday_date":"2026-06-17","holiday_name":"Galungan"}]}`)
+		io.WriteString(w, `{"data":`+hariliburFixture+`}`)
 	}))
 	defer srv.Close()
 	k := NewKresna(srv.URL)
-	hs, err := k.HolidaysBetween(context.Background(), domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30))
+	hs, err := k.HolidaysBetween(context.Background(), domain.NewDate(2026, 6, 1), domain.NewDate(2026, 12, 31))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hs) != 1 || hs[0].Name != "Galungan" {
+	if len(hs) != 2 || hs[0].Name != "Hari Raya Natal" {
 		t.Errorf("hs = %+v", hs)
+	}
+}
+
+// TestKresnaNationalFilter: one source, two categories — nationalOnly=true
+// keeps is_national_holiday items, false keeps the Bali/Saka remainder.
+func TestKresnaNationalFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, hariliburFixture)
+	}))
+	defer srv.Close()
+	nat := NewKresnaFiltered(srv.URL, "", true)
+	saka := NewKresnaFiltered(srv.URL, "", false)
+	if nat.Name() != "harilibur-national" || nat.Category() != "national" {
+		t.Errorf("nat name/category = %q/%q", nat.Name(), nat.Category())
+	}
+	if saka.Name() != "harilibur-saka" || saka.Category() != "saka" {
+		t.Errorf("saka name/category = %q/%q", saka.Name(), saka.Category())
+	}
+	ctx := context.Background()
+	nhs, err := nat.HolidaysBetween(ctx, domain.NewDate(2026, 12, 1), domain.NewDate(2026, 12, 31))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nhs) != 1 || nhs[0].Name != "Hari Raya Natal" {
+		t.Errorf("national hs = %+v", nhs)
+	}
+	shs, err := saka.HolidaysBetween(ctx, domain.NewDate(2026, 10, 1), domain.NewDate(2026, 10, 31))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shs) != 1 || shs[0].Name != "Hari Saraswati" {
+		t.Errorf("saka hs = %+v", shs)
+	}
+}
+
+// TestKresnaFallbackMirror: primary mirror down (e.g. 402/5xx) → one retry on
+// the fallback mirror before the provider reports failure.
+func TestKresnaFallbackMirror(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Payment required\n\nDEPLOYMENT_DISABLED", http.StatusPaymentRequired)
+	}))
+	defer primary.Close()
+	fallbackCalled := false
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackCalled = true
+		io.WriteString(w, `[{"holiday_date":"2026-12-25","holiday_name":"Hari Raya Natal","is_national_holiday":true}]`)
+	}))
+	defer fallback.Close()
+	k := NewKresnaFiltered(primary.URL, fallback.URL, true)
+	hs, err := k.HolidaysBetween(context.Background(), domain.NewDate(2026, 12, 1), domain.NewDate(2026, 12, 31))
+	if err != nil {
+		t.Fatalf("fallback must recover: %v", err)
+	}
+	if !fallbackCalled {
+		t.Error("fallback mirror was not called")
+	}
+	if len(hs) != 1 || hs[0].Name != "Hari Raya Natal" {
+		t.Errorf("hs = %+v", hs)
+	}
+}
+
+// TestKresnaBothMirrorsFail: no fallback configured (or both down) → error,
+// which CachedRemote degrades per its own policy.
+func TestKresnaBothMirrorsFail(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusInternalServerError)
+	}))
+	defer down.Close()
+	k := NewKresnaFiltered(down.URL, down.URL, true)
+	_, err := k.HolidaysBetween(context.Background(), domain.NewDate(2026, 12, 1), domain.NewDate(2026, 12, 31))
+	if err == nil {
+		t.Fatal("both mirrors down must produce an error")
+	}
+	if !strings.Contains(err.Error(), "status 500") {
+		t.Errorf("err = %v, want it to contain \"status 500\"", err)
 	}
 }
 
@@ -215,7 +293,7 @@ func TestKresnaStatusCheck(t *testing.T) {
 		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	defer srv.Close()
-	k := NewKresna(srv.URL)
+	k := NewKresna(srv.URL) // no fallback → single attempt
 	_, err := k.HolidaysBetween(context.Background(), domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30))
 	if err == nil {
 		t.Fatal("404 must produce an error")
