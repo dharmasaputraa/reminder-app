@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { api, type UpcomingItem } from '../lib/api'
 import { pageTitle } from '../lib/page-title'
 import {
+  findReminderItem,
+  reminderEventId,
   validateReminderSearch,
   type ReminderSearch,
 } from '../lib/reminder-search'
@@ -156,6 +158,7 @@ function Dashboard() {
   )
   const events = useMemo(() => calendarItems.map(toCalendarEvent), [calendarItems])
   const yearsLoading = yearQueries.some((q) => q.isLoading)
+  const yearsSettled = yearQueries.every((q) => q.isSuccess)
 
   // The side agenda (and the card list below lg) shows the events of the month
   // currently displayed on the calendar, sorted by date.
@@ -193,16 +196,65 @@ function Dashboard() {
   // detail surface, a day click scrolls the agenda to that day. Below lg the
   // same clicks keep using the dialogs (the agenda panel doesn't exist there).
   const [dayDialogDate, setDayDialogDate] = useState<Date | null>(null)
-  const [detailItem, setDetailItem] = useState<UpcomingItem | null>(null)
-  const [dialogDetail, setDialogDetail] = useState<UpcomingItem | null>(null)
 
-  const openDetail = (it: UpcomingItem) => {
-    if (isLg) {
-      setDetailItem(it)
-      setAgendaOpen(true)
-    } else {
-      setDialogDetail(it)
+  // Event detail is owned by the URL (`?event=`): the side panel (lg) and the
+  // below-lg dialog resolve the same param against the fetched items.
+  const resolvedEvent = useMemo(
+    () =>
+      search.event ? findReminderItem(calendarItems, search.event) : undefined,
+    [calendarItems, search.event]
+  )
+  const detailItem = resolvedEvent ?? null
+
+  // Deep link + self-healing: a bare `event` param gets its month inferred —
+  // holiday ids carry the date (`holiday-2026-03-11` → `2026-03`), occasions
+  // once they resolve — so the right year loads. A well-formed id that no
+  // loaded year knows is stripped once the anchor years have settled.
+  useEffect(() => {
+    const eventId = search.event
+    if (!eventId) return
+    if (!search.month) {
+      const target =
+        resolvedEvent?.date.slice(0, 7) ??
+        (eventId.startsWith('holiday-') ? eventId.slice(8, 14) : undefined)
+      if (target) {
+        navigate({
+          search: (prev: ReminderSearch) => ({ ...prev, month: target }),
+          replace: true,
+        })
+        return
+      }
     }
+    if (yearsSettled && !resolvedEvent) {
+      navigate(
+        { search: (prev: ReminderSearch) => ({ month: prev.month }), replace: true }
+      )
+    }
+  }, [search.event, search.month, resolvedEvent, yearsSettled, navigate])
+
+  /** Open detail: push, so browser Back closes the panel/dialog. The month
+   *  param rides along when missing, keeping shared URLs self-contained. */
+  const openDetail = (it: UpcomingItem) => {
+    const event = reminderEventId(it)
+    if (!event) return
+    if (isLg) setAgendaOpen(true)
+    navigate({
+      search: (prev: ReminderSearch) => ({
+        ...prev,
+        month: prev.month ?? format(visibleMonth, 'yyyy-MM'),
+        event,
+      }),
+    })
+  }
+
+  /** Close detail: replace-drop the param (keep `month`) so no stale history
+   *  entry reopens it later; no-op when nothing is open. */
+  const closeDetail = () => {
+    if (!search.event) return
+    navigate({
+      search: (prev: ReminderSearch) => ({ month: prev.month }),
+      replace: true,
+    })
   }
 
   /** Scroll the agenda list to a day's group, unfolding it first if needed.
@@ -286,7 +338,7 @@ function Dashboard() {
             onSlotClick={(slot) => {
               if (isLg) {
                 // back to the list, then glide to the clicked day
-                setDetailItem(null)
+                closeDetail()
                 setAgendaOpen(true)
                 scrollAgendaToDay(slot.date)
               } else {
@@ -370,7 +422,7 @@ function Dashboard() {
               events={monthEvents}
               month={visibleMonth}
               detailItem={detailItem}
-              onBack={() => setDetailItem(null)}
+              onBack={closeDetail}
               collapsedDays={collapsedDays}
               onToggleDay={(key) =>
                 setCollapsedDays((prev) => {
@@ -446,9 +498,9 @@ function Dashboard() {
             }}
           />
           <EventDetailDialog
-            item={dialogDetail}
+            item={detailItem}
             onOpenChange={(open) => {
-              if (!open) setDialogDetail(null)
+              if (!open) closeDetail()
             }}
           />
         </>
