@@ -12,8 +12,12 @@ export interface ReminderSearch {
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 const EVENT_RE = /^(occasion-\d+|holiday-\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]))$/
 
-/** Route `validateSearch`: keeps only well-formed params, drops the rest so a
- *  bad URL self-cleans instead of erroring. */
+/** Route `validateSearch`: invalid params are overwritten with undefined.
+ *  NOTE: this router version merges the validator's return over the raw
+ *  search (Object.assign in router-core), so simply omitting an invalid key
+ *  would leave its raw value in the typed search. Writing undefined clears
+ *  it, and the search serializer drops undefined values, so the URL cleans
+ *  itself up on the next navigation. */
 export function validateReminderSearch(
   search: Record<string, unknown>
 ): ReminderSearch {
@@ -25,7 +29,7 @@ export function validateReminderSearch(
     typeof search.event === 'string' && EVENT_RE.test(search.event)
       ? search.event
       : undefined
-  return { ...(month && { month }), ...(event && { event }) }
+  return { month, event }
 }
 
 /** Stable URL identity for an item. Occasions are keyed by id (two different
