@@ -268,7 +268,7 @@ CREATE INDEX idx_contacts_owner ON contacts(owner_id);
 CREATE TABLE occasions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('birthday','otongan','anniversary')),
+  type TEXT NOT NULL CHECK (type IN ('birthday','otonan','anniversary')),
   base_date TEXT NOT NULL,
   label TEXT NOT NULL DEFAULT ''
 );
@@ -2136,7 +2136,7 @@ func TestContactFlow(t *testing.T) {
 	// for a 30-day window (random dates often fall outside the window → flaky).
 	today := domain.DateFromTime(time.Now())
 	base := today.AddDays(-domain.PawukonCycleDays)
-	ocBody, _ := json.Marshal(map[string]string{"type": "otongan", "date": base.String()})
+	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": base.String()})
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
 	if w.Code != 201 { t.Fatalf("add occasion: %d %s", w.Code, w.Body.String()) }

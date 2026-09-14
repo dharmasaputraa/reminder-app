@@ -24,6 +24,10 @@ function applyTheme(theme: Theme) {
     theme === 'dark' ||
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   document.documentElement.classList.toggle('dark', dark)
+  // The favicon is rendered by the browser, outside the page's CSS, so it needs
+  // an explicit white/black variant swap instead of following text-foreground.
+  const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  if (favicon) favicon.href = dark ? '/favicon-dark.svg' : '/favicon.svg'
 }
 
 let currentTheme: Theme = getStoredTheme()

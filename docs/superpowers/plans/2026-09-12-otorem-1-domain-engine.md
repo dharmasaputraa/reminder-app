@@ -504,7 +504,7 @@ git commit -m "feat(domain): kalenderbali.org fixture scraper + daily fixture te
 
 ---
 
-### Task 4: Occurrence engine (otongan / birthday / anniversary)
+### Task 4: Occurrence engine (otonan / birthday / anniversary)
 
 **Files:**
 - Create: `internal/domain/occurrence.go`
@@ -598,7 +598,7 @@ type OccurrenceType string
 
 const (
 	Birthday    OccurrenceType = "birthday"
-	Otonan      OccurrenceType = "otongan"
+	Otonan      OccurrenceType = "otonan"
 	Anniversary OccurrenceType = "anniversary"
 )
 
@@ -704,7 +704,7 @@ Expected: all PASS. Note on TestOccurrencesBetween: 4 occurrences (210/420/630/8
 ```bash
 gofmt -w internal/ && go vet ./...
 git add internal/
-git commit -m "feat(domain): occurrence engine (otongan 210d, birthday feb29, anniversary)"
+git commit -m "feat(domain): occurrence engine (otonan 210d, birthday feb29, anniversary)"
 ```
 
 ---

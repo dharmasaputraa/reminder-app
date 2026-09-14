@@ -56,9 +56,9 @@ compares against notification_log (dedupe) → sends via Notifier (retry) → re
 users            (id, email UNIQUE, name, role CHECK(admin|member), created_at)
                  -- auto-provisioned from Cloudflare Access email claim; ADMIN_EMAILS env → admin
 contacts         (id, owner_id→users, name, nickname, notes, created_at)
-occasions        (id, contact_id→contacts, type CHECK(birthday|otongan|anniversary),
+occasions        (id, contact_id→contacts, type CHECK(birthday|otonan|anniversary),
                   base_date DATE, label TEXT, created_at)
-                 -- birthday/otongan: base_date = date of birth; anniversary: arbitrary date
+                 -- birthday/otonan: base_date = date of birth; anniversary: arbitrary date
 reminder_prefs   (id, contact_id UNIQUE→contacts, offsets JSON, channel_ids JSON,
                   enabled BOOL DEFAULT 1)   -- per-contact override; NULL = use global default
 channels         (id, owner_id→users, type CHECK(gotify|telegram|email), name,
@@ -100,7 +100,7 @@ wuku[cycleDay]      = WUKU30[ceil(cycleDay/7)]       # 30 names: Sinta, Landep, 
 
 ### 5.2 Occurrence & reminders
 
-- **otongan**: `otonganKeN(birthDate, N) = birthDate + 210·N`. The next one is the smallest N whose
+- **otonan**: `otonganKeN(birthDate, N) = birthDate + 210·N`. The next one is the smallest N whose
   date is ≥ today. Label: `"{Saptawara} {Pancawara}, Wuku {Wuku}"` + `"Otonan ke-N"`.
   Consistency: pawukon(birthDate) must equal pawukon(otonan date) (asserted in tests).
 - **birthday**: annual; **Feb 29 → Mar 1 in non-leap years** (dateutil convention, documented
@@ -249,7 +249,7 @@ dual i18n, a native mobile app, iCal export (easy to add later), multi-instance 
 
 ## 16. Open Assumptions (please confirm during review)
 
-1. The `otongan` type in v1 = **a 210-day cycle from the date of birth** labeled saptawara+pancawara+wuku.
+1. The `otonan` type in v1 = **a 210-day cycle from the date of birth** labeled saptawara+pancawara+wuku.
 2. The Pawukon anchor is locked via published Galungan dates + kalenderbali.org fixtures (5.1).
 3. UI language: a natural mix, in Indonesian (holiday & pawukon labels keep Balinese terms).
 4. Lightweight multi-user: can all users see all contacts? **Default: per-user (owner), admin sees everything.**

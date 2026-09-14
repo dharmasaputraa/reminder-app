@@ -398,7 +398,7 @@ Open `http://localhost:5173` → enter an email at the prompt → the Dashboard 
 curl -s -X POST -H 'X-Dev-Email: admin@x.id' -H 'Content-Type: application/json' \
   -d '{"name":"Made"}' localhost:8080/api/v1/contacts
 curl -s -X POST -H 'X-Dev-Email: admin@x.id' -H 'Content-Type: application/json' \
-  -d "{\"type\":\"otongan\",\"date\":\"$(date -u +%F -d '-210 days' 2>/dev/null || date -v-210d -u +%F)\"}" \
+  -d "{\"type\":\"otonan\",\"date\":\"$(date -u +%F -d '-210 days' 2>/dev/null || date -v-210d -u +%F)\"}" \
   localhost:8080/api/v1/contacts/1/occasions
 ```
 Expected: an "Otonan ke-1 …" item appears on the dashboard with a red H-0 badge.
@@ -477,7 +477,7 @@ import { api, type Channel, type Contact, type Settings } from '../lib/api'
 export const Route = createFileRoute('/contacts/$id')({ component: ContactDetail })
 
 const TIPE: { value: string; label: string }[] = [
-  { value: 'otongan', label: 'Otonan (Pawukon 210 hari)' },
+  { value: 'otonan', label: 'Otonan (Pawukon 210 hari)' },
   { value: 'birthday', label: 'Ulang tahun' },
   { value: 'anniversary', label: 'Anniversary' },
 ]
@@ -490,7 +490,7 @@ function ContactDetail() {
   const channels = useQuery({ queryKey: ['channels'], queryFn: () => api<{ channels: Channel[] }>('/channels') })
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
 
-  const [type, setType] = useState('otongan')
+  const [type, setType] = useState('otonan')
   const [date, setDate] = useState('')
   const [pawukon, setPawukon] = useState('')
   const [offsets, setOffsets] = useState('')
@@ -498,7 +498,7 @@ function ContactDetail() {
 
   async function previewPawukon(d: string) {
     setPawukon('')
-    if (!d || type !== 'otongan') return
+    if (!d || type !== 'otonan') return
     try { setPawukon((await api<{ label: string }>(`/pawukon?date=${d}`)).label) } catch { /* stay silent */ }
   }
 
@@ -611,7 +611,7 @@ Note for the engineer: channel checkboxes use `defaultChecked` + mutate immediat
 ```bash
 npm run build
 ```
-Expected: success. Manually: add a contact → add an otongan occasion → the pawukon preview appears → toggling a channel persists (still checked after refresh).
+Expected: success. Manually: add a contact → add an otonan occasion → the pawukon preview appears → toggling a channel persists (still checked after refresh).
 
 ```bash
 git add web/ && git commit -m "feat(web): crud kontak, occasions, prefs dengan preview pawukon"

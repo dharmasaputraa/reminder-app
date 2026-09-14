@@ -706,7 +706,7 @@ Expected: green.
 
 - [ ] **Step 4: Visual verification**
 
-`/contacts`: add a contact, a card appears with the initials avatar. Open the detail: pick a date via the calendar popover → the pawukon preview appears for the otongan type; add an occasion → the list grows with a type badge; toggle active + save preferences → no errors; delete an occasion & delete the contact via AlertDialog (deleting the contact returns to the list).
+`/contacts`: add a contact, a card appears with the initials avatar. Open the detail: pick a date via the calendar popover → the pawukon preview appears for the otonan type; add an occasion → the list grows with a type badge; toggle active + save preferences → no errors; delete an occasion & delete the contact via AlertDialog (deleting the contact returns to the list).
 
 - [ ] **Step 5: Commit**
 

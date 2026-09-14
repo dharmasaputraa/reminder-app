@@ -1,10 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { startOfMonth, getDaysInMonth } from 'date-fns'
 import { api, type UpcomingItem } from '../lib/api'
 import { pageTitle } from '../lib/page-title'
-import { cn } from '../lib/utils'
 import {
   CalendarSettingsButton,
   DEFAULT_CALENDAR_SETTINGS,
@@ -13,6 +11,7 @@ import {
 import { CalendarDateSelectorButton } from '@/components/calendar-date-selector-button'
 import { DayEventsDialog } from '@/components/day-events-dialog'
 import { EventDetailDialog } from '@/components/event-detail-dialog'
+import { AgendaPanel, contactAvatar } from '@/components/agenda-panel'
 import { EventCalendar } from '@/components/reui/event-calendar/event-calendar'
 import type { EventCalendarRenderEventProps } from '@/components/reui/event-calendar/event-calendar'
 import { EventCalendarContent } from '@/components/reui/event-calendar/event-calendar-content'
@@ -30,7 +29,6 @@ import type {
   CalendarView,
 } from '@/components/reui/event-calendar/event-calendar-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -97,43 +95,6 @@ function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<UpcomingIte
   }
 }
 
-// Full class names so Tailwind can see every variant at build time.
-const AVATAR_COLORS = [
-  'bg-indigo-500',
-  'bg-emerald-500',
-  'bg-rose-500',
-  'bg-sky-500',
-  'bg-violet-500',
-  'bg-amber-500',
-  'bg-teal-500',
-  'bg-orange-500',
-]
-
-function avatarColor(contactId: number | undefined): string {
-  if (!contactId) return 'bg-slate-500'
-  return AVATAR_COLORS[contactId % AVATAR_COLORS.length]
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('')
-}
-
-function contactAvatar(it: UpcomingItem) {
-  return (
-    <Avatar className="ring-background size-4 shrink-0 ring-1">
-      <AvatarFallback
-        className={cn('text-[8px] font-semibold text-white', avatarColor(it.contact_id))}
-      >
-        {initials(it.contact_name ?? '')}
-      </AvatarFallback>
-    </Avatar>
-  )
-}
-
 /** Contact avatar in place of the leading dot on occasion chips, the
  *  c-event-calendar-1 way; returning undefined keeps the built-in chip for
  *  holidays. Applies to month cells and the "+N more" popover. */
@@ -146,25 +107,6 @@ function renderEventContent({
     <>
       {contactAvatar(it)}
       <span className="truncate font-medium">{occurrence.event.title}</span>
-    </>
-  )
-}
-
-/** Agenda rows replace the color dot with the contact avatar; the rest of the
- *  default row (time column, title) is mirrored. Our events are date-only, so
- *  the time column is always the all-day label. */
-function renderAgendaEventContent({
-  occurrence,
-}: EventCalendarRenderEventProps<UpcomingItem>) {
-  const it = occurrence.event.data
-  if (!it || it.kind !== 'occasion' || !it.contact_name) return undefined
-  return (
-    <>
-      <span className="text-muted-foreground w-40 shrink-0 truncate tabular-nums">
-        All day
-      </span>
-      {contactAvatar(it)}
-      <span className="truncate text-sm">{occurrence.event.title}</span>
     </>
   )
 }
@@ -194,8 +136,8 @@ function Dashboard() {
   const events = useMemo(() => calendarItems.map(toCalendarEvent), [calendarItems])
   const yearsLoading = yearQueries.some((q) => q.isLoading)
 
-  // The list under the calendar shows the events of the month currently
-  // displayed on the calendar (holidays included), sorted by date.
+  // The side agenda (and the card list below lg) shows the events of the month
+  // currently displayed on the calendar, sorted by date.
   const visibleMonth = visibleDate ?? (up.data?.today ? localMidnight(up.data.today) : new Date())
   const monthEvents = useMemo(
     () =>
@@ -208,16 +150,6 @@ function Dashboard() {
         .sort((a, b) => a.start.getTime() - b.start.getTime()),
     [events, visibleMonth]
   )
-  // lg+: the right-side agenda mirrors the month shown on the calendar. Keyed
-  // by month, not identity — a fresh Date per render would invalidate the
-  // agenda calendar's controlled `date` on every render.
-  const visibleMonthKey = `${visibleMonth.getFullYear()}-${visibleMonth.getMonth()}`
-  const agendaStart = useMemo(
-    () => startOfMonth(visibleMonth),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleMonthKey]
-  )
-  const agendaDays = getDaysInMonth(agendaStart)
 
   // Calendar settings panel (c-event-calendar-1 pattern): one resettable
   // object flowing into <EventCalendar> as controlled props.
@@ -232,11 +164,49 @@ function Dashboard() {
   // calendar is pinned to month there); below lg the view switcher returns.
   const isLg = useIsLg()
   const [agendaOpen, setAgendaOpen] = useState(true)
+  // Folded agenda day groups (key = event-start ms).
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
+  const agendaRef = useRef<HTMLDivElement | null>(null)
 
-  // Click targets: an empty date cell → the day's full view; an event chip →
-  // its detail modal (preventDefault opts out of the built-in selection).
+  // Click targets: at lg both land in the side agenda — an event chip opens the
+  // detail surface, a day click scrolls the agenda to that day. Below lg the
+  // same clicks keep using the dialogs (the agenda panel doesn't exist there).
   const [dayDialogDate, setDayDialogDate] = useState<Date | null>(null)
   const [detailItem, setDetailItem] = useState<UpcomingItem | null>(null)
+  const [dialogDetail, setDialogDetail] = useState<UpcomingItem | null>(null)
+
+  const openDetail = (it: UpcomingItem) => {
+    if (isLg) {
+      setDetailItem(it)
+      setAgendaOpen(true)
+    } else {
+      setDialogDetail(it)
+    }
+  }
+
+  /** Scroll the agenda list to a day's group, unfolding it first if needed.
+   *  Days without events have no group, so this is a no-op for them. */
+  const scrollAgendaToDay = (day: Date) => {
+    const root = agendaRef.current
+    if (!root) return
+    const key = String(day.getTime())
+    const wasCollapsed = collapsedDays.has(key)
+    if (wasCollapsed) {
+      const next = new Set(collapsedDays)
+      next.delete(key)
+      setCollapsedDays(next)
+    }
+    const scroll = () => {
+      const viewport = root.querySelector('[data-agenda-scroll]')
+      const target = root.querySelector(`[data-day="${key}"]`)
+      if (!viewport || !target) return
+      const vp = viewport.getBoundingClientRect()
+      const tg = target.getBoundingClientRect()
+      viewport.scrollTo({ top: viewport.scrollTop + (tg.top - vp.top) - 2, behavior: 'smooth' })
+    }
+    if (wasCollapsed) setTimeout(scroll, 240) // let the unfold tween finish
+    else requestAnimationFrame(scroll)
+  }
 
   if (up.isLoading)
     return (
@@ -290,10 +260,19 @@ function Dashboard() {
             offDays
             renderEvent={renderEventContent}
             onDateChange={(d) => setVisibleDate(d)}
-            onSlotClick={(slot) => setDayDialogDate(slot.date)}
+            onSlotClick={(slot) => {
+              if (isLg) {
+                // back to the list, then glide to the clicked day
+                setDetailItem(null)
+                setAgendaOpen(true)
+                scrollAgendaToDay(slot.date)
+              } else {
+                setDayDialogDate(slot.date)
+              }
+            }}
             onEventClick={(occurrence, e) => {
               e.preventDefault()
-              if (occurrence.event.data) setDetailItem(occurrence.event.data)
+              if (occurrence.event.data) openDetail(occurrence.event.data)
             }}
             // Two event rows per cell, "+N more" beyond that; the calendar height
             // below is sized so 2 lanes + the "+N more" chip + the day number fit
@@ -344,13 +323,14 @@ function Dashboard() {
             <EventCalendarContent />
           </EventCalendar>
         </div>
-        {/* lg+ replaces the card list below: the calendar's agenda view sits
+        {/* lg+ replaces the card list below: the agenda/detail panel sits
             alongside, pinned to the month the calendar is showing. Collapsible
             via the toolbar's panel button; the collapse is animated — width +
-            opacity tween, while the fixed-width inner keeps the agenda from
+            opacity tween, while the fixed-width inner keeps the panel from
             squishing mid-transition. The container's lg gap lives on the
             animated marginLeft so a collapsed panel leaves no dead space. */}
         <motion.aside
+          ref={agendaRef}
           aria-label="Agenda"
           aria-hidden={!agendaOpen}
           initial={false}
@@ -360,31 +340,25 @@ function Dashboard() {
             marginLeft: agendaOpen ? 16 : 0,
           }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="hidden h-[720px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
+          className="hidden h-[560px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
         >
           <div className="h-full w-[280px] xl:w-[340px]">
-            <EventCalendar
-              events={events}
-              view="agenda"
-              views={['agenda']}
-              date={agendaStart}
-              agendaDayCount={agendaDays}
-              // Native scrollbars sit outside the content box, so the sticky day
-              // headers span the full panel width (the custom overlay scrollbar
-              // would force a right inset on them) — and color-scheme keeps them
-              // dark.
-              scrollbars="native"
-              interactions={{ drag: false, resize: false, selectSlot: false }}
-              renderEvent={renderEventContent}
-              renderAgendaEvent={renderAgendaEventContent}
-              onEventClick={(occurrence, e) => {
-                e.preventDefault()
-                if (occurrence.event.data) setDetailItem(occurrence.event.data)
-              }}
-              className="h-full w-full"
-            >
-              <EventCalendarContent />
-            </EventCalendar>
+            <AgendaPanel
+              events={monthEvents}
+              month={visibleMonth}
+              detailItem={detailItem}
+              onBack={() => setDetailItem(null)}
+              collapsedDays={collapsedDays}
+              onToggleDay={(key) =>
+                setCollapsedDays((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(key)) next.delete(key)
+                  else next.add(key)
+                  return next
+                })
+              }
+              onOpenEvent={openDetail}
+            />
           </div>
         </motion.aside>
       </div>
@@ -397,7 +371,7 @@ function Dashboard() {
         {monthEvents.map((e) => {
           const it = e.data
           if (!it) return null
-          const open = () => setDetailItem(it)
+          const open = () => openDetail(it)
           return (
             <Card
               key={e.id}
@@ -434,23 +408,28 @@ function Dashboard() {
         })}
       </div>
 
-      <DayEventsDialog
-        date={dayDialogDate}
-        events={events}
-        onOpenChange={(open) => {
-          if (!open) setDayDialogDate(null)
-        }}
-        onOpenEvent={(it) => {
-          setDayDialogDate(null)
-          setDetailItem(it)
-        }}
-      />
-      <EventDetailDialog
-        item={detailItem}
-        onOpenChange={(open) => {
-          if (!open) setDetailItem(null)
-        }}
-      />
+      {/* Below lg the side agenda doesn't exist, so the dialogs stay. */}
+      {!isLg && (
+        <>
+          <DayEventsDialog
+            date={dayDialogDate}
+            events={events}
+            onOpenChange={(open) => {
+              if (!open) setDayDialogDate(null)
+            }}
+            onOpenEvent={(it) => {
+              setDayDialogDate(null)
+              openDetail(it)
+            }}
+          />
+          <EventDetailDialog
+            item={dialogDetail}
+            onOpenChange={(open) => {
+              if (!open) setDialogDetail(null)
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
