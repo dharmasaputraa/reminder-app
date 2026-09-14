@@ -24,6 +24,9 @@ type UpcomingItem struct {
 	Pawukon     string      `json:"pawukon,omitempty"`
 	DaysUntil   int         `json:"days_until"`
 	Reminders   []int       `json:"reminders,omitempty"`
+	// RemindersDefault: the offsets above came from the global default_offsets
+	// fallback (no per-contact prefs / per-category override).
+	RemindersDefault bool `json:"reminders_default,omitempty"`
 }
 
 func (s *Server) handleUpcoming(c *gin.Context) {
@@ -87,7 +90,8 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 	var items []UpcomingItem
 	for _, cw := range contacts {
 		offsets := settings.DefaultOffsets
-		if cw.Prefs != nil && cw.Prefs.Enabled && len(cw.Prefs.Offsets) > 0 {
+		remindersDefault := !(cw.Prefs != nil && cw.Prefs.Enabled && len(cw.Prefs.Offsets) > 0)
+		if !remindersDefault {
 			offsets = cw.Prefs.Offsets
 		}
 		for _, occ := range cw.Occasions {
@@ -100,6 +104,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 					Date: o.Date, Kind: "occasion", OccasionID: occ.ID, ContactID: cw.ID,
 					ContactName: cw.Name, Type: string(o.Type), Number: o.Number,
 					Title: o.Label, DaysUntil: o.Date.JDN() - today.JDN(), Reminders: offsets,
+					RemindersDefault: remindersDefault,
 				}
 				if occ.Type == domain.Otonan {
 					item.Pawukon = domain.Pawukon(o.Date).Label()
@@ -115,8 +120,16 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 		return
 	}
 	for _, h := range hs {
+		// Same resolution as the scheduler: per-category offsets, global
+		// default fallback (an empty Category also lands on the fallback).
+		offs := settings.HolidayOffsets[h.Category]
+		remindersDefault := len(offs) == 0
+		if remindersDefault {
+			offs = settings.DefaultOffsets
+		}
 		items = append(items, UpcomingItem{Date: h.Date, Kind: "holiday",
-			Title: h.Name, DaysUntil: h.Date.JDN() - today.JDN()})
+			Title: h.Name, DaysUntil: h.Date.JDN() - today.JDN(),
+			Reminders: offs, RemindersDefault: remindersDefault})
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {

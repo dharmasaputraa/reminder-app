@@ -36,7 +36,10 @@ func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, hs...)
+		for _, h := range hs {
+			h.Category = p.Category()
+			out = append(out, h)
+		}
 	}
 	return out, nil
 }

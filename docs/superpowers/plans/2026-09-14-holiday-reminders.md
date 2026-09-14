@@ -134,7 +134,7 @@ const hariliburFixture = `[{"holiday_date":"2026-12-25","holiday_name":"Hari Ray
 
 func TestKresnaParseWrapped(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `{"data":[`+hariliburFixture+`]}`)
+		io.WriteString(w, `{"data":`+hariliburFixture+`}`)
 	}))
 	defer srv.Close()
 	k := NewKresna(srv.URL)

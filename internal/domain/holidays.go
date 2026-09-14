@@ -24,6 +24,10 @@ var PawukonHolidayDefs = []HolidayDef{
 type Holiday struct {
 	Date Date
 	Name string
+	// Category: the source category (pawukon/saka/national), stamped by
+	// MultiProvider from the producing provider. Empty when a provider is used
+	// directly. Drives per-category reminder offsets in /upcoming.
+	Category string `json:"category,omitempty"`
 }
 
 // PawukonHolidaysBetween returns Pawukon-based holidays in [from, to].
