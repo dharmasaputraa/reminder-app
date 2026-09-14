@@ -396,3 +396,26 @@ cd /Users/taksu/Work/code/otorem && git add web/src/routes/reminder.index.tsx &&
 ```
 
 (Skip if the checklist passed with no changes.)
+
+---
+
+## Amendments during execution
+
+1. **Key-remount instead of controlled `date` prop (Tasks 2–3).** The calendar
+   stays uncontrolled and is remounted via `key={search.month}` when the URL
+   month changes, rather than receiving a controlled `date` prop. The agenda
+   view steps ±30 days internally; a controlled anchor pinned to the 1st
+   dead-ends 31-day months.
+2. **Validator overwrites invalid params with explicit `undefined` (Task 1).**
+   This router version merges `validateSearch` output over the raw search
+   (`Object.assign` in router-core), so omitting an invalid key would leave its
+   raw value in the typed search. Writing `undefined` clears it; the search
+   serializer drops undefined values, so the URL cleans itself on the next
+   navigation.
+3. **Occasion URL id includes the occurrence date (`occasion-<occasion_id>-<YYYY-MM-DD>`).**
+   Occasions recur (otonan ~every 210 days, birthdays yearly), so the fetched
+   ±1-year window holds several items with the same `occasion_id`; an id
+   without the date opened the earliest match. `reminderEventId` now appends
+   `it.date`, `EVENT_RE` and `findReminderItem()` match on id + date, and the
+   deep-link month inference reads the date suffix directly from the id
+   (`…-YYYY-MM-DD`) without waiting for data.

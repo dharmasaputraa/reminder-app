@@ -206,20 +206,17 @@ function Dashboard() {
   )
   const detailItem = resolvedEvent ?? null
 
-  // Deep link + self-healing: a bare `event` param gets its month inferred —
-  // holiday ids carry the date (`holiday-2026-03-11` → `2026-03`), occasions
-  // once they resolve — so the right year loads. The month is the 7 chars
-  // after the 8-char `holiday-` prefix (slice(8, 15)); the search validator
-  // guarantees `holiday-YYYY-MM-DD`, so it is always a well-formed `YYYY-MM`.
+  // Deep link + self-healing: a bare `event` param gets its month inferred
+  // straight from the id, so the right year loads without waiting for data.
   // A well-formed id that no loaded year knows is stripped once the anchor
   // years have settled.
   useEffect(() => {
     const eventId = search.event
     if (!eventId) return
+    // Every id form embeds its occurrence date (`…-YYYY-MM-DD`), so a bare
+    // deep link infers the month straight from the id.
     if (!search.month) {
-      const target =
-        resolvedEvent?.date.slice(0, 7) ??
-        (eventId.startsWith('holiday-') ? eventId.slice(8, 15) : undefined)
+      const target = eventId.match(/\d{4}-\d{2}-\d{2}$/)?.[0]?.slice(0, 7)
       if (target) {
         navigate({
           search: (prev: ReminderSearch) => ({ ...prev, month: target }),

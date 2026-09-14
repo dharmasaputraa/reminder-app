@@ -24,9 +24,11 @@ Reflect visible month and opened event in the URL query string so that:
 - `?month=YYYY-MM` — month displayed on the calendar. Optional; absent means
   "never navigated" (calendar shows today, URL stays clean).
 - `?event=<id>` — opened event detail. Optional. Two id forms:
-  - `occasion-<occasion_id>` (e.g. `event=occasion-42`) — occasions are
-    identified by their database id so two different occasions falling on the
-    same date never collide.
+  - `occasion-<occasion_id>-<YYYY-MM-DD>` (e.g. `event=occasion-42-2026-03-11`)
+    — occasions are identified by their database id so two different occasions
+    falling on the same date never collide, and the date names the exact
+    occurrence because a recurring occasion appears several times within the
+    fetched ±1-year window.
   - `holiday-<YYYY-MM-DD>` (e.g. `event=holiday-2026-03-11`) — holidays have
     no id; kind + date is unique for them.
 - Both params are independent. `event` without `month` resolves the month
@@ -53,6 +55,20 @@ state. Approach: route-level `validateSearch` (canonical TanStack Router
 pattern; first use in this codebase). Rejected alternatives: mirroring
 existing `useState` to the URL via effects (two sources of truth, sync loops)
 and third-party query-state libraries (overkill for two params).
+
+Execution rulings that differ from the sketch below:
+
+- The calendar stays uncontrolled with `key={search.month}` remounting it when
+  the URL month changes, instead of receiving a controlled `date` prop. The
+  agenda view steps ±30 days internally; a controlled anchor pinned to the 1st
+  dead-ends 31-day months (stepping forward from the 1st of a 31-day month
+  lands on the 1st of the next month at best, losing days), so prop-driven
+  control was rejected.
+- In this router version, `validateSearch` output is merged over the raw
+  search (`Object.assign` in router-core), so simply omitting an invalid key
+  would leave the raw value in the typed search. The validator therefore
+  overwrites invalid params with explicit `undefined`; the search serializer
+  drops undefined values, so the URL cleans itself up on the next navigation.
 
 ### Route wiring (`web/src/routes/reminder.index.tsx`)
 
