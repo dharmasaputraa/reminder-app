@@ -87,7 +87,7 @@ function Channels() {
           <Badge variant={ch.enabled ? 'default' : 'secondary'}>{ch.type}</Badge>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{ch.name}</p>
-            <p className="text-xs text-slate-400">{ch.enabled ? 'active' : 'inactive'}</p>
+            <p className="text-xs text-muted-foreground">{ch.enabled ? 'active' : 'inactive'}</p>
           </div>
           <label className="flex items-center gap-1.5 text-sm">
             <Switch

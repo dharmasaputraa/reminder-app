@@ -8,6 +8,16 @@
     <meta name="theme-color" content="#4f46e5" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>otorem — otonan & birthday reminders</title>
+    <script>
+      ;(function () {
+        try {
+          var theme = localStorage.getItem('otorem.theme')
+          if (theme !== 'light' && theme !== 'dark' && theme !== 'system') theme = 'system'
+          var dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

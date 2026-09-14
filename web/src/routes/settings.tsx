@@ -105,7 +105,7 @@ function SettingsPage() {
         </p>
       </div>
     )
-  if (!form) return <p className="text-slate-500">Loading…</p>
+  if (!form) return <p className="text-muted-foreground">Loading…</p>
   const set = (patch: Partial<Settings>) => setForm({ ...form, ...patch })
   const saveNow = () =>
     save.mutate({
@@ -190,7 +190,7 @@ function SettingsPage() {
       </Card>
 
       {me.data && (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Signed in as <b>{me.data.email}</b> ({me.data.role}) — dev mode via the X-Dev-Email header;
           production via Cloudflare Access.
         </p>

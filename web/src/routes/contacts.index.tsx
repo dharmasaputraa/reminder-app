@@ -40,7 +40,7 @@ function Contacts() {
             </Avatar>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{c.name}{c.nickname ? ` · ${c.nickname}` : ''}</p>
-              <p className="truncate text-sm text-slate-500">
+              <p className="truncate text-sm text-muted-foreground">
                 {c.occasions.length === 0
                   ? 'no occasions yet'
                   : c.occasions.map((o) => `${o.type} ${o.base_date}`).join(' · ')}

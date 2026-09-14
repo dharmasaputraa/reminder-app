@@ -2,6 +2,14 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { ChevronDown, LayoutDashboard, Menu, Radio, Settings, Users, X } from 'lucide-react'
+import { Logo } from '@/components/logo'
+import { ThemeToggle } from '@/components/theme-toggle'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -19,7 +27,6 @@ const NAV_SECTIONS = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ email: string; role: string }>('/me') })
   const email = me.data?.email ?? '…'
@@ -39,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Menu className="size-5" />
             </button>
             <Link to="/" className="flex items-center gap-2">
-              <img src="/logo-w.svg" alt="Logo otorem" className="size-6" />
+              <Logo className="size-6 shrink-0" />
             </Link>
             <nav className="ml-4 hidden items-center gap-1 md:flex">
               {NAV_SECTIONS.map((navSection) => {
@@ -60,24 +67,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )
               })}
             </nav>
-            <div className="ml-auto flex items-center gap-2">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setProfileOpen((value) => !value)}
-                  className="flex h-9 items-center gap-2 rounded-md px-2 hover:bg-muted"
+            <div className="ml-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted"
+                    />
+                  }
                 >
-                  <span className="flex size-8 items-center justify-center rounded-full border text-xs">{initial}</span>
+                  <span className="flex size-5 items-center justify-center rounded-full border text-[10px]">{initial}</span>
                   <span className="hidden text-sm font-medium md:inline">{email}</span>
                   <ChevronDown className="hidden size-3 md:block" />
-                </button>
-                {profileOpen && (
-                  <div className="absolute top-11 right-0 z-30 w-40 rounded-md border bg-popover p-1 text-sm shadow-lg">
-                    <div className="truncate px-2 py-1.5 text-xs text-muted-foreground">{email}</div>
-                    <div className="px-2 py-1.5 text-xs">{me.data?.role ?? '…'}</div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <div className="flex items-center gap-3 px-1 pt-1.5 pb-1.5">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full border text-xs">
+                      {initial}
+                    </span>
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm font-medium text-foreground">{email}</span>
+                      <span className="truncate text-xs text-muted-foreground">{me.data?.role ?? '…'}</span>
+                    </div>
                   </div>
-                )}
-              </div>
+                  <DropdownMenuSeparator />
+                  <div className="py-2.5">
+                    <ThemeToggle />
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -114,7 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <aside className="relative z-10 flex h-full w-[calc(100%-2rem)] max-w-[300px] flex-col border-r bg-background p-4 shadow-xl">
             <div className="flex items-center gap-2">
-              <img src="/logo-w.svg" alt="Logo otorem" className="size-6" />
+              <Logo className="size-6 shrink-0" />
               <button
                 type="button"
                 onClick={() => setSheetOpen(false)}

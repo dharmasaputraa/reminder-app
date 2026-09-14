@@ -4,8 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-body { @apply bg-slate-50 text-slate-900; }
-
 @theme inline {
 
  --radius-sm: calc(var(--radius) - 4px);
