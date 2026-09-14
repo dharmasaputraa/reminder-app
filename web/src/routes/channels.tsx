@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Channel } from '../lib/api'
+import { pageTitle } from '../lib/page-title'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +29,10 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-export const Route = createFileRoute('/channels')({ component: Channels })
+export const Route = createFileRoute('/channels')({
+  component: Channels,
+  head: () => ({ meta: [{ title: pageTitle('Channels') }] }),
+})
 
 const TIPE = ['gotify', 'telegram', 'email'] as const
 

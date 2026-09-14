@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Settings } from '../lib/api'
+import { pageTitle } from '../lib/page-title'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -18,7 +19,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export const Route = createFileRoute('/settings')({ component: SettingsPage })
+export const Route = createFileRoute('/settings')({
+  component: SettingsPage,
+  head: () => ({ meta: [{ title: pageTitle('Settings') }] }),
+})
 
 const KATEGORI = [
   { key: 'pawukon', label: 'Pawukon holidays (computed locally)' },

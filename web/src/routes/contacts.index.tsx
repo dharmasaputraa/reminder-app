@@ -2,12 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, type Contact } from '../lib/api'
+import { pageTitle } from '../lib/page-title'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
-export const Route = createFileRoute('/contacts/')({ component: Contacts })
+export const Route = createFileRoute('/contacts/')({
+  component: Contacts,
+  head: () => ({ meta: [{ title: pageTitle('Contacts') }] }),
+})
 
 function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')

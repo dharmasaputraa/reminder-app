@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { api, type UpcomingItem } from '../lib/api'
+import { pageTitle } from '../lib/page-title'
 import {
   CalendarSettingsButton,
   CALENDAR_LOCALES,
@@ -33,7 +34,10 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
-export const Route = createFileRoute('/')({ component: Dashboard })
+export const Route = createFileRoute('/')({
+  component: Dashboard,
+  head: () => ({ meta: [{ title: pageTitle('Dashboard') }] }),
+})
 
 function useUpcoming(days = 30) {
   return useQuery({

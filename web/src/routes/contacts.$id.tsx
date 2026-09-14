@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Channel, type Contact, type Settings } from '../lib/api'
 import { hydratePrefsForm } from '../lib/prefs'
+import { pageTitle } from '../lib/page-title'
 import {
   DateSelectorPopover,
   dateSelectorValueToDate,
@@ -35,7 +36,10 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-export const Route = createFileRoute('/contacts/$id')({ component: ContactDetail })
+export const Route = createFileRoute('/contacts/$id')({
+  component: ContactDetail,
+  head: () => ({ meta: [{ title: pageTitle('Contacts') }] }),
+})
 
 const TIPE: { value: string; label: string }[] = [
   { value: 'otongan', label: 'Otonan (210-day Pawukon)' },
