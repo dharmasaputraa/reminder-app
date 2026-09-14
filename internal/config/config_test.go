@@ -62,7 +62,7 @@ func TestLoadValid(t *testing.T) {
 	if c.Addr != ":8080" {
 		t.Errorf("Addr default = %q", c.Addr)
 	}
-	if c.DBPath() != "./data/otorem.db" {
+	if c.DBPath() != "./data/wimember.db" {
 		t.Errorf("DBPath = %q", c.DBPath())
 	}
 	if !c.AdminEmails["admin@x.com"] {

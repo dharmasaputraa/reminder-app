@@ -51,7 +51,7 @@ func Load() (Config, error) {
 	return c, nil
 }
 
-func (c Config) DBPath() string { return c.DataDir + "/otorem.db" }
+func (c Config) DBPath() string { return c.DataDir + "/wimember.db" }
 
 func envOr(k, d string) string {
 	if v := os.Getenv(k); v != "" {

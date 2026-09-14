@@ -3,7 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 
-	"otorem/internal/notify"
+	"wimember/internal/notify"
 )
 
 // handleChannelTest sends a test message to the channel — end-to-end config validation.

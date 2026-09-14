@@ -1,6 +1,6 @@
 # Replicate SQLite to object storage — fill in per provider (S3/R2).
 dbs:
-  - path: /data/otorem.db
+  - path: /data/wimember.db
     replicas:
-      - url: s3://bucket-anda/otorem/otorem.db
+      - url: s3://bucket-anda/wimember/wimember.db
         # endpoint, access-key-id, secret-access-key via env LITESTREAM_*

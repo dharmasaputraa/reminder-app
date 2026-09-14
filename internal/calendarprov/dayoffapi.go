@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 // DayOffAPI: Indonesian national holidays & joint leave (including Nyepi).

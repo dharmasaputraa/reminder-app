@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 // Kresna: national + Bali regional holidays (Galungan, Kuningan, Saraswati, etc.).

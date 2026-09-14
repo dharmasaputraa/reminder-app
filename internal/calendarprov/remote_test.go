@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"otorem/internal/domain"
-	"otorem/internal/store"
+	"wimember/internal/domain"
+	"wimember/internal/store"
 )
 
 func TestDayOffAPIParse(t *testing.T) {

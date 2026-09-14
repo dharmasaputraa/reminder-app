@@ -1,6 +1,6 @@
-# otorem
+# wimember
 
-**otorem** is a self-hosted reminder service for Balinese otonan based on the 210-day Pawukon cycle, birthdays, anniversaries, and holidays — computed automatically and delivered via Gotify, Telegram, or email. Everything runs from a single container: the SPA is embedded in the Go binary, the SQLite database lives on a volume, and access is secured through Cloudflare Access with no additional password.
+**wimember** is a self-hosted reminder service for Balinese otonan based on the 210-day Pawukon cycle, birthdays, anniversaries, and holidays — computed automatically and delivered via Gotify, Telegram, or email. Everything runs from a single container: the SPA is embedded in the Go binary, the SQLite database lives on a volume, and access is secured through Cloudflare Access with no additional password.
 
 ## Features
 
@@ -22,13 +22,13 @@
 You need Docker (+ Compose) **or** Podman (+ podman-compose), and a domain pointed at Cloudflare (for the tunnel).
 
 ```bash
-git clone <your-repo> otorem && cd otorem
+git clone <your-repo> wimember && cd wimember
 cp .env.example .env   # set APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS
 podman-compose up -d                 # app only; no profile needed if cloudflared already runs on the host
 # (Docker users: docker compose up -d --build; need an in-container tunnel: add --profile cloudflared)
 ```
 
-The application only listens on the internal compose network; public access goes through the Cloudflare tunnel. Open `https://otorem.your-domain.com`.
+The application only listens on the internal compose network; public access goes through the Cloudflare tunnel. Open `https://wimember.your-domain.com`.
 
 Compose profiles (all optional, `app` is always included):
 
@@ -59,13 +59,13 @@ Profiles can be combined, e.g. `docker compose --profile cloudflared --profile g
 ## Cloudflare Access setup
 
 1. Zero Trust → **Access** → **Applications** → **Add an application** → **Self-hosted**.
-2. Domain: `otorem.your-domain.com` (the subdomain used by the tunnel).
+2. Domain: `wimember.your-domain.com` (the subdomain used by the tunnel).
 3. Add a policy: Action **Allow**, Include **Emails** → your email (and family members').
 4. Note the two values from the Access application:
    - **Team domain**: `your-team.cloudflareaccess.com` → `CF_ACCESS_TEAM_DOMAIN`
    - **Application Audience (AUD) tag** → `CF_ACCESS_AUD`
 5. Create the tunnel: Zero Trust → **Networks** → **Tunnels** → **Create a tunnel** (Cloudflared) → copy **TUNNEL_TOKEN** into `.env`.
-6. Add a **Public hostname** to the tunnel: `otorem.your-domain.com` → Service `http://app:8080`.
+6. Add a **Public hostname** to the tunnel: `wimember.your-domain.com` → Service `http://app:8080`.
 7. Fill in `.env` (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ADMIN_EMAILS`) and run `docker compose --profile cloudflared up -d`.
 
 The application validates the Cloudflare Access JWT (JWKS is cached); the email from the JWT claim is used to auto-provision users, and emails listed in `ADMIN_EMAILS` are granted the admin role.
@@ -96,7 +96,7 @@ Channels are managed from the **Channels** page in the UI (configs are stored en
 
 ## Backup & restore
 
-The main data is a single file: `./data/otorem.db` (SQLite in WAL mode). While the container is running, copy the `./data` volume consistently, or use Litestream for continuous replication.
+The main data is a single file: `./data/wimember.db` (SQLite in WAL mode). While the container is running, copy the `./data` volume consistently, or use Litestream for continuous replication.
 
 **Litestream (optional, recommended):**
 
@@ -109,13 +109,13 @@ The main data is a single file: `./data/otorem.db` (SQLite in WAL mode). While t
 ```bash
 docker compose stop app
 docker compose --profile litestream run --rm litestream \
-  restore -o /data/otorem.db s3://your-bucket/otorem/otorem.db
+  restore -o /data/wimember.db s3://your-bucket/wimember/wimember.db
 docker compose start app
 ```
 
-For a one-off restore without filling in `.env`, pass the credentials directly to `docker compose run`, e.g. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/otorem.db s3://your-bucket/otorem/otorem.db`.
+For a one-off restore without filling in `.env`, pass the credentials directly to `docker compose run`, e.g. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/wimember.db s3://your-bucket/wimember/wimember.db`.
 
-Alternative without Litestream: stop the app, copy `otorem.db` back, start the app.
+Alternative without Litestream: stop the app, copy `wimember.db` back, start the app.
 
 ## Development
 
@@ -123,7 +123,7 @@ Alternative without Litestream: stop the app, copy `otorem.db` back, start the a
 make test    # CGO_ENABLED=0 go test ./... -count=1
 make dev     # backend with hot reload (air): rebuild + restart on .go changes
 make web     # npm ci + build SPA → internal/api/webroot (embed)
-make build   # build SPA + binary to bin/otorem
+make build   # build SPA + binary to bin/wimember
 make run     # build + run dev mode on :8080 (without hot reload)
 make container  # docker compose build, podman-compose fallback (Makefile)
 ```
@@ -136,13 +136,13 @@ Pawukon fixtures are scraped once at dev time (not at runtime) with a separate m
 cd scripts/fetch_fixtures && go run . -year 2026 -out ../../testdata
 ```
 
-Fixture data © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Universitas Udayana) — used as personal test fixtures with attribution; **do not redistribute**. otorem at runtime never depends on third-party sites.
+Fixture data © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Universitas Udayana) — used as personal test fixtures with attribution; **do not redistribute**. wimember at runtime never depends on third-party sites.
 
-**Remote holiday provider note:** the `dayoffapi` and `kresnasatya` providers use cache-first with a 10-minute negative cache — if the remote service is down, otorem stops trying temporarily and uses the existing cache. Local Pawukon/otonan calculation keeps working in full; only national holidays are temporarily empty.
+**Remote holiday provider note:** the `dayoffapi` and `kresnasatya` providers use cache-first with a 10-minute negative cache — if the remote service is down, wimember stops trying temporarily and uses the existing cache. Local Pawukon/otonan calculation keeps working in full; only national holidays are temporarily empty.
 
 ## Container verification
 
-**Verified with Podman 6.0.2 + podman-compose 1.6.0** on the developer's machine: `podman build -t otorem:latest .` succeeds (39.7 MB image), smoke containers pass (healthz, SPA, deep-link, scheduler-run). Podman note: HEALTHCHECK is ignored with the OCI format — add `--format docker` to `podman build` if you want the healthcheck. The following steps remain relevant for Docker users:
+**Verified with Podman 6.0.2 + podman-compose 1.6.0** on the developer's machine: `podman build -t wimember:latest .` succeeds (39.7 MB image), smoke containers pass (healthz, SPA, deep-link, scheduler-run). Podman note: HEALTHCHECK is ignored with the OCI format — add `--format docker` to `podman build` if you want the healthcheck. The following steps remain relevant for Docker users:
 
 The current development environment has no Docker, so the following steps must be run manually on a machine that does:
 
@@ -150,17 +150,17 @@ The current development environment has no Docker, so the following steps must b
 cp .env.example .env   # set at least APP_SECRET
 docker compose config                        # validate compose, no errors
 docker compose build app                     # image builds
-docker run --rm -d --name otorem-smoke -p 8081:8080 \
-  -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c otorem-app:latest
+docker run --rm -d --name wimember-smoke -p 8081:8080 \
+  -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c wimember-app:latest
 sleep 2
 curl -s localhost:8081/healthz               # expect: {"ok":true}
 curl -s localhost:8081/ | head -c 120        # expect: SPA HTML (<!doctype html> / <div id="root">)
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8081/contacts/1   # expect: 200 (SPA deep-link)
 curl -s -H 'X-Dev-Email: a@b.c' -X POST localhost:8081/api/v1/scheduler/run   # expect: {"sent":...,"failed":...,"missed":...}
-docker rm -f otorem-smoke
+docker rm -f wimember-smoke
 ```
 
-Note: `ADMIN_EMAILS` must be included because `/scheduler/run` is admin-only. The image name produced by `docker compose build app` follows the project directory name (e.g. `otorem-app` if the repo is in a folder named `otorem`); if it differs, adjust the tag or build with `docker build -t otorem-app .`.
+Note: `ADMIN_EMAILS` must be included because `/scheduler/run` is admin-only. The image name produced by `docker compose build app` follows the project directory name (e.g. `wimember-app` if the repo is in a folder named `wimember`); if it differs, adjust the tag or build with `docker build -t wimember-app .`.
 
 Verification without Docker is still possible via `make test` + `make build` + `make run` (see §Development).
 

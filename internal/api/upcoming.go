@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"otorem/internal/calendarprov"
-	"otorem/internal/domain"
+	"wimember/internal/calendarprov"
+	"wimember/internal/domain"
 )
 
 type UpcomingItem struct {

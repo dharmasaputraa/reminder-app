@@ -1,4 +1,4 @@
-module otorem
+module wimember
 
 go 1.26.0
 

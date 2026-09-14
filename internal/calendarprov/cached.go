@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"otorem/internal/domain"
-	"otorem/internal/store"
+	"wimember/internal/domain"
+	"wimember/internal/store"
 )
 
 type cachePayload struct {

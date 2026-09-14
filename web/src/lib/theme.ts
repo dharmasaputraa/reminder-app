@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'otorem.theme'
+const STORAGE_KEY = 'wimember.theme'
 
 function isTheme(value: string | null): value is Theme {
   return value === 'light' || value === 'dark' || value === 'system'

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 func TestTanggalIndo(t *testing.T) {

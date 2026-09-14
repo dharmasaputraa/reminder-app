@@ -17,8 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
-	"otorem/internal/config"
-	"otorem/internal/store"
+	"wimember/internal/config"
+	"wimember/internal/store"
 )
 
 type stubProvisioner struct{ users map[string]store.User }

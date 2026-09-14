@@ -1,4 +1,4 @@
-const devEmailKey = 'otorem-dev-email'
+const devEmailKey = 'wimember-dev-email'
 
 export function devEmail(): string | null { return localStorage.getItem(devEmailKey) }
 

@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"otorem/internal/domain"
-	"otorem/internal/secret"
-	"otorem/internal/store"
+	"wimember/internal/domain"
+	"wimember/internal/secret"
+	"wimember/internal/store"
 )
 
 func bind[T any](c *gin.Context) (*T, bool) {

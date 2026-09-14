@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 // SPA contract: GET contact always carries an occasions array; `null` makes

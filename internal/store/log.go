@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 type NotificationEntry struct {

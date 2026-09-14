@@ -10,10 +10,10 @@ web:
 	touch internal/api/webroot/.gitkeep
 
 build: web
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/otorem ./cmd/server
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/wimember ./cmd/server
 
 run: build
-	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data ./bin/otorem
+	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data ./bin/wimember
 
 # Hot reload: rebuild + restart otomatis saat file .go berubah (SPA via npm run dev)
 dev:

@@ -1,4 +1,4 @@
-module otorem/scripts/fetchfixtures
+module wimember/scripts/fetchfixtures
 
 go 1.27.1
 

@@ -1,6 +1,6 @@
 {
-  "name": "otorem — otonan & birthday reminders",
-  "short_name": "otorem",
+  "name": "wimember — remember",
+  "short_name": "wimember",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",

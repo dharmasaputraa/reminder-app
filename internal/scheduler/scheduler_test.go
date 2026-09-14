@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"otorem/internal/calendarprov"
-	"otorem/internal/domain"
-	"otorem/internal/notify"
-	"otorem/internal/store"
+	"wimember/internal/calendarprov"
+	"wimember/internal/domain"
+	"wimember/internal/notify"
+	"wimember/internal/store"
 )
 
 type stubNotifier struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 func TestRecordNotificationDedupe(t *testing.T) {

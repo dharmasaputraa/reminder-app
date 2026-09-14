@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"otorem/internal/secret"
-	"otorem/internal/store"
+	"wimember/internal/secret"
+	"wimember/internal/store"
 )
 
 // NewFromChannel decrypts the channel config and returns a concrete Notifier.

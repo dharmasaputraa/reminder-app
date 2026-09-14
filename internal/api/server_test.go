@@ -13,9 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"otorem/internal/config"
-	"otorem/internal/domain"
-	"otorem/internal/store"
+	"wimember/internal/config"
+	"wimember/internal/domain"
+	"wimember/internal/store"
 )
 
 func newTestServer(t *testing.T, admin string) (*Server, *store.Store) {

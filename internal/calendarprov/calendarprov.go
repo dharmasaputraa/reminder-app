@@ -5,7 +5,7 @@ package calendarprov
 import (
 	"context"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 type Provider interface {

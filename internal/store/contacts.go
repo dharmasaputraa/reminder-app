@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"otorem/internal/domain"
+	"wimember/internal/domain"
 )
 
 type Contact struct {
