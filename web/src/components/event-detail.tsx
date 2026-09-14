@@ -27,6 +27,33 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
+/**
+ * "Reminders" value: items inheriting the global defaults read
+ * "Default (D-7, D-4, …)" Google-Calendar style; custom prefs or per-category
+ * holiday offsets render as D-N badges. Empty → em dash.
+ */
+function RemindersValue({ item }: { item: UpcomingItem }) {
+  if (!item.reminders?.length) return <>—</>
+  if (item.reminders_default) {
+    const offs = [...item.reminders].sort((a, b) => b - a)
+    return (
+      <span>
+        <span className="font-medium">Default</span>
+        <span className="text-muted-foreground"> ({offs.map((r) => `D-${r}`).join(', ')})</span>
+      </span>
+    )
+  }
+  return (
+    <>
+      {item.reminders.map((r) => (
+        <Badge key={r} variant="secondary" className="me-1">
+          D-{r}
+        </Badge>
+      ))}
+    </>
+  )
+}
+
 /** Info rows for one upcoming item (no actions). */
 export function EventDetailRows({ item }: { item: UpcomingItem }) {
   return (
@@ -53,13 +80,7 @@ export function EventDetailRows({ item }: { item: UpcomingItem }) {
       )}
       {item.pawukon && <DetailRow label="Pawukon">{item.pawukon}</DetailRow>}
       <DetailRow label="Reminders">
-        {item.reminders?.length
-          ? item.reminders.map((r) => (
-              <Badge key={r} variant="secondary" className="me-1">
-                D-{r}
-              </Badge>
-            ))
-          : '—'}
+        <RemindersValue item={item} />
       </DetailRow>
     </div>
   )

@@ -35,7 +35,8 @@ export interface UpcomingItem {
   date: string; kind: 'occasion' | 'holiday'
   occasion_id?: number; contact_id?: number; contact_name?: string
   type?: string; number?: number
-  title: string; pawukon?: string; days_until: number; reminders?: number[]
+  title: string; pawukon?: string; days_until: number
+  reminders?: number[]; reminders_default?: boolean
 }
 export interface Occasion { id: number; type: string; base_date: string; label: string }
 export interface Prefs { contact_id: number; offsets: number[]; channel_ids: number[]; enabled: boolean }
