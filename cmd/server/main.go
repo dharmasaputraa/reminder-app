@@ -46,10 +46,15 @@ func main() {
 	if _, err := api.SeedDevTelegram(context.Background(), st, key, cfg); err != nil {
 		slog.Error("dev telegram seed", "err", err)
 	}
+	// api-harilibur mirrors: pages.dev primary, netlify.app fallback. The old
+	// sources are dead — dayoffapi.vercel.app (402 DEPLOYMENT_DISABLED) and
+	// artworks.kresna.me (404). One source, two categories via is_national_holiday.
+	hariliburPrimary := "https://api-harilibur.pages.dev"
+	hariliburFallback := "https://api-harilibur.netlify.app"
 	providers := []calendarprov.Provider{
 		calendarprov.NewComputedPawukon(),
-		calendarprov.NewCachedRemote(calendarprov.NewDayOffAPI(), st),
-		calendarprov.NewCachedRemote(calendarprov.NewKresna(""), st),
+		calendarprov.NewCachedRemote(calendarprov.NewKresnaFiltered(hariliburPrimary, hariliburFallback, true), st),
+		calendarprov.NewCachedRemote(calendarprov.NewKresnaFiltered(hariliburPrimary, hariliburFallback, false), st),
 	}
 	srv := api.NewServer(cfg, st, providers)
 

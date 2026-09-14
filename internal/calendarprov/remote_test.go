@@ -13,26 +13,6 @@ import (
 	"wimember/internal/store"
 )
 
-func TestDayOffAPIParse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("year") != "2026" {
-			t.Errorf("year = %q", r.URL.Query().Get("year"))
-		}
-		io.WriteString(w, `[{"tanggal":"2026-03-19","keterangan":"Nyepi","is_cuti_bersama":false},
-			{"tanggal":"2026-12-25","keterangan":"Natal","is_cuti_bersama":true}]`)
-	}))
-	defer srv.Close()
-	d := NewDayOffAPI()
-	d.BaseURL = srv.URL
-	hs, err := d.HolidaysBetween(context.Background(), domain.NewDate(2026, 3, 1), domain.NewDate(2026, 4, 1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(hs) != 1 || hs[0].Name != "National Holiday — Nyepi" || hs[0].Date != (domain.Date{Year: 2026, Month: 3, Day: 19}) {
-		t.Errorf("hs = %+v", hs)
-	}
-}
-
 const hariliburFixture = `[{"holiday_date":"2026-12-25","holiday_name":"Hari Raya Natal","is_national_holiday":true},
 	{"holiday_date":"2026-10-31","holiday_name":"Hari Saraswati","is_national_holiday":false}]`
 
@@ -126,6 +106,12 @@ func TestKresnaBothMirrorsFail(t *testing.T) {
 	}
 }
 
+// newTestRemote: a Kresna wired to a test server, national category, no
+// fallback (offline-safe; "" disables the mirror retry).
+func newTestRemote(url string) *Kresna {
+	return NewKresnaFiltered(url, "", true)
+}
+
 func TestCachedRemoteCacheFirst(t *testing.T) {
 	st, _ := store.OpenInMemory()
 	defer st.Close()
@@ -134,11 +120,10 @@ func TestCachedRemoteCacheFirst(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		io.WriteString(w, `[{"tanggal":"2026-03-19","keterangan":"Nyepi","is_cuti_bersama":false}]`)
+		io.WriteString(w, `[{"holiday_date":"2026-03-19","holiday_name":"Nyepi","is_national_holiday":true}]`)
 	}))
 	defer srv.Close()
-	inner := NewDayOffAPI()
-	inner.BaseURL = srv.URL
+	inner := newTestRemote(srv.URL)
 	c := NewCachedRemote(inner, st)
 	ctx := context.Background()
 
@@ -166,10 +151,7 @@ func TestCachedRemoteStaleFallback(t *testing.T) {
 	}
 	stale := cachePayload{
 		FetchedAt: time.Now().Add(-48 * time.Hour),
-		Holidays:  []domain.Holiday{{Date: domain.NewDate(2026, 3, 19), Name: "National Holiday — Nyepi"}},
-	}
-	if err := st.PutHolidayCache(context.Background(), 2026, "dayoffapi", stale); err != nil {
-		t.Fatal(err)
+		Holidays:  []domain.Holiday{{Date: domain.NewDate(2026, 3, 19), Name: "Nyepi"}},
 	}
 
 	calls := 0
@@ -178,15 +160,17 @@ func TestCachedRemoteStaleFallback(t *testing.T) {
 		http.Error(w, "down", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	inner := NewDayOffAPI()
-	inner.BaseURL = srv.URL
+	inner := newTestRemote(srv.URL)
 	c := NewCachedRemote(inner, st)
+	if err := st.PutHolidayCache(context.Background(), 2026, c.Inner.Name(), stale); err != nil {
+		t.Fatal(err)
+	}
 
 	hs, err := c.HolidaysBetween(context.Background(), domain.NewDate(2026, 3, 10), domain.NewDate(2026, 3, 20))
 	if err != nil {
 		t.Fatalf("stale fallback must succeed: %v", err)
 	}
-	if len(hs) != 1 || hs[0].Name != "National Holiday — Nyepi" {
+	if len(hs) != 1 || hs[0].Name != "Nyepi" {
 		t.Errorf("hs = %+v", hs)
 	}
 	if calls != 1 {
@@ -211,8 +195,7 @@ func TestCachedRemoteFailureBackoff(t *testing.T) {
 		http.Error(w, "down", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	inner := NewDayOffAPI()
-	inner.BaseURL = srv.URL
+	inner := newTestRemote(srv.URL)
 	c := NewCachedRemote(inner, st)
 	ctx := context.Background()
 	ran := domain.NewDate(2026, 3, 10)
@@ -260,11 +243,10 @@ func TestCachedRemoteBackoffClearedOnSuccess(t *testing.T) {
 			http.Error(w, "down", http.StatusInternalServerError)
 			return
 		}
-		io.WriteString(w, `[{"tanggal":"2026-03-19","keterangan":"Nyepi","is_cuti_bersama":false}]`)
+		io.WriteString(w, `[{"holiday_date":"2026-03-19","holiday_name":"Nyepi","is_national_holiday":true}]`)
 	}))
 	defer srv.Close()
-	inner := NewDayOffAPI()
-	inner.BaseURL = srv.URL
+	inner := newTestRemote(srv.URL)
 	c := NewCachedRemote(inner, st)
 	ran := domain.NewDate(2026, 3, 10)
 
