@@ -355,11 +355,12 @@ function Dashboard() {
             maxEventsPerCell={2}
             className="h-[720px] w-full"
           >
-            {/* Below sm the controls stack into two deliberate rows — navigation
-                on top, period/utility beneath — instead of an arbitrary wrap;
-                sm+ keeps the single wrapping row. */}
-            <div className="flex flex-col gap-2 pe-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <EventCalendarNav className="min-w-0 flex-1">
+            {/* Below sm the controls stack into two centered rows — navigation on
+                top, period/utility beneath (content-width, no grow spacers) —
+                with an extra bottom margin before the grid; sm+ keeps the single
+                wrapping row with the nav flexing full-width. */}
+            <div className="mb-2 flex flex-col items-center gap-2 sm:mb-0 sm:flex-row sm:flex-wrap sm:items-center sm:pe-2">
+              <EventCalendarNav className="min-w-0 sm:flex-1">
                 <TooltipProvider delay={600} closeDelay={0} timeout={300}>
                   <EventCalendarNavToday />
                   <div className="flex items-center">
@@ -376,7 +377,7 @@ function Dashboard() {
               <EventCalendarToolbar>
                 {/* the side agenda owns the agenda at lg, so its switcher would be
                     a dead end there; on phones it leads the utility row */}
-                <div className="grow sm:grow-0 lg:hidden">
+                <div className="lg:hidden">
                   <EventCalendarViewSwitcher />
                 </div>
                 {/* icon-only on phones (matches the icon-sm settings button);
