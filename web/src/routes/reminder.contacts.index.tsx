@@ -1,13 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { api, type Contact } from '../lib/api'
-import { validateContactsSearch } from '../lib/contacts-search'
+import { validateContactsSearch, type ContactsSearch } from '../lib/contacts-search'
 import { pageTitle } from '../lib/page-title'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { ContactDetailContent } from '@/components/contacts/contact-detail-content'
+import { ContactsGrid, useNextReminderMap } from '@/components/contacts/contacts-grid'
+import { useIsLg } from '@/hooks/use-lg'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const Route = createFileRoute('/reminder/contacts/')({
   validateSearch: validateContactsSearch,
@@ -15,46 +26,104 @@ export const Route = createFileRoute('/reminder/contacts/')({
   head: () => ({ meta: [{ title: pageTitle('Contacts') }] }),
 })
 
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
-}
-
 function Contacts() {
+  const { c } = Route.useSearch()
+  const nav = Route.useNavigate()
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: ['contacts'], queryFn: () => api<{ contacts: Contact[] }>('/contacts') })
-  const [name, setName] = useState('')
-  const create = useMutation({
-    mutationFn: () => api('/contacts', { method: 'POST', body: JSON.stringify({ name }) }),
-    onSuccess: () => { setName(''); qc.invalidateQueries({ queryKey: ['contacts'] }) },
+  const isLg = useIsLg()
+
+  const contacts = useQuery({ queryKey: ['contacts'], queryFn: () => api<{ contacts: Contact[] }>('/contacts') })
+  const next = useNextReminderMap()
+
+  const selectedId = c && c !== 'new' ? Number(c) : undefined
+
+  /** Spec history contract: docked selection REPLACES (browsing rows leaves
+   *  one history entry); below lg a row is ordinary navigation to the page. */
+  const select = (id: number) => {
+    if (!isLg) {
+      nav({ to: '/reminder/contacts/$id', params: { id: String(id) } })
+      return
+    }
+    nav({ search: (prev: ContactsSearch) => ({ ...prev, c: String(id) }), replace: true })
+  }
+
+  const openCreate = () => {
+    if (!isLg) {
+      nav({ to: '/reminder/contacts/new' })
+      return
+    }
+    nav({ search: () => ({ c: 'new' }), replace: true })
+  }
+
+  // Row-action delete: the confirm dialog and DELETE mutation live here so
+  // deleting the selected contact can drop ?c in the same update (spec).
+  const [pendingDelete, setPendingDelete] = useState<Contact | null>(null)
+  const del = useMutation({
+    mutationFn: (contact: Contact) => api(`/contacts/${contact.id}`, { method: 'DELETE' }),
+    onSuccess: (_res, contact) => {
+      toast.success('Contact deleted')
+      setPendingDelete(null)
+      if (selectedId === contact.id) nav({ search: () => ({}), replace: true })
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      qc.invalidateQueries({ queryKey: ['upcoming'] })
+    },
+    onError: (e) => toast.error(`Failed to delete contact: ${String(e)}`),
   })
 
+  const showPanel = isLg && c !== undefined
+
   return (
-    <div className="space-y-3">
-      <h1 className="text-xl font-bold">Contacts</h1>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) create.mutate() }}>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Made Wijaya)"
-          className="flex-1" />
-        <Button type="submit" disabled={create.isPending || !name.trim()}>
-          Add
-        </Button>
-      </form>
-      {q.data?.contacts.map((c) => (
-        <Link key={c.id} to="/reminder/contacts/$id" params={{ id: String(c.id) }} className="block">
-          <Card className="flex-row items-center gap-3 p-3 transition-colors hover:ring-indigo-300">
-            <Avatar>
-              <AvatarFallback>{initials(c.name)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{c.name}{c.nickname ? ` · ${c.nickname}` : ''}</p>
-              <p className="truncate text-sm text-muted-foreground">
-                {c.occasions.length === 0
-                  ? 'no occasions yet'
-                  : c.occasions.map((o) => `${o.type} ${o.base_date}`).join(' · ')}
-              </p>
-            </div>
-          </Card>
-        </Link>
-      ))}
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-0">
+      <div className="min-w-0 flex-1">
+        {contacts.isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-64" />
+            <Skeleton className="h-[420px] w-full rounded-xl" />
+          </div>
+        ) : contacts.isError ? (
+          <p className="text-red-600">{String(contacts.error)}</p>
+        ) : (
+          <ContactsGrid
+            contacts={contacts.data?.contacts ?? []}
+            nextById={next.map}
+            selectedId={selectedId}
+            isLoading={next.isLoading}
+            onSelect={select}
+            onAdd={openCreate}
+            onRequestDelete={setPendingDelete}
+          />
+        )}
+      </div>
+
+      {/* Docked right section (lg+ only): full detail, own scroll, fixed width.
+          When ?c is absent the grid takes the full width (spec). */}
+      {showPanel && (
+        <aside
+          aria-label="Contact detail"
+          className="border-border shrink-0 overflow-hidden border-t lg:mt-0 lg:w-96 lg:border-t-0 lg:border-s xl:w-[28rem]"
+        >
+          <div className="h-full overflow-y-auto p-4">
+            <ContactDetailContent contactId={c === 'new' ? 'new' : Number(c)} variant="docked" />
+          </div>
+        </aside>
+      )}
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => { if (!o) setPendingDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {pendingDelete?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All occasions and reminder preferences for this contact will be deleted too.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pendingDelete && del.mutate(pendingDelete)}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
