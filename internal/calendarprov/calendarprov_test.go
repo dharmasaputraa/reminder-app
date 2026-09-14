@@ -41,3 +41,31 @@ func TestMultiProviderFilter(t *testing.T) {
 		t.Errorf("category on: %v", hs)
 	}
 }
+
+// stubProvider: minimal in-memory provider for MultiProvider tests.
+type stubProvider struct {
+	name, cat string
+	hs        []domain.Holiday
+}
+
+func (s stubProvider) Name() string     { return s.name }
+func (s stubProvider) Category() string { return s.cat }
+func (s stubProvider) HolidaysBetween(_ context.Context, _ domain.Date, _ domain.Date) ([]domain.Holiday, error) {
+	return s.hs, nil
+}
+
+// TestMultiProviderTagsCategory: MultiProvider stamps each holiday with the
+// producing provider's category so consumers (/upcoming) can resolve
+// per-category reminder offsets without their own provider loop.
+func TestMultiProviderTagsCategory(t *testing.T) {
+	m := MultiProvider{Providers: []Provider{stubProvider{name: "stub", cat: "pawukon",
+		hs: []domain.Holiday{{Date: domain.NewDate(2026, 6, 17), Name: "Galungan"}}}}}
+	hs, err := m.HolidaysBetween(context.Background(),
+		domain.NewDate(2026, 6, 1), domain.NewDate(2026, 6, 30), map[string]bool{"pawukon": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 1 || hs[0].Category != "pawukon" {
+		t.Errorf("hs = %+v, want one holiday tagged Category=pawukon", hs)
+	}
+}
