@@ -14,7 +14,8 @@ import (
 )
 
 const hariliburFixture = `[{"holiday_date":"2026-12-25","holiday_name":"Hari Raya Natal","is_national_holiday":true},
-	{"holiday_date":"2026-10-31","holiday_name":"Hari Saraswati","is_national_holiday":false}]`
+	{"holiday_date":"2026-10-31","holiday_name":"Hari Saraswati","is_national_holiday":false},
+	{"holiday_date":"2026-06-1","holiday_name":"Purnama Kapat","is_national_holiday":false}]`
 
 func TestKresnaParseWrapped(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +27,8 @@ func TestKresnaParseWrapped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hs) != 2 || hs[0].Name != "Hari Raya Natal" {
+	// 3 items — including the non-zero-padded "2026-06-1" (live API quirk).
+	if len(hs) != 3 || hs[0].Name != "Hari Raya Natal" {
 		t.Errorf("hs = %+v", hs)
 	}
 }

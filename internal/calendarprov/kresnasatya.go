@@ -112,7 +112,9 @@ func (k *Kresna) fetchYearFrom(ctx context.Context, base string, year int) ([]do
 		if !k.keep(it) {
 			continue
 		}
-		dt, err := time.Parse("2006-01-02", it.HolidayDate)
+		// The source emits non-zero-padded dates ("2026-06-1") alongside
+		// padded ones; layout "2006-1-2" accepts both day and month widths.
+		dt, err := time.Parse("2006-1-2", it.HolidayDate)
 		if err != nil {
 			return nil, fmt.Errorf("harilibur date %q: %w", it.HolidayDate, err)
 		}
