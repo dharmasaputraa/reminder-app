@@ -1,8 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { format } from 'date-fns'
 import { api, type UpcomingItem } from '../lib/api'
 import { pageTitle } from '../lib/page-title'
+import {
+  validateReminderSearch,
+  type ReminderSearch,
+} from '../lib/reminder-search'
 import {
   CalendarSettingsButton,
   DEFAULT_CALENDAR_SETTINGS,
@@ -39,6 +44,7 @@ import { useIsLg } from '@/hooks/use-lg'
 import { motion } from 'motion/react'
 
 export const Route = createFileRoute('/reminder/')({
+  validateSearch: validateReminderSearch,
   component: Dashboard,
   head: () => ({ meta: [{ title: pageTitle('Dashboard') }] }),
 })
@@ -119,8 +125,18 @@ function Dashboard() {
   })
 
   const todayYear = up.data?.today ? Number(up.data.today.slice(0, 4)) : new Date().getFullYear()
-  // Visible calendar month (from navigation); null = never navigated (today).
-  const [visibleDate, setVisibleDate] = useState<Date | null>(null)
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  // Visible calendar month, owned by the URL (`?month=`); null = no param yet,
+  // so the calendar stays uncontrolled and shows today.
+  const visibleDate = search.month ? localMidnight(`${search.month}-01`) : null
+  // Replace-navigation: browsing months rewrites one history entry instead of
+  // piling one up per month (spec: month replace, event push).
+  const setMonthParam = (d: Date) =>
+    navigate({
+      search: (prev: ReminderSearch) => ({ ...prev, month: format(d, 'yyyy-MM') }),
+      replace: true,
+    })
   const yearAnchor = visibleDate?.getFullYear() ?? todayYear
   // ±1 year around the anchor is fetched at once → year jumps are already filled
   // before being clicked (prefetch), and each year is cached separately in react-query.
@@ -247,6 +263,7 @@ function Dashboard() {
             view={isLg ? 'month' : view}
             views={['month', 'agenda']}
             onViewChange={setView}
+            date={visibleDate ?? undefined}
             defaultDate={up.data?.today ? localMidnight(up.data.today) : new Date()}
             viewSettings={settings.viewSettings}
             onViewSettingsChange={(viewSettings) => patch({ viewSettings })}
@@ -259,7 +276,7 @@ function Dashboard() {
             eventTooltip={settings.eventTooltip}
             offDays
             renderEvent={renderEventContent}
-            onDateChange={(d) => setVisibleDate(d)}
+            onDateChange={setMonthParam}
             onSlotClick={(slot) => {
               if (isLg) {
                 // back to the list, then glide to the clicked day
