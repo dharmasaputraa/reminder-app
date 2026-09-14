@@ -359,7 +359,7 @@ function Dashboard() {
                 top, period/utility beneath (content-width, no grow spacers) —
                 with an extra bottom margin before the grid; sm+ keeps the single
                 wrapping row with the nav flexing full-width. */}
-            <div className="mb-2 flex flex-col items-center gap-2 sm:mb-0 sm:flex-row sm:flex-wrap sm:items-center sm:pe-2">
+            <div className="mb-3 flex flex-col items-center sm:mb-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:pe-2">
               <EventCalendarNav className="min-w-0 sm:flex-1">
                 <TooltipProvider delay={600} closeDelay={0} timeout={300}>
                   <EventCalendarNavToday />
@@ -380,10 +380,10 @@ function Dashboard() {
                 <div className="lg:hidden">
                   <EventCalendarViewSwitcher />
                 </div>
-                {/* icon-only on phones (matches the icon-sm settings button);
-                    sm+ restores the original labeled w-56 trigger */}
+                {/* icon-only on phones (matches the icon-sm settings button,
+                    radius included); sm+ restores the original labeled trigger */}
                 <CalendarDateSelectorButton
-                  className="size-7 justify-center px-0 sm:h-8 sm:w-56 sm:justify-start sm:px-2.5"
+                  className="size-7 rounded-[min(var(--radius-md),12px)] justify-center px-0 sm:h-8 sm:w-56 sm:justify-start sm:rounded-lg sm:px-2.5"
                   labelClassName="hidden sm:inline"
                 />
                 <CalendarSettingsButton
