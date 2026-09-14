@@ -116,8 +116,8 @@ export function ReminderTrigger({
         onClick={() => send.mutate([enabledChannels[0].id])}
         disabled={send.isPending}
       >
-        <SendIcon aria-hidden="true" />
-        {send.isPending ? 'Sending…' : 'Send reminder'}
+        <SendIcon aria-hidden="true" className="size-3.5" />
+        {send.isPending ? 'Sending…' : 'Remind Now'}
       </Button>
     )
   }
@@ -127,13 +127,15 @@ export function ReminderTrigger({
       <DropdownMenuTrigger
         render={
           <Button className={className} disabled={send.isPending}>
-            <SendIcon aria-hidden="true" />
-            {send.isPending ? 'Sending…' : 'Send reminder'}
+            <SendIcon aria-hidden="true" className="size-3.5" />
+            {send.isPending ? 'Sending…' : 'Remind Now'}
             <ChevronDownIcon aria-hidden="true" className="ms-0.5 opacity-60" />
           </Button>
         }
       />
-      <DropdownMenuContent align="start" className="w-56">
+      {/* min-w overrides the shell's min-w-32 and restores the default anchor
+          width: the menu tracks the full-width trigger and only grows */}
+      <DropdownMenuContent align="start" className="min-w-(--anchor-width)">
         {enabledChannels.map((c) => (
           <DropdownMenuItem key={c.id} onClick={() => send.mutate([c.id])}>
             <span className="truncate">{c.name}</span>
