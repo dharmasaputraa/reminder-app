@@ -379,10 +379,10 @@ function Dashboard() {
                 <div className="grow sm:grow-0 lg:hidden">
                   <EventCalendarViewSwitcher />
                 </div>
-                {/* icon-only on phones: the calendar glyph reads fine and the
-                    label would crowd the row */}
+                {/* icon-only on phones (matches the icon-sm settings button);
+                    sm+ restores the original labeled w-56 trigger */}
                 <CalendarDateSelectorButton
-                  className="size-9 justify-center px-0 sm:size-auto sm:px-3"
+                  className="size-7 justify-center px-0 sm:h-8 sm:w-56 sm:justify-start sm:px-2.5"
                   labelClassName="hidden sm:inline"
                 />
                 <CalendarSettingsButton
