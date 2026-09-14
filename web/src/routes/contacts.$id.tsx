@@ -1,11 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
-import { CalendarIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Channel, type Contact, type Settings } from '../lib/api'
 import { hydratePrefsForm } from '../lib/prefs'
+import {
+  DateSelectorPopover,
+  dateSelectorValueToDate,
+} from '@/components/date-selector-popover'
+import type { DateSelectorValue } from '@/components/reui/date-selector'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,11 +23,9 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -51,8 +53,7 @@ function ContactDetail() {
 
   const [type, setType] = useState('otongan')
   const [date, setDate] = useState('')
-  const [dateObj, setDateObj] = useState<Date | undefined>(undefined)
-  const [dateOpen, setDateOpen] = useState(false)
+  const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
   const [pawukon, setPawukon] = useState('')
   const [offsets, setOffsets] = useState('')
   const [enabled, setEnabled] = useState(true)
@@ -78,7 +79,7 @@ function ContactDetail() {
   }
   const addOcc = useMutation({
     mutationFn: () => api(`/contacts/${id}/occasions`, { method: 'POST', body: JSON.stringify({ type, date }) }),
-    onSuccess: () => { setDate(''); setDateObj(undefined); setPawukon(''); invalidate() },
+    onSuccess: () => { setDate(''); setDateSel(undefined); setPawukon(''); invalidate() },
   })
   const delOcc = useMutation({
     mutationFn: (oid: number) => api(`/occasions/${oid}`, { method: 'DELETE' }), onSuccess: invalidate,
@@ -93,7 +94,7 @@ function ContactDetail() {
     onSuccess: () => nav({ to: '/contacts' }),
   })
 
-  if (contact.isLoading) return <p className="text-slate-500">Loading…</p>
+  if (contact.isLoading) return <p className="text-muted-foreground">Loading…</p>
   if (contact.isError) return <p className="text-red-600">{String(contact.error)}</p>
   const c = contact.data!
 
@@ -126,7 +127,7 @@ function ContactDetail() {
         </CardHeader>
         <CardContent>
           {c.occasions.map((o) => (
-            <div key={o.id} className="flex items-center justify-between border-b border-slate-100 py-2 text-sm">
+            <div key={o.id} className="flex items-center justify-between border-b py-2 text-sm">
               <span className="flex items-center gap-2">
                 <Badge variant="secondary" className="uppercase">{o.type}</Badge>
                 {o.base_date}
@@ -163,34 +164,25 @@ function ContactDetail() {
                 {TIPE.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Popover open={dateOpen} onOpenChange={setDateOpen}>
-              <PopoverTrigger
-                render={
-                  <Button variant="outline" className="justify-start font-normal">
-                    <CalendarIcon className="size-4" />
-                    {dateObj ? format(dateObj, 'yyyy-MM-dd') : 'Pick a date'}
-                  </Button>
-                }
-              />
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dateObj}
-                  onSelect={(d) => {
-                    setDateObj(d)
-                    const iso = d ? format(d, 'yyyy-MM-dd') : ''
-                    setDate(iso)
-                    setDateOpen(false)
-                    previewPawukon(iso)
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
+            <DateSelectorPopover
+              value={dateSel}
+              onApply={(v) => {
+                setDateSel(v)
+                const d = dateSelectorValueToDate(v)
+                const iso = d ? format(d, 'yyyy-MM-dd') : ''
+                setDate(iso)
+                previewPawukon(iso)
+              }}
+              placeholder="Pick a date"
+              minYear={1900}
+              maxYear={new Date().getFullYear() + 10}
+              weekStartsOn={1}
+            />
             <Button disabled={!date || addOcc.isPending} onClick={() => addOcc.mutate()}>Add</Button>
           </div>
-          {pawukon && <p className="mt-2 text-sm text-emerald-700">🛕 {pawukon}</p>}
+          {pawukon && <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-400">🛕 {pawukon}</p>}
           {type === 'birthday' && date.endsWith('-02-29') && (
-            <p className="mt-2 text-xs text-slate-500">Feb 29 in non-leap years is observed on March 1.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Feb 29 in non-leap years is observed on March 1.</p>
           )}
         </CardContent>
       </Card>
@@ -200,7 +192,7 @@ function ContactDetail() {
           <CardTitle>Reminder Preferences</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-2 text-sm text-slate-500">
+          <p className="mb-2 text-sm text-muted-foreground">
             Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -213,7 +205,7 @@ function ContactDetail() {
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {channels.data?.channels.map((ch) => (
-              <label key={ch.id} className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 text-sm">
+              <label key={ch.id} className="flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-sm">
                 <Checkbox
                   defaultChecked={c.prefs?.channel_ids.includes(ch.id) ?? false}
                   onCheckedChange={(v) => {

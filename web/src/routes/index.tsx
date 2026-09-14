@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { addYears } from 'date-fns'
-import { ChevronsLeftIcon, ChevronsRightIcon } from 'lucide-react'
 import { api, type UpcomingItem } from '../lib/api'
 import {
-  EventCalendar,
-  useEventCalendarNavigation,
-} from '@/components/reui/event-calendar/event-calendar'
+  CalendarSettingsButton,
+  CALENDAR_LOCALES,
+  CALENDAR_TIME_ZONES,
+  DEFAULT_CALENDAR_SETTINGS,
+  type CalendarSettings,
+} from '@/components/calendar-settings-button'
+import { CalendarDateSelectorButton } from '@/components/calendar-date-selector-button'
+import { DayEventsDialog } from '@/components/day-events-dialog'
+import { EventDetailDialog } from '@/components/event-detail-dialog'
+import { EventCalendar } from '@/components/reui/event-calendar/event-calendar'
 import { EventCalendarContent } from '@/components/reui/event-calendar/event-calendar-content'
 import {
   EventCalendarNav,
@@ -15,12 +20,15 @@ import {
   EventCalendarNavPrev,
   EventCalendarNavToday,
   EventCalendarTitle,
+  EventCalendarToolbar,
   EventCalendarViewSwitcher,
 } from '@/components/reui/event-calendar/event-calendar-nav'
-import type { CalendarEvent } from '@/components/reui/event-calendar/event-calendar-types'
+import type {
+  CalendarEvent,
+  CalendarView,
+} from '@/components/reui/event-calendar/event-calendar-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -73,8 +81,9 @@ function calendarEmoji(it: UpcomingItem): string {
   return '🎊'
 }
 
-/** UpcomingItem → reUI CalendarEvent: date-only, so start = end (local midnight). */
-function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<{ kind: UpcomingItem['kind'] }> {
+/** UpcomingItem → reUI CalendarEvent: date-only, so start = end (local midnight).
+ *  The whole item rides along in `data` for the click dialogs. */
+function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<UpcomingItem> {
   const start = localMidnight(it.date)
   const emoji = calendarEmoji(it)
   return {
@@ -84,45 +93,8 @@ function toCalendarEvent(it: UpcomingItem, i: number): CalendarEvent<{ kind: Upc
     end: new Date(start),
     allDay: true,
     color: KIND_COLOR[it.kind],
-    data: { kind: it.kind },
+    data: it,
   }
-}
-
-const CALENDAR_I18N = {
-  labels: {
-    today: 'Today',
-    previous: 'Previous',
-    next: 'Next',
-    allDay: 'All day',
-    more: (count: number) => `+${count} more`,
-    noEvents: 'No events',
-    loading: 'Loading…',
-    event: 'event',
-    events: (count: number) => `${count} events`,
-    selectView: 'Switch view',
-  },
-  viewNames: {
-    month: 'Month',
-    week: 'Week',
-    day: 'Day',
-    days: (count: number) => `${count} days`,
-    agenda: 'Agenda',
-    resource: 'Resource',
-  },
-}
-
-/** ±1 year jump button — must be rendered inside <EventCalendar> so it can
- *  use its navigation context. */
-function YearJumpButton({ dir }: { dir: -1 | 1 }) {
-  const { date, goTo } = useEventCalendarNavigation()
-  const label = dir === -1 ? 'Previous year' : 'Next year'
-  const Icon = dir === -1 ? ChevronsLeftIcon : ChevronsRightIcon
-  return (
-    <Button variant="ghost" size="icon-sm" aria-label={label} title={label}
-      onClick={() => goTo(addYears(date, dir))}>
-      <Icon className="size-4" aria-hidden="true" />
-    </Button>
-  )
 }
 
 function Dashboard() {
@@ -151,6 +123,27 @@ function Dashboard() {
   const events = useMemo(() => calendarItems.map(toCalendarEvent), [calendarItems])
   const yearsLoading = yearQueries.some((q) => q.isLoading)
 
+  // Calendar settings panel (c-event-calendar-1 pattern): one resettable
+  // object flowing into <EventCalendar> as controlled props.
+  const [settings, setSettings] = useState<CalendarSettings>(DEFAULT_CALENDAR_SETTINGS)
+  const patch = (partial: Partial<CalendarSettings>) =>
+    setSettings((current) => ({ ...current, ...partial }))
+  // Mirror the active view so the settings panel can show the time-grid
+  // internals tab only where those options are visible.
+  const [view, setView] = useState<CalendarView>('month')
+  const isTimeGridView = view !== 'month' && view !== 'agenda'
+
+  const activeLocale =
+    CALENDAR_LOCALES.find((entry) => entry.id === settings.localeId) ?? CALENDAR_LOCALES[0]
+  const activeTimeZone =
+    CALENDAR_TIME_ZONES.find((entry) => entry.id === settings.timeZoneId) ??
+    CALENDAR_TIME_ZONES[0]
+
+  // Click targets: an empty date cell → the day's full view; an event chip →
+  // its detail modal (preventDefault opts out of the built-in selection).
+  const [dayDialogDate, setDayDialogDate] = useState<Date | null>(null)
+  const [detailItem, setDetailItem] = useState<UpcomingItem | null>(null)
+
   if (up.isLoading)
     return (
       <div className="space-y-3">
@@ -165,7 +158,7 @@ function Dashboard() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Next 30 Days</h1>
+        <h1 className="text-xl font-bold">Calendar</h1>
         <Link to="/contacts" className="text-sm text-indigo-600 hover:underline">Manage Contacts</Link>
       </div>
 
@@ -179,42 +172,68 @@ function Dashboard() {
         </Alert>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border bg-card" dir={activeLocale.dir}>
         <EventCalendar
           events={events}
           defaultView="month"
           views={['month', 'agenda']}
+          onViewChange={setView}
           defaultDate={up.data?.today ? localMidnight(up.data.today) : new Date()}
-          weekStartsOn={1}
-          interactions={{ drag: false, resize: false, selectSlot: false }}
-          i18n={CALENDAR_I18N}
+          locale={activeLocale.locale}
+          i18n={activeLocale.i18n}
+          timeZone={activeTimeZone.value}
+          viewSettings={settings.viewSettings}
+          onViewSettingsChange={(viewSettings) => patch({ viewSettings })}
+          interactions={settings.interactions}
+          onInteractionsChange={(interactions) => patch({ interactions })}
+          weekStartsOn={settings.weekStartsOn}
+          dayStartHour={settings.dayStartHour}
+          dayEndHour={settings.dayEndHour}
+          interval={settings.interval}
+          snapDuration={settings.snapDuration}
+          eventTooltip={settings.eventTooltip}
+          showDayAddButton={settings.showDayAddButton}
+          offDays
           onDateChange={(d) => setVisibleYear(d.getFullYear())}
+          onSlotClick={(slot) => setDayDialogDate(slot.date)}
+          onEventClick={(occurrence, e) => {
+            e.preventDefault()
+            if (occurrence.event.data) setDetailItem(occurrence.event.data)
+          }}
           className="h-[560px] w-full"
         >
-          <EventCalendarNav>
-            <TooltipProvider delay={600} closeDelay={0} timeout={300}>
-              <EventCalendarNavToday />
-              <EventCalendarViewSwitcher />
-              <div className="flex items-center">
-                <YearJumpButton dir={-1} />
-                <EventCalendarNavPrev />
-                <EventCalendarNavNext />
-                <YearJumpButton dir={1} />
-              </div>
-              {/* ms-3 sets the title apart from the tight control cluster so the
-                  period reads as its own group, not another button */}
-              <EventCalendarTitle className="ms-3" />
-              {yearsLoading && <span className="ms-2 text-xs text-slate-400">loading…</span>}
-              <div className="grow" />
-            </TooltipProvider>
-          </EventCalendarNav>
+          <div className="flex flex-wrap items-center gap-2 pe-2">
+            <EventCalendarNav className="min-w-0 flex-1">
+              <TooltipProvider delay={600} closeDelay={0} timeout={300}>
+                <EventCalendarNavToday />
+                <EventCalendarViewSwitcher />
+                <CalendarDateSelectorButton />
+                <div className="flex items-center">
+                  <EventCalendarNavPrev />
+                  <EventCalendarNavNext />
+                </div>
+                {/* ms-3 sets the title apart from the tight control cluster so the
+                    period reads as its own group, not another button */}
+                <EventCalendarTitle className="ms-3" />
+                {yearsLoading && <span className="ms-2 text-xs text-muted-foreground">loading…</span>}
+                <div className="grow" />
+              </TooltipProvider>
+            </EventCalendarNav>
+            <EventCalendarToolbar>
+              <CalendarSettingsButton
+                settings={settings}
+                onPatch={patch}
+                isTimeGridView={isTimeGridView}
+              />
+            </EventCalendarToolbar>
+          </div>
           <EventCalendarContent />
         </EventCalendar>
       </div>
 
       <div className="space-y-3">
         {items.length === 0 && (
-          <p className="text-slate-500">No events in the next 30 days.</p>
+          <p className="text-muted-foreground">No events in the next 30 days.</p>
         )}
 
         {items.map((it: UpcomingItem, i: number) => (
@@ -225,7 +244,7 @@ function Dashboard() {
             </Badge>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{it.title}</p>
-              <p className="truncate text-sm text-slate-500">
+              <p className="truncate text-sm text-muted-foreground">
                 {it.kind === 'holiday' ? 'Holiday' : it.contact_name} · {it.date}
                 {it.pawukon ? ` · ${it.pawukon}` : ''}
               </p>
@@ -238,6 +257,24 @@ function Dashboard() {
           </Card>
         ))}
       </div>
+
+      <DayEventsDialog
+        date={dayDialogDate}
+        events={events}
+        onOpenChange={(open) => {
+          if (!open) setDayDialogDate(null)
+        }}
+        onOpenEvent={(it) => {
+          setDayDialogDate(null)
+          setDetailItem(it)
+        }}
+      />
+      <EventDetailDialog
+        item={detailItem}
+        onOpenChange={(open) => {
+          if (!open) setDetailItem(null)
+        }}
+      />
     </div>
   )
 }
