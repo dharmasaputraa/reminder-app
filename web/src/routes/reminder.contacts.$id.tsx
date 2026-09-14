@@ -37,13 +37,13 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-export const Route = createFileRoute('/contacts/$id')({
+export const Route = createFileRoute('/reminder/contacts/$id')({
   component: ContactDetail,
   head: () => ({ meta: [{ title: pageTitle('Contacts') }] }),
 })
 
 const TIPE: { value: string; label: string }[] = [
-  { value: 'otongan', label: 'Otonan (210-day Pawukon)' },
+  { value: 'otonan', label: 'Otonan (210-day Pawukon)' },
   { value: 'birthday', label: 'Birthday' },
   { value: 'anniversary', label: 'Anniversary' },
 ]
@@ -61,7 +61,7 @@ function ContactDetail() {
   const channels = useQuery({ queryKey: ['channels'], queryFn: () => api<{ channels: Channel[] }>('/channels') })
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
 
-  const [type, setType] = useState('otongan')
+  const [type, setType] = useState('otonan')
   const [date, setDate] = useState('')
   const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
   const [pawukon, setPawukon] = useState('')
@@ -78,7 +78,7 @@ function ContactDetail() {
 
   async function previewPawukon(d: string) {
     setPawukon('')
-    if (!d || type !== 'otongan') return
+    if (!d || type !== 'otonan') return
     try { setPawukon((await api<{ label: string }>(`/pawukon?date=${d}`)).label) } catch { /* stay silent */ }
   }
 
@@ -101,7 +101,7 @@ function ContactDetail() {
   })
   const delContact = useMutation({
     mutationFn: () => api(`/contacts/${id}`, { method: 'DELETE' }),
-    onSuccess: () => nav({ to: '/contacts' }),
+    onSuccess: () => nav({ to: '/reminder/contacts' }),
   })
 
   if (contact.isLoading) return <p className="text-muted-foreground">Loading…</p>

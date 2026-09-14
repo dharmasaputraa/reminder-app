@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { ChevronDown, LayoutDashboard, Menu, Radio, Settings, Users, X } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -11,23 +11,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
-import { cn } from '@/lib/utils'
 
 const NAV_SECTIONS = [
   {
     section: 'Reminder',
     items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/contacts', label: 'Contacts', icon: Users },
-      { to: '/channels', label: 'Channels', icon: Radio },
-      { to: '/settings', label: 'Settings', icon: Settings },
+      { to: '/reminder', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/reminder/contacts', label: 'Contacts', icon: Users },
+      { to: '/reminder/channels', label: 'Channels', icon: Radio },
+      { to: '/reminder/settings', label: 'Settings', icon: Settings },
     ],
   },
 ] as const
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false)
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ email: string; role: string }>('/me') })
   const email = me.data?.email ?? '…'
   const initial = me.data?.email ? me.data.email.slice(0, 1).toUpperCase() : '…'
@@ -36,38 +34,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <main className="relative flex h-svh min-h-[600px] w-full flex-col overflow-hidden bg-background text-foreground">
       <header className="sticky top-0 z-20 bg-background">
         <div className="border-b">
-          <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-4 px-4 lg:px-6">
-            <button
-              type="button"
-              aria-label="Open navigation"
-              onClick={() => setSheetOpen(true)}
-              className="flex size-9 items-center justify-center rounded-md hover:bg-muted md:hidden"
-            >
-              <Menu className="size-5" />
-            </button>
-            <Link to="/" className="flex items-center gap-2">
-              <Logo className="size-6 shrink-0" />
-            </Link>
-            <nav className="ml-4 hidden items-center gap-1 md:flex">
-              {NAV_SECTIONS.map((navSection) => {
-                const isActive = navSection.items.some((item) =>
-                  item.to === '/' ? pathname === '/' : pathname.startsWith(item.to),
-                )
-                return (
+          {/* lg+ drops the centered max-w so the shell fills wide viewports;
+              justify-between keeps two flex targets: brand+menu and account */}
+          <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4 lg:max-w-[1400px] lg:px-6">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Open navigation"
+                onClick={() => setSheetOpen(true)}
+                className="flex size-9 items-center justify-center rounded-md hover:bg-muted md:hidden"
+              >
+                <Menu className="size-5" />
+              </button>
+              <Link to="/" className="flex items-center gap-2">
+                <Logo className="size-6 shrink-0" />
+              </Link>
+              <nav className="ml-2 hidden items-center gap-1 md:flex">
+                {NAV_SECTIONS.map((navSection) => (
                   <Link
                     key={navSection.section}
                     to={navSection.items[0].to}
-                    className={cn(
-                      'flex h-9 items-center rounded-md px-2.5 text-sm font-medium hover:bg-muted',
-                      isActive && 'bg-muted',
-                    )}
+                    activeProps={{ className: 'bg-muted' }}
+                    className="flex h-9 items-center rounded-md px-2.5 text-sm font-medium hover:bg-muted"
                   >
                     {navSection.section}
                   </Link>
-                )
-              })}
-            </nav>
-            <div className="ml-auto">
+                ))}
+              </nav>
+            </div>
+            <div className="flex items-center">
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -101,14 +96,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="border-b bg-muted/30">
-          <div className="mx-auto flex h-10 w-full max-w-5xl items-center gap-1 px-4 lg:px-6">
+          <div className="mx-auto flex h-10 w-full max-w-5xl items-center gap-1 px-4 lg:max-w-[1400px] lg:px-6">
             {NAV_SECTIONS[0].items.map((item) => {
               const Icon = item.icon
               return (
                 <Link
                   key={item.to}
                   to={item.to}
-                  activeOptions={{ exact: item.to === '/' }}
+                  activeOptions={{ exact: item.to === '/reminder' }}
                   activeProps={{ className: 'bg-accent text-accent-foreground' }}
                   className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm hover:bg-muted"
                 >
@@ -121,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <section className="flex flex-1 overflow-y-auto pt-4 lg:pt-6">
-        <div className="mx-auto w-full max-w-5xl px-4 lg:px-6">{children}</div>
+        <div className="mx-auto w-full max-w-5xl px-4 lg:max-w-[1400px] lg:px-6">{children}</div>
       </section>
       {sheetOpen && (
         <div className="absolute inset-0 z-50 flex md:hidden">
@@ -157,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                           key={item.to}
                           to={item.to}
                           onClick={() => setSheetOpen(false)}
-                          activeOptions={{ exact: item.to === '/' }}
+                          activeOptions={{ exact: item.to === '/reminder' }}
                           activeProps={{ className: 'bg-muted' }}
                           className="flex h-9 items-center gap-2 rounded-md px-2 text-sm"
                         >

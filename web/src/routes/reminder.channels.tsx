@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-export const Route = createFileRoute('/channels')({
+export const Route = createFileRoute('/reminder/channels')({
   component: Channels,
   head: () => ({ meta: [{ title: pageTitle('Channels') }] }),
 })

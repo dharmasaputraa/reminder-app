@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export const Route = createFileRoute('/settings')({
+export const Route = createFileRoute('/reminder/settings')({
   component: SettingsPage,
   head: () => ({ meta: [{ title: pageTitle('Settings') }] }),
 })

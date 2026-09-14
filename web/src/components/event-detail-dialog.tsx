@@ -124,7 +124,7 @@ export function EventDetailDialog({
             {item.contact_id && (
               <DetailRow label="Contact">
                 <Link
-                  to="/contacts/$id"
+                  to="/reminder/contacts/$id"
                   params={{ id: String(item.contact_id) }}
                   className="text-indigo-600 hover:underline"
                   onClick={() => onOpenChange(false)}
