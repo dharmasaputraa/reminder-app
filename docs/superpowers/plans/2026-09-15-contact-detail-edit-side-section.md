@@ -1175,28 +1175,32 @@ function ContactDetailPage() {
           verbatim — width + opacity + marginLeft in place, fixed-width inner
           so the panel never squishes mid-transition, lg gap on the animated
           marginLeft. The form stays mounted through the close tween (inert),
-          so unsaved edits survive an accidental close. */}
-      <motion.aside
-        aria-label="Edit contact"
-        inert={!editOpen}
-        initial={false}
-        animate={{
-          width: editOpen ? 'auto' : 0,
-          opacity: editOpen ? 1 : 0,
-          marginLeft: editOpen ? 16 : 0,
-        }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="hidden h-[640px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
-      >
-        <div className="h-full w-[360px] xl:w-[420px]">
-          <ContactEditForm
-            contactId={Number(id)}
-            variant="panel"
-            onClose={closeEdit}
-            onSaved={closeEdit}
-          />
-        </div>
-      </motion.aside>
+          so unsaved edits survive an accidental close. Gated on isLg (not
+          just hidden) so the below-lg dialog never coexists with a second
+          mounted form carrying the same DOM ids. */}
+      {isLg && (
+        <motion.aside
+          aria-label="Edit contact"
+          inert={!editOpen}
+          initial={false}
+          animate={{
+            width: editOpen ? 'auto' : 0,
+            opacity: editOpen ? 1 : 0,
+            marginLeft: editOpen ? 16 : 0,
+          }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="hidden h-[640px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
+        >
+          <div className="h-full w-[360px] xl:w-[420px]">
+            <ContactEditForm
+              contactId={Number(id)}
+              variant="panel"
+              onClose={closeEdit}
+              onSaved={closeEdit}
+            />
+          </div>
+        </motion.aside>
+      )}
 
       {/* Below lg the side section doesn't exist — the dialog replaces it.
           The same ?edit param drives both surfaces. */}
