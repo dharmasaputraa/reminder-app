@@ -27,3 +27,24 @@ export function validateContactsSearch(
   else c = undefined
   return { c }
 }
+
+/** URL search contract for /reminder/contacts/$id — the edit side section
+ *  (lg) / edit dialog (below lg) is open while `edit` is present. */
+export interface ContactDetailSearch {
+  /** Present = the edit panel (lg) or edit dialog (below lg) is open.
+   *  Open pushes (browser Back closes); close replace-drops so no stale
+   *  history entry reopens it. */
+  edit?: boolean
+}
+
+/** Route `validateSearch` for the contact detail page. Accepts `?edit=1`,
+ *  `?edit=true`, and the bare `?edit` form. Writing undefined clears the
+ *  key so the URL cleans itself up (same validator-merge note as
+ *  validateContactsSearch above). */
+export function validateContactDetailSearch(
+  search: Record<string, unknown>
+): ContactDetailSearch {
+  const raw = search.edit
+  const edit = raw === true || raw === '1' || raw === 'true' || raw === ''
+  return { edit: edit || undefined }
+}
