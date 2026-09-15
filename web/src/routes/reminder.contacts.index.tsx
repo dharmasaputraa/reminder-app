@@ -7,6 +7,7 @@ import { api, type Contact } from '../lib/api'
 import { validateContactsSearch, type ContactsSearch } from '../lib/contacts-search'
 import { pageTitle } from '../lib/page-title'
 import { ContactDetailContent } from '@/components/contacts/contact-detail-content'
+import { ContactEditForm } from '@/components/contacts/contact-edit-form'
 import { ContactsGrid, useNextReminderMap } from '@/components/contacts/contacts-grid'
 import { useIsLg } from '@/hooks/use-lg'
 import {
@@ -139,7 +140,15 @@ function Contacts() {
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="h-full overflow-y-auto"
               >
-                <ContactDetailContent contactId={panelC} variant="docked" />
+                {panelC === 'new' ? (
+                  <ContactEditForm
+                    contactId="new"
+                    variant="panel"
+                    onClose={() => nav({ to: '/reminder/contacts', replace: true })}
+                  />
+                ) : (
+                  <ContactDetailContent contactId={panelC} variant="docked" />
+                )}
               </motion.div>
             )}
           </div>
