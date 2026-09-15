@@ -120,7 +120,6 @@ function Contacts() {
             is absent the grid takes the full width. */}
         <motion.aside
           aria-label="Contact detail"
-          aria-hidden={!showPanel}
           inert={!showPanel}
           initial={false}
           animate={{

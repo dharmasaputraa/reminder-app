@@ -118,7 +118,7 @@ export function AgendaPanel({
       {/* Agenda list layer */}
       <div
         data-agenda-scroll
-        aria-hidden={!!detailItem}
+        inert={!!detailItem}
         className={cn('absolute inset-0 overflow-y-auto', detailItem && 'invisible')}
       >
         {groups.length === 0 && (

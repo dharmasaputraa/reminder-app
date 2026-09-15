@@ -416,7 +416,7 @@ function Dashboard() {
         <motion.aside
           ref={agendaRef}
           aria-label="Agenda"
-          aria-hidden={!agendaOpen}
+          inert={!agendaOpen}
           initial={false}
           animate={{
             width: agendaOpen ? 'auto' : 0,
