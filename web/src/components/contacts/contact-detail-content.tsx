@@ -33,7 +33,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
@@ -201,7 +200,7 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
     <div
       className={
         variant === 'page'
-          ? 'flex flex-col items-center gap-2 px-4 pt-2 text-center'
+          ? 'flex flex-col items-center gap-2 px-4 pb-5 pt-2 text-center'
           : 'flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center'
       }
     >
@@ -364,15 +363,15 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
     )
   }
 
-  // ============ PAGE: old-editor composition — a static actions row
-  // (Edit + ⋮ holding the destructive Delete), the read-only identity
-  // header, then separate editable cards for Occasions and Reminder
-  // Preferences (revision spec). ============
+  // ============ PAGE: one wrap card (revision follow-up) — the static
+  // actions row, the read-only identity header, and the editable Occasions /
+  // Reminder Preferences sections all live inside a single bordered card,
+  // separated by PanelSection hairlines (no nested cards). ============
   return (
-    <div className="space-y-5 text-sm">
+    <div className="rounded-xl border bg-card text-sm">
       {/* In-flow actions row: takes layout space, so it can never paint over
           the avatar below (revision decision 4). */}
-      <div className="flex items-center justify-end gap-1.5">
+      <div className="flex items-center justify-end gap-1.5 px-4 pt-4">
         {onEdit && (
           <Button size="sm" onClick={onEdit}>
             <PencilIcon aria-hidden="true" />
@@ -413,11 +412,8 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
         </AlertDialogContent>
       </AlertDialog>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Occasions</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <PanelSection title="Occasions">
+        <div>
           {c.occasions.length === 0 && (
             <p className="text-muted-foreground text-sm">No occasions yet — add the first one below.</p>
           )}
@@ -541,14 +537,11 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
           {type === 'birthday' && date.endsWith('-02-29') && (
             <p className="text-muted-foreground mt-3 text-xs">Feb 29 in non-leap years is observed on March 1.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </PanelSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Reminder Preferences</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <PanelSection title="Reminder Preferences">
+        <div className="space-y-4">
           <p className="text-muted-foreground text-sm">
             Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
           </p>
@@ -601,8 +594,8 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
               Save preferences
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </PanelSection>
     </div>
   )
 }
