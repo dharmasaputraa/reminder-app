@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, format } from 'date-fns'
 import { useTable } from '@tanstack/react-table'
@@ -97,7 +98,9 @@ function ActionsCell({
       <DropdownMenuTrigger
         render={
           <Button
-            className="size-7"
+            // Above the row's stretched open-link (see the name column), so
+            // the menu trigger stays clickable through the link overlay.
+            className="relative z-10 size-7"
             size="icon"
             variant="ghost"
             aria-label={`Actions for ${row.original.name}`}
@@ -186,6 +189,28 @@ export function ContactsGrid({
                 <div className="text-muted-foreground truncate text-xs">{row.original.nickname}</div>
               )}
             </div>
+            {/* Notion-style row link: a real anchor stretched over the whole
+                row (the row itself is `relative`), so cmd/ctrl+click,
+                middle-click and the context menu open the contact page in a
+                new tab natively. A plain click is prevented — the Link then
+                bubbles into the row's onRowClick, keeping the docked-panel
+                select (below lg: ordinary navigation) as the only handler. */}
+            <Link
+              to="/reminder/contacts/$id"
+              params={{ id: String(row.original.id) }}
+              className="absolute inset-0 rounded-lg outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+                  // Modifier clicks belong to the browser (new tab/window);
+                  // keep them out of the row's plain-click select.
+                  e.stopPropagation()
+                  return
+                }
+                e.preventDefault()
+              }}
+            >
+              <span className="sr-only">Open {row.original.name}</span>
+            </Link>
           </div>
         ),
         enableSorting: true,
@@ -306,6 +331,10 @@ export function ContactsGrid({
       recordCount={filtered.length}
       isLoading={isLoading}
       onRowClick={(row) => onSelect(row.id)}
+      // `relative` makes each row the containing block for its stretched
+      // open-link (name column), which is what gives the whole row native
+      // cmd/ctrl+click new-tab behavior.
+      tableClassNames={{ bodyRow: 'relative' }}
       tableLayout={{
         columnsPinnable: false,
         columnsResizable: false,

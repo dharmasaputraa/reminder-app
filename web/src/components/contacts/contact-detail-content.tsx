@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -277,7 +277,11 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Open fullscreen detail"
-                onClick={() => nav({ to: '/reminder/contacts/$id', params: { id } })}
+                // Rendered as a real link: cmd/ctrl+click, middle-click and
+                // the context menu open the fullscreen page in a new tab
+                // natively (same pattern as the grid's row links); a plain
+                // click is the Link's SPA nav to the same page.
+                render={<Link to="/reminder/contacts/$id" params={{ id }} />}
               >
                 <Maximize2Icon aria-hidden="true" className="size-3.5" />
               </Button>
