@@ -61,12 +61,13 @@ function ContactDetailPage() {
           visual card; the edit overlay is absolute inset-0 within it. The
           base layer goes inert while covered so Tab can't land on the
           hidden Edit/⋮ buttons (the agenda panel's pattern). The min-h
-          floor holds the column at the edit form's natural height in BOTH
-          states, so switching edit on/off never resizes the card (user
-          revision: equal heights). The overlay is lg-only; below lg the
-          dialog replaces it (same ?edit param). */}
+          floor is the measured max of the card's (361px) and the edit
+          form's (359px) natural heights, held in BOTH states so switching
+          edit on/off never resizes the card and the form has no dead space
+          below Notes. Longer notes grow both naturally. The overlay is
+          lg-only; below lg the dialog replaces it (same ?edit param). */}
       <div className="order-1 shrink-0 lg:order-2 lg:sticky lg:top-0 lg:w-[340px] xl:w-[400px]">
-        <div className="relative overflow-hidden rounded-xl border bg-card lg:min-h-[400px]">
+        <div className="relative overflow-hidden rounded-xl border bg-card lg:min-h-[361px]">
           <div inert={editOpen}>
             <ContactSummaryCard contactId={Number(id)} onEdit={openEdit} />
           </div>
