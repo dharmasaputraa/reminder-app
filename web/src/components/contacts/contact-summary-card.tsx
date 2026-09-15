@@ -110,7 +110,7 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
             )}
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2Icon aria-hidden="true" />
-              Delete contact
+              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
