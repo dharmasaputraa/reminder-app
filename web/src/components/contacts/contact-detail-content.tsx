@@ -3,14 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import {
-  ChevronRightIcon,
-  Maximize2Icon,
-  MoreHorizontalIcon,
-  PencilIcon,
-  Trash2Icon,
-  XIcon,
-} from 'lucide-react'
+import { ChevronRightIcon, Maximize2Icon, Trash2Icon, XIcon } from 'lucide-react'
 import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
 import { initials } from '@/lib/initials'
 import { hydratePrefsForm } from '@/lib/prefs'
@@ -35,12 +28,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -73,15 +60,13 @@ function shortDate(iso: string): string {
 interface ContactDetailContentProps {
   contactId: number
   /** docked = read-only right section of /reminder/contacts;
-   *  page = the detail column of /reminder/contacts/$id — identity is
-   *  read-only there, occasions/preferences are edited in place. */
+   *  page = the editable sections column of /reminder/contacts/$id —
+   *  occasions/preferences are edited in place; identity + actions live
+   *  in the sticky ContactSummaryCard beside this column. */
   variant: 'docked' | 'page'
-  /** page only: renders the Edit action; the host opens the edit side
-   *  section (lg) or edit dialog (below lg) — identity-only editing. */
-  onEdit?: () => void
 }
 
-export function ContactDetailContent({ contactId, variant, onEdit }: ContactDetailContentProps) {
+export function ContactDetailContent({ contactId, variant }: ContactDetailContentProps) {
   const id = String(contactId)
   const qc = useQueryClient()
   const nav = useNavigate()
@@ -96,18 +81,6 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   // shares the grid's ['upcoming','grid'] query, no extra fetch.
   const { map: upcomingByOccasion } = useUpcomingByOccasion()
 
-  const delContact = useMutation({
-    mutationFn: () => api(`/contacts/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      toast.success('Contact deleted')
-      // The grid (and next-reminder column) must drop the deleted contact.
-      qc.invalidateQueries({ queryKey: ['contacts'] })
-      qc.invalidateQueries({ queryKey: ['upcoming'] })
-      nav({ to: '/reminder/contacts', replace: true })
-    },
-    onError: (e) => toast.error(`Failed to delete contact: ${String(e)}`),
-  })
-
   // --- occasions + preferences form state (page variant only) ---
   const [type, setType] = useState('otonan')
   const [date, setDate] = useState('')
@@ -115,8 +88,6 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   const [pawukon, setPawukon] = useState('')
   const [offsets, setOffsets] = useState('')
   const [enabled, setEnabled] = useState(true)
-  // Delete lives behind the ⋮ menu: the item opens this confirm dialog.
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (!contact.data) return
@@ -156,7 +127,7 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   })
 
   if (contact.isLoading)
-    return (
+    return variant === 'docked' ? (
       <div>
         <div className="flex flex-col items-center gap-2 px-4 pt-8">
           <Skeleton className="size-16 rounded-full" />
@@ -167,6 +138,29 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-3/4" />
+        </div>
+      </div>
+    ) : (
+      // Page: two section-card skeletons — identity has its own card now.
+      <div className="space-y-5">
+        <div className="rounded-xl border bg-card">
+          <div className="px-4 pt-4">
+            <Skeleton className="h-5 w-28" />
+          </div>
+          <div className="space-y-2.5 px-4 py-4">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card">
+          <div className="px-4 pt-4">
+            <Skeleton className="h-5 w-44" />
+          </div>
+          <div className="space-y-2.5 px-4 py-4">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
         </div>
       </div>
     )
@@ -193,18 +187,11 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
     disabled: existingTypes.has(t.value),
   }))
 
-  /** Identity block: avatar above the name (+ nickname) — the subject,
-   *  centered like a profile header. Notes render in this block on the page
-   *  variant only; docked shows them via its own Notes PanelSection.
-   *  Identity is read-only here: editing lives in the side section. */
+  /** Identity block (docked panel only): avatar above the name (+ nickname)
+   *  — the centered profile header. The page variant has no identity block
+   *  here; it lives in the sticky ContactSummaryCard. */
   const identityBlock = (
-    <div
-      className={
-        variant === 'page'
-          ? 'flex flex-col items-center gap-2 px-4 pb-5 pt-2 text-center'
-          : 'flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center'
-      }
-    >
+    <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center">
       <Avatar className="size-16">
         <AvatarFallback className="text-lg">{initials(c.name)}</AvatarFallback>
       </Avatar>
@@ -212,9 +199,6 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
         <h1 className="text-pretty text-lg leading-snug font-semibold">{c.name}</h1>
         {c.nickname && <p className="text-muted-foreground text-sm">{c.nickname}</p>}
       </div>
-      {variant === 'page' && c.notes && (
-        <p className="text-pretty max-w-2xl whitespace-pre-wrap text-muted-foreground">{c.notes}</p>
-      )}
     </div>
   )
 
@@ -364,58 +348,11 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
     )
   }
 
-  // ============ PAGE: a header card (actions row + read-only identity),
-  // then one card per editable section — Occasions and Reminder Preferences
-  // (revision follow-up: card on each section). ============
+  // ============ PAGE: the editable sections column — Occasions and
+  // Reminder Preferences cards. Identity + the Edit/⋮ actions live in the
+  // sticky ContactSummaryCard beside this column (route-level). ============
   return (
     <div className="space-y-5 text-sm">
-      <div className="rounded-xl border bg-card">
-        {/* In-flow actions row: takes layout space, so it can never paint over
-            the avatar below (revision decision 4). */}
-        <div className="flex items-center justify-end gap-1.5 px-4 pt-4">
-          {onEdit && (
-            <Button size="sm" onClick={onEdit}>
-              <PencilIcon aria-hidden="true" />
-              Edit
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="icon-sm" aria-label="More actions">
-                  <MoreHorizontalIcon aria-hidden="true" />
-                </Button>
-              }
-            />
-            {/* min-w-40: the menu tracks its 28px icon anchor by default,
-                which wraps "Delete contact" onto two lines. */}
-            <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-                <Trash2Icon aria-hidden="true" />
-                Delete contact
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {identityBlock}
-      </div>
-
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              All occasions and reminder preferences for this contact will be deleted too.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => delContact.mutate()}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <Card>
         <CardHeader>
           <CardTitle>Occasions</CardTitle>
