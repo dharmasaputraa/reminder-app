@@ -194,7 +194,13 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
    *  centered like a profile header. Notes render beneath when present.
    *  Identity is read-only here: editing lives in the side section. */
   const identityBlock = (
-    <div className="flex flex-col items-center gap-2 px-4 pt-2 text-center">
+    <div
+      className={
+        variant === 'page'
+          ? 'flex flex-col items-center gap-2 px-4 pt-2 text-center'
+          : 'flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center'
+      }
+    >
       <Avatar className="size-16">
         <AvatarFallback className="text-lg">{initials(c.name)}</AvatarFallback>
       </Avatar>
@@ -202,7 +208,7 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
         <h1 className="text-pretty text-lg leading-snug font-semibold">{c.name}</h1>
         {c.nickname && <p className="text-muted-foreground text-sm">{c.nickname}</p>}
       </div>
-      {c.notes && (
+      {variant === 'page' && c.notes && (
         <p className="text-pretty max-w-2xl whitespace-pre-wrap text-muted-foreground">{c.notes}</p>
       )}
     </div>
