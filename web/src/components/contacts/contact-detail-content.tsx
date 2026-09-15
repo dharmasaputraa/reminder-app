@@ -1,11 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ChevronRightIcon, Maximize2Icon, PencilIcon, XIcon } from 'lucide-react'
+import {
+  ChevronRightIcon,
+  Maximize2Icon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react'
 import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
 import { initials } from '@/lib/initials'
+import { hydratePrefsForm } from '@/lib/prefs'
 import { useUpcomingByOccasion } from '@/components/contacts/contacts-grid'
+import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-selector-popover'
+import type { DateSelectorValue } from '@/components/reui/date-selector'
+import { ReminderTrigger } from '@/components/event-detail'
 import { DetailRow, PanelSection } from '@/components/panel-section'
 import {
   AlertDialog,
@@ -21,7 +33,32 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+
+const TIPE: { value: string; label: string }[] = [
+  { value: 'otonan', label: 'Otonan (210-day Pawukon)' },
+  { value: 'birthday', label: 'Birthday' },
+  { value: 'anniversary', label: 'Anniversary' },
+]
 
 /** ISO yyyy-MM-dd → "Wednesday, 18 June 2003" (page occasion rows). */
 function longDate(iso: string): string {
@@ -36,11 +73,11 @@ function shortDate(iso: string): string {
 interface ContactDetailContentProps {
   contactId: number
   /** docked = read-only right section of /reminder/contacts;
-   *  page = read-only detail column of /reminder/contacts/$id. */
+   *  page = the detail column of /reminder/contacts/$id — identity is
+   *  read-only there, occasions/preferences are edited in place. */
   variant: 'docked' | 'page'
   /** page only: renders the Edit action; the host opens the edit side
-   *  section (lg) or edit dialog (below lg). Editing itself lives in
-   *  ContactEditForm — this component is read-only by design. */
+   *  section (lg) or edit dialog (below lg) — identity-only editing. */
   onEdit?: () => void
 }
 
@@ -69,6 +106,50 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
       nav({ to: '/reminder/contacts', replace: true })
     },
     onError: (e) => toast.error(`Failed to delete contact: ${String(e)}`),
+  })
+
+  // --- occasions + preferences form state (page variant only) ---
+  const [type, setType] = useState('otonan')
+  const [date, setDate] = useState('')
+  const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
+  const [pawukon, setPawukon] = useState('')
+  const [offsets, setOffsets] = useState('')
+  const [enabled, setEnabled] = useState(true)
+  // Delete lives behind the ⋮ menu: the item opens this confirm dialog.
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  useEffect(() => {
+    if (!contact.data) return
+    const form = hydratePrefsForm(contact.data.prefs)
+    setOffsets(form.offsets)
+    setEnabled(form.enabled)
+  }, [contact.data])
+
+  async function previewPawukon(d: string) {
+    setPawukon('')
+    if (!d || type !== 'otonan') return
+    try { setPawukon((await api<{ label: string }>(`/pawukon?date=${d}`)).label) } catch { /* stay silent */ }
+  }
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['contact', id] })
+    qc.invalidateQueries({ queryKey: ['contacts'] })
+    // Prefix match also refreshes ['upcoming', 'grid'] (next-reminder column)
+    // and the dashboard's ['upcoming', days] / ['upcoming-year', y] queries.
+    qc.invalidateQueries({ queryKey: ['upcoming'] })
+  }
+
+  const addOcc = useMutation({
+    mutationFn: () => api(`/contacts/${id}/occasions`, { method: 'POST', body: JSON.stringify({ type, date }) }),
+    onSuccess: () => { setDate(''); setDateSel(undefined); setPawukon(''); invalidate() },
+  })
+  const delOcc = useMutation({
+    mutationFn: (oid: number) => api(`/occasions/${oid}`, { method: 'DELETE' }), onSuccess: invalidate,
+  })
+  const savePrefs = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api(`/contacts/${id}/prefs`, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: invalidate,
+    onError: (e) => toast.error(`Failed to save preferences: ${String(e)}`),
   })
 
   if (contact.isLoading)
@@ -100,16 +181,20 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   }
   const c = contact.data!
 
+  // One occasion per type: types the contact already has are disabled in the
+  // type select and the Add button locks.
+  const existingTypes = new Set(c.occasions.map((o) => o.type))
+  const typeItems = TIPE.map((t) => ({
+    label: t.label,
+    value: t.value,
+    disabled: existingTypes.has(t.value),
+  }))
+
   /** Identity block: avatar above the name (+ nickname) — the subject,
-   *  centered like a profile header in both variants. */
+   *  centered like a profile header. Notes render beneath when present.
+   *  Identity is read-only here: editing lives in the side section. */
   const identityBlock = (
-    <div
-      className={
-        variant === 'page'
-          ? 'flex flex-col items-center gap-2 px-4 pb-5 pt-14 text-center sm:pt-6'
-          : 'flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center'
-      }
-    >
+    <div className="flex flex-col items-center gap-2 px-4 pt-2 text-center">
       <Avatar className="size-16">
         <AvatarFallback className="text-lg">{initials(c.name)}</AvatarFallback>
       </Avatar>
@@ -117,6 +202,9 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
         <h1 className="text-pretty text-lg leading-snug font-semibold">{c.name}</h1>
         {c.nickname && <p className="text-muted-foreground text-sm">{c.nickname}</p>}
       </div>
+      {c.notes && (
+        <p className="text-pretty max-w-2xl whitespace-pre-wrap text-muted-foreground">{c.notes}</p>
+      )}
     </div>
   )
 
@@ -266,68 +354,240 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
     )
   }
 
-  // ============ PAGE: read-only detail card — the panel anatomy at page
-  // width (hairline sections, no nested cards). Edit/Delete pinned to the
-  // top-right corner over the centered identity. ============
+  // ============ PAGE: old-editor composition — a static actions row
+  // (Edit + ⋮ holding the destructive Delete), the read-only identity
+  // header, then separate editable cards for Occasions and Reminder
+  // Preferences (revision spec). ============
   return (
-    <div className="relative rounded-xl border bg-card text-sm">
-      <div className="absolute end-4 top-4 flex items-center gap-1.5">
+    <div className="space-y-5 text-sm">
+      {/* In-flow actions row: takes layout space, so it can never paint over
+          the avatar below (revision decision 4). */}
+      <div className="flex items-center justify-end gap-1.5">
         {onEdit && (
           <Button size="sm" onClick={onEdit}>
             <PencilIcon aria-hidden="true" />
             Edit
           </Button>
         )}
-        <AlertDialog>
-          <AlertDialogTrigger
-            render={<Button variant="destructive" size="sm">Delete contact</Button>}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="outline" size="icon-sm" aria-label="More actions">
+                <MoreHorizontalIcon aria-hidden="true" />
+              </Button>
+            }
           />
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                All occasions and reminder preferences for this contact will be deleted too.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => delContact.mutate()}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+              <Trash2Icon aria-hidden="true" />
+              Delete contact
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
       {identityBlock}
-      {notesSection}
-      <PanelSection title="Occasions">
-        {c.occasions.length === 0 ? (
-          <p className="text-muted-foreground">
-            No occasions yet — use Edit to add the first one.
-          </p>
-        ) : (
-          <div className="divide-y">
-            {c.occasions.map((o) => {
-              const up = upcomingByOccasion.get(o.id)
-              return (
-                <div key={o.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <Badge variant="secondary" className="uppercase">{o.type}</Badge>
-                    <span className="truncate">{longDate(o.base_date)}</span>
-                  </span>
-                  {up && (
-                    <Badge
-                      variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
-                      className="shrink-0"
-                    >
-                      {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
-                    </Badge>
-                  )}
-                </div>
-              )
-            })}
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All occasions and reminder preferences for this contact will be deleted too.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => delContact.mutate()}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Occasions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {c.occasions.length === 0 && (
+            <p className="text-muted-foreground text-sm">No occasions yet — add the first one below.</p>
+          )}
+          {c.occasions.length > 0 && (
+            <div className="divide-y">
+              {c.occasions.map((o) => {
+                const up = upcomingByOccasion.get(o.id)
+                return (
+                  <div key={o.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <Badge variant="secondary" className="uppercase">{o.type}</Badge>
+                      <span className="truncate">{longDate(o.base_date)}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {up && (
+                        <Badge
+                          variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
+                          className="shrink-0"
+                        >
+                          {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
+                        </Badge>
+                      )}
+                      <ReminderTrigger
+                        kind="occasion"
+                        occasionId={o.id}
+                        contactId={c.id}
+                        date={o.base_date}
+                        title={`${c.name}'s ${o.type}`}
+                        variant="ghost"
+                        compact
+                        className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
+                      />
+                      <AlertDialog>
+                        <AlertDialogTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Delete ${o.type} occasion`}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2Icon aria-hidden="true" />
+                            </Button>
+                          }
+                        />
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {o.type} on {longDate(o.base_date)} will be permanently deleted.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {/* flex-wrap: the two w-56 controls share the row only when there
+              is room and stack on narrow viewports. */}
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+            <Select
+              items={typeItems}
+              value={type}
+              onValueChange={(v) => {
+                if (!v) return
+                setType(v)
+              }}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {typeItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <DateSelectorPopover
+              value={dateSel}
+              onApply={(v) => {
+                setDateSel(v)
+                const d = dateSelectorValueToDate(v)
+                const iso = d ? format(d, 'yyyy-MM-dd') : ''
+                setDate(iso)
+                previewPawukon(iso)
+              }}
+              placeholder="Pick a date"
+              minYear={1800}
+              maxYear={new Date().getFullYear() + 10}
+              weekStartsOn={1}
+              allowRange={false}
+              periodTypes={['day', 'month', 'year']}
+              monthCascadesToDay
+              showFilterTypes={false}
+              className="w-56 justify-start"
+            />
+            <Button disabled={!date || existingTypes.has(type) || addOcc.isPending} onClick={() => addOcc.mutate()}>Add</Button>
           </div>
-        )}
-      </PanelSection>
-      {remindersSection}
+          {existingTypes.has(type) && (
+            <p className="text-muted-foreground mt-3 text-xs">
+              This contact already has this type of occasion — only one of each type is allowed.
+            </p>
+          )}
+          {pawukon && <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{pawukon}</p>}
+          {type === 'birthday' && date.endsWith('-02-29') && (
+            <p className="text-muted-foreground mt-3 text-xs">Feb 29 in non-leap years is observed on March 1.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reminder Preferences</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground text-sm">
+            Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="pref-offsets">Custom offsets</Label>
+            <Input
+              id="pref-offsets"
+              value={offsets}
+              onChange={(e) => setOffsets(e.target.value)}
+              placeholder="e.g. 7, 4, 2, 1, 0"
+              className="w-full sm:max-w-xs"
+            />
+            <p className="text-muted-foreground text-xs">
+              Days before the occasion. Empty uses the global default.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <Switch checked={enabled} onCheckedChange={(v) => setEnabled(v === true)} />
+            Active
+          </label>
+          <div className="space-y-1.5">
+            <div className="text-sm font-medium">Channels</div>
+            <div className="flex flex-wrap gap-2">
+              {channels.data?.channels.map((ch) => (
+                <label key={ch.id} className="flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-sm">
+                  <Checkbox
+                    defaultChecked={c.prefs?.channel_ids.includes(ch.id) ?? false}
+                    onCheckedChange={(v) => {
+                      const cur = new Set(c.prefs?.channel_ids ?? [])
+                      if (v === true) cur.add(ch.id)
+                      else cur.delete(ch.id)
+                      savePrefs.mutate({ channel_ids: [...cur] })
+                    }}
+                  />
+                  {ch.name} ({ch.type})
+                </label>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Changes save automatically — no selection uses the system default channels.
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => savePrefs.mutate({
+                offsets: offsets.trim() ? offsets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)) : [],
+                enabled,
+              })}
+            >
+              Save preferences
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
