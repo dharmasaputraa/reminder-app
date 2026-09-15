@@ -4,7 +4,7 @@ test:
 	CGO_ENABLED=0 go test ./... -count=1
 
 web:
-	cd web && npm ci && npm run build
+	cd web && pnpm install --frozen-lockfile && pnpm run build
 	rm -rf internal/api/webroot && mkdir -p internal/api/webroot
 	cp -R web/dist/. internal/api/webroot/
 	touch internal/api/webroot/.gitkeep

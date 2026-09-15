@@ -1,13 +1,17 @@
 # ---- 1: build SPA ----
 FROM node:22-alpine AS web
 WORKDIR /src/web
-COPY web/package*.json ./
-RUN npm ci
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY web/ ./
-RUN npm run build
+RUN pnpm run build
 
 # ---- 2: build binary (embed SPA) ----
-FROM golang:1.25-alpine AS build
+# Must be >= the `go` directive in go.mod (1.26), else the build breaks or
+# GOTOOLCHAIN silently downloads a second toolchain inside the image build.
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
