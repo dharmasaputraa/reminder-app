@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ChevronRightIcon,
@@ -17,6 +17,7 @@ import { hydratePrefsForm } from '@/lib/prefs'
 import { useUpcomingByOccasion } from '@/components/contacts/contacts-grid'
 import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-selector-popover'
 import type { DateSelectorValue } from '@/components/reui/date-selector'
+import { DetailRow, PanelSection } from '@/components/panel-section'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,34 +62,6 @@ function longDate(iso: string): string {
 /** Compact variant for the narrow docked panel: "Wed, 18 Jun 2003". */
 function shortDate(iso: string): string {
   return format(new Date(`${iso}T00:00:00`), 'EEE, d MMM yyyy')
-}
-
-/** Section of the docked read-only panel: hairline divider, label, content
- *  below — same chrome language as the agenda panel. */
-function PanelSection({
-  title,
-  children,
-}: {
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <section className="border-t px-4 py-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <div className="mt-3 space-y-2.5">{children}</div>
-    </section>
-  )
-}
-
-/** Read-only fact row: muted label left, value right — the agenda detail's
- *  row style, so both right panels read the same. */
-function DetailRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="min-w-0 text-right font-medium">{children}</span>
-    </div>
-  )
 }
 
 interface ContactDetailContentProps {

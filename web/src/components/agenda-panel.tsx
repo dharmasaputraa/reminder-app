@@ -6,15 +6,21 @@ import type { UpcomingItem } from '../lib/api'
 import { cn } from '../lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { EventDetailRows, ReminderTrigger, localMidnight } from '@/components/event-detail'
+import {
+  EventDetailFacts,
+  EventRemindersRow,
+  ReminderTrigger,
+  localMidnight,
+} from '@/components/event-detail'
+import { PanelSection } from '@/components/panel-section'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { IconStack } from '@/components/reui/icon-stack'
 import {
-  ArrowLeftIcon,
   CalendarIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  XIcon,
 } from 'lucide-react'
 
 function initials(name: string): string {
@@ -48,14 +54,6 @@ export function contactAvatar(
   )
 }
 
-export function DayBadge({ daysUntil }: { daysUntil: number }) {
-  return daysUntil <= 0 ? (
-    <Badge className="bg-destructive text-white">TODAY</Badge>
-  ) : (
-    <Badge variant="outline">D-{daysUntil}</Badge>
-  )
-}
-
 function typeLabel(it: UpcomingItem): string {
   return it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Event'
 }
@@ -67,6 +65,22 @@ export function eventDisplayTitle(it: UpcomingItem): string {
     return `${typeLabel(it)} #${it.number}`
   }
   return it.title
+}
+
+/** The detail identity block's centered avatar: the contact's own avatar for
+ *  occasions (same as the contacts panel's profile header), a calendar icon
+ *  for holidays and anything without a contact. */
+function identityAvatar(it: UpcomingItem) {
+  if (it.kind === 'occasion' && it.contact_name) {
+    return contactAvatar(it, 'size-16', 'text-lg')
+  }
+  return (
+    <Avatar className="size-16">
+      <AvatarFallback className="text-lg">
+        <CalendarIcon aria-hidden="true" className="size-6" />
+      </AvatarFallback>
+    </Avatar>
+  )
 }
 
 interface AgendaPanelProps {
@@ -88,7 +102,9 @@ interface AgendaPanelProps {
 /**
  * The right-side panel content at lg: a titled card with the month's agenda,
  * grouped per day with collapsible groups, plus an event-detail surface that
- * slides over it (back button in the header, styled like the agenda day bars).
+ * slides over it. The detail carries the contacts docked panel's anatomy —
+ * h-11 title bar with a dismiss action, centered identity block, hairline
+ * sections, pinned action footer — so both right panels read the same.
  * Both layers stay mounted so the agenda keeps its scroll position and
  * collapse state while the detail is open.
  */
@@ -167,7 +183,7 @@ export function AgendaPanel({
           const collapsed = collapsedDays.has(g.key)
           return (
             <div key={g.key} role="group" data-day={g.key}>
-              {/* Day bar — same chrome as the detail header below */}
+              {/* Day bar — the list layer's sticky muted group header */}
               <button
                 type="button"
                 onClick={() => onToggleDay(g.key)}
@@ -230,7 +246,10 @@ export function AgendaPanel({
         })}
       </div>
       {/* Detail layer — sweeps in from the right edge covering the agenda, and
-          slides back out to the right on back, revealing the agenda beneath */}
+          slides back out to the right on back, revealing the agenda beneath.
+          Chrome mirrors the contacts docked panel: h-11 title bar with the
+          dismiss action, centered identity block, hairline sections, and the
+          pinned footer. */}
       <AnimatePresence>
         {detailItem && (
           <motion.div
@@ -239,31 +258,46 @@ export function AgendaPanel({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-card absolute inset-0 z-20 flex flex-col"
+            className="bg-card absolute inset-0 z-20 flex flex-col text-sm"
           >
-            <div className="bg-muted flex h-9 items-center gap-1.5 border-b px-2">
+            <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
+              <span className="font-semibold">Event</span>
               <Button
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Back to agenda"
                 onClick={onBack}
               >
-                <ArrowLeftIcon aria-hidden="true" />
+                <XIcon aria-hidden="true" />
               </Button>
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {eventDisplayTitle(detailItem)}
-              </span>
-              <DayBadge daysUntil={detailItem.days_until} />
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <p className="text-muted-foreground text-sm">
-                {format(localMidnight(detailItem.date), 'EEEE, d MMMM yyyy')}
-              </p>
-              <div className="mt-3">
-                <EventDetailRows item={detailItem} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {/* Identity block — the contacts panel's profile header: avatar
+                  above the title, the long date as the muted subtitle */}
+              <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center">
+                {identityAvatar(detailItem)}
+                <h2 className="text-pretty text-lg leading-snug font-semibold">
+                  {eventDisplayTitle(detailItem)}
+                </h2>
+                <p className="text-muted-foreground">
+                  {format(localMidnight(detailItem.date), 'EEEE, d MMMM yyyy')}
+                </p>
+                {/* Countdown badge — the contacts panel's occasion-badge style
+                    ("in 5d" / "today", warning within a week) so both right
+                    panels read the same */}
+                <Badge variant={detailItem.days_until <= 7 ? 'warning-outline' : 'secondary'}>
+                  {detailItem.days_until <= 0 ? 'today' : `in ${detailItem.days_until}d`}
+                </Badge>
               </div>
+              <PanelSection title="Details">
+                <EventDetailFacts item={detailItem} />
+              </PanelSection>
+              <PanelSection title="Reminders">
+                <EventRemindersRow item={detailItem} />
+              </PanelSection>
             </div>
-            {/* Send trigger pinned to the bottom, full width */}
+            {/* Send trigger pinned to the bottom, full width — the contacts
+                panel's pinned action slot */}
             <div className="border-t p-3">
               <ReminderTrigger item={detailItem} className="w-full" />
             </div>

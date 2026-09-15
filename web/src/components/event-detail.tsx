@@ -11,20 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { DetailRow } from '@/components/panel-section'
 import { ChevronDownIcon, SendIcon } from 'lucide-react'
 
 /** Local midnight — avoids the UTC offset shift of `new Date("YYYY-MM-DD")`. */
 export function localMidnight(date: string): Date {
   return new Date(`${date}T00:00:00`)
-}
-
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="text-muted-foreground shrink-0 text-sm">{label}</span>
-      <span className="text-right text-sm font-medium">{children}</span>
-    </div>
-  )
 }
 
 /**
@@ -54,10 +46,11 @@ function RemindersValue({ item }: { item: UpcomingItem }) {
   )
 }
 
-/** Info rows for one upcoming item (no actions). */
-export function EventDetailRows({ item }: { item: UpcomingItem }) {
+/** Facts about one upcoming item, minus reminders — rows only (no wrapper),
+ *  so panels can drop them straight into a "Details" section. */
+export function EventDetailFacts({ item }: { item: UpcomingItem }) {
   return (
-    <div className="space-y-3">
+    <>
       <DetailRow label="Kind">
         {item.kind === 'holiday' ? 'Holiday' : 'Occasion'}
       </DetailRow>
@@ -79,9 +72,21 @@ export function EventDetailRows({ item }: { item: UpcomingItem }) {
         </DetailRow>
       )}
       {item.pawukon && <DetailRow label="Pawukon">{item.pawukon}</DetailRow>}
-      <DetailRow label="Reminders">
-        <RemindersValue item={item} />
-      </DetailRow>
+    </>
+  )
+}
+
+/** The reminders row on its own, so panels can give it its own section. */
+export function EventRemindersRow({ item }: { item: UpcomingItem }) {
+  return <DetailRow label="Reminders"><RemindersValue item={item} /></DetailRow>
+}
+
+/** Info rows for one upcoming item (no actions). */
+export function EventDetailRows({ item }: { item: UpcomingItem }) {
+  return (
+    <div className="space-y-2.5">
+      <EventDetailFacts item={item} />
+      <EventRemindersRow item={item} />
     </div>
   )
 }
