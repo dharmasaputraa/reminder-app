@@ -46,32 +46,20 @@ function ContactDetailPage() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-0">
-      {/* Read-only detail. Centered at max-w-2xl (672px) while no edit is
-          open — deliberately narrower than the shell container — then pushed
-          to the left edge and widened to the full two-column width as the
-          panel opens. maxWidth tweens with the panel's own 0.25s easeOut so
-          panel + push + widen read as one movement; mx-auto in both states
-          keeps it centered whenever the width leaves slack (mid-tween and
-          below lg). 1600 sits above the widest shell (1400px), so the open
-          state is effectively uncapped — the `min-w-0 flex-1` behavior the
-          other two-section pages use. */}
+      {/* Detail column: always full width — no max-width animation
+          (revision spec); the edit aside pushes it through flex alone. */}
       <div className="min-w-0 flex-1">
-        <motion.div
-          initial={false}
-          animate={{ maxWidth: isLg && editOpen ? 1600 : 672 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="mx-auto w-full"
-        >
-          <ContactDetailContent contactId={Number(id)} variant="page" onEdit={openEdit} />
-        </motion.div>
+        <ContactDetailContent contactId={Number(id)} variant="page" onEdit={openEdit} />
       </div>
 
       {/* Edit side section (lg+ only): the contacts-index collapse tween
           verbatim — width + opacity + marginLeft in place, fixed-width inner
           so the panel never squishes mid-transition, lg gap on the animated
           marginLeft. The form stays mounted through the close tween (inert),
-          so unsaved edits survive an accidental close. Gated on isLg (not
-          just hidden) so the below-lg dialog never coexists with a second
+          so unsaved edits survive an accidental close. Panel height is
+          content-driven (no fixed height) since the form is identity-only
+          and short — the panel hugs its content. Gated on isLg (not just
+          hidden) so the below-lg dialog never coexists with a second
           mounted form carrying the same DOM ids. */}
       {isLg && (
         <motion.aside
@@ -84,9 +72,9 @@ function ContactDetailPage() {
             marginLeft: editOpen ? 16 : 0,
           }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="hidden h-[640px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
+          className="hidden shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
         >
-          <div className="h-full w-[360px] xl:w-[420px]">
+          <div className="w-[360px] xl:w-[420px]">
             <ContactEditForm
               contactId={Number(id)}
               variant="panel"
@@ -106,7 +94,7 @@ function ContactDetailPage() {
               <DialogHeader>
                 <DialogTitle className="text-left">Edit contact</DialogTitle>
                 <DialogDescription className="text-left">
-                  Identity, occasions, and preferences — saved in place.
+                  Name, nickname, and notes — saved in place.
                 </DialogDescription>
               </DialogHeader>
               <ContactEditForm contactId={Number(id)} variant="dialog" onSaved={closeEdit} />
