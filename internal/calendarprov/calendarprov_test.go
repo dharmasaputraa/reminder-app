@@ -91,6 +91,26 @@ func TestDeduplicateHolidaysFirstWins(t *testing.T) {
 	}
 }
 
+// The dedup key is (date + normalized name): two genuinely DIFFERENT holidays
+// sharing a date must not be over-merged. Pins the "same day ≠ duplicate" edge
+// of the merge that first-wins semantics could otherwise swallow.
+func TestDeduplicateHolidaysKeepsDistinctSameDay(t *testing.T) {
+	in := []domain.Holiday{
+		{Date: domain.NewDate(2026, 1, 1), Name: "Tahun Baru Masehi", Category: "national"},
+		{Date: domain.NewDate(2026, 1, 1), Name: "Hari Saraswati", Category: "saka"},
+	}
+	out := DeduplicateHolidays(in)
+	if len(out) != 2 {
+		t.Fatalf("out = %+v, want both distinct same-day holidays to survive", out)
+	}
+	if out[0].Name != "Tahun Baru Masehi" || out[0].Category != "national" {
+		t.Errorf("first holiday must be preserved in order: %+v", out[0])
+	}
+	if out[1].Name != "Hari Saraswati" || out[1].Category != "saka" {
+		t.Errorf("second holiday must be preserved in order: %+v", out[1])
+	}
+}
+
 func TestMultiProviderDeduplicatesAcrossSources(t *testing.T) {
 	m := MultiProvider{Providers: []Provider{
 		stubProvider{name: "paw", cat: "pawukon", hs: []domain.Holiday{

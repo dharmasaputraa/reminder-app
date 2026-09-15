@@ -340,6 +340,34 @@ func TestHolidayProviderFailureStillSendsOthers(t *testing.T) {
 	}
 }
 
+// The HIGHER-priority provider is absent entirely (only saka configured): the
+// lower-priority duplicate must not be swallowed by dedup — it is scheduled
+// with its OWN category's offsets (saka {0} → on-time D0). Pawukon normally
+// wins this same-day collision (TestHolidayDedupAcrossProviders); this pins
+// the degenerate case where nothing outranks the saka copy.
+func TestHolidaySakaSurvivesWithoutPawukon(t *testing.T) {
+	now := time.Date(2026, 10, 31, 8, 2, 0, 0, time.UTC)
+	h := newHarness(t, now)
+	h.svc.Providers = []calendarprov.Provider{
+		&stubProvider{cat: "saka", hs: []domain.Holiday{
+			{Date: domain.NewDate(2026, 10, 31), Name: "Hari Saraswati"}}},
+	}
+	snap := snapUTC()
+	snap.DefaultOffsets = []int{0}
+	snap.HolidayOffsets = map[string][]int{"saka": {0}}
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sent != 2 || res.Missed != 0 {
+		t.Fatalf("res = %+v, want Sent 2 (otonan + saka Hari Saraswati D0 on time), Missed 0", res)
+	}
+	res, _ = h.svc.RunOnce(context.Background(), snap)
+	if res.Sent != 0 || res.Missed != 0 {
+		t.Errorf("second run must be fully deduped: %+v", res)
+	}
+}
+
 // Service is built exactly like in main.go (Plan 3 Task 9): struct literal
 // from outside the package — the unexported failUntil field cannot be initialized,
 // so lazy-init in RunOnce is mandatory; the first failed send must not panic
