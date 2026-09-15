@@ -122,13 +122,13 @@ Alternative without Litestream: stop the app, copy `wimember.db` back, start the
 ```bash
 make test    # CGO_ENABLED=0 go test ./... -count=1
 make dev     # backend with hot reload (air): rebuild + restart on .go changes
-make web     # npm ci + build SPA → internal/api/webroot (embed)
+make web     # pnpm install --frozen-lockfile + build SPA → internal/api/webroot (embed)
 make build   # build SPA + binary to bin/wimember
 make run     # build + run dev mode on :8080 (without hot reload)
 make container  # docker compose build, podman-compose fallback (Makefile)
 ```
 
-Full-stack dev flow (two terminals): `make dev` for the backend (air, ~1s auto-rebuild) and `cd web && npm run dev` for the frontend (Vite HMR, proxying `/api` to `:8080`). Air is pinned via the `tool` directive in go.mod — no manual install needed, just `go tool air`. Configuration lives in `.air.toml` (only non-test `.go` files trigger a rebuild; the SPA still goes through Vite).
+Full-stack dev flow (two terminals): `make dev` for the backend (air, ~1s auto-rebuild) and `cd web && pnpm run dev` for the frontend (Vite HMR, proxying `/api` to `:8080`). Air is pinned via the `tool` directive in go.mod — no manual install needed, just `go tool air`. Configuration lives in `.air.toml` (only non-test `.go` files trigger a rebuild; the SPA still goes through Vite).
 
 Pawukon fixtures are scraped once at dev time (not at runtime) with a separate module:
 
@@ -163,6 +163,37 @@ docker rm -f wimember-smoke
 Note: `ADMIN_EMAILS` must be included because `/scheduler/run` is admin-only. The image name produced by `docker compose build app` follows the project directory name (e.g. `wimember-app` if the repo is in a folder named `wimember`); if it differs, adjust the tag or build with `docker build -t wimember-app .`.
 
 Verification without Docker is still possible via `make test` + `make build` + `make run` (see §Development).
+
+## CI/CD & Deployment (Dokploy)
+
+Images are **built in GitHub Actions and pushed to GHCR** — Dokploy only pulls pre-built images, so versioning happens via image tags (no build load on the server).
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `ci.yml` | push to `main`, PRs | `go test` + `go vet`, web lint + typecheck/build, full Docker image build (no push) |
+| `release.yml` | push tag `v*` (or manual) | `go test`, multi-arch image → `ghcr.io/dharmasaputraa/reminder-app`, redeploy via Dokploy API |
+
+### Release flow
+
+```bash
+git tag v1.2.3 && git push origin v1.2.3
+```
+
+Pushes image tags `1.2.3`, `1.2`, `1`, `latest`, `sha-<sha>` to GHCR (linux/amd64 + linux/arm64), then triggers Dokploy to redeploy.
+
+### One-time Dokploy setup
+
+1. **Registry**: in Dokploy add a registry (GHCR) — username `dharmasaputraa`, password = GitHub PAT with `read:packages`.
+2. **Application**: Source Type **Docker**, image `ghcr.io/dharmasaputraa/reminder-app:latest`.
+3. **Volumes**: mount a volume at `/data` (SQLite lives there — without it, data is lost on redeploy).
+4. **Environment**: `APP_SECRET` (≥16 chars), `AUTH_MODE=cfaccess`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ADMIN_EMAILS`, `TZ`.
+5. **Health check**: path `/healthz`, port 8080.
+6. **API**: create an API key (Dokploy → Profile → API Keys), copy the application ID from the app's URL.
+7. **GitHub secrets** (repo → Settings → Secrets → Actions): `DOKPLOY_URL` (e.g. `https://panel.example.com`), `DOKPLOY_API_KEY`, `DOKPLOY_APPLICATION_ID`. Without them, `release.yml` still builds and pushes images — it only skips the auto-redeploy step.
+
+### Rollback
+
+Point the application's image tag at an older version (e.g. `ghcr.io/dharmasaputraa/reminder-app:1.2.2`) in Dokploy → Deploy. Every release stays pullable from GHCR.
 
 ## Project structure
 
