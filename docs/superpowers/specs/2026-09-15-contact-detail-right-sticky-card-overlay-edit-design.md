@@ -112,6 +112,24 @@ flows (`?c=new` docked panel, `/new` page), and the docked variant of
   buttons. No focus is moved programmatically; the dialog keeps Radix's
   automatic focus trap below lg.
 
+## Revision 2 (2026-09-15, user follow-up — approved in chat)
+
+All in `ContactSummaryCard` only; route, docked panel, and edit form untouched.
+
+1. **Edit moves into the ⋮ dropdown.** The actions row is a single
+   right-aligned ⋮ button; the menu holds an `Edit` item (pencil icon,
+   calls `onEdit`) above the destructive `Delete contact` item.
+   `min-w-40` kept so items stay on one line.
+2. **Notes becomes a section** replacing the plain paragraph: a small
+   muted "Notes" label above a `rounded-lg border` box holding the notes
+   text (`whitespace-pre-wrap`), left-aligned, full card width. The box
+   height matches the edit form's Notes textarea (`min-h-16`, same
+   padding/border/text sizing). Empty notes render muted
+   "No notes yet." with the box still shown so the height is stable.
+3. **More space above the avatar**: identity block `pt-2` → `pt-8`.
+4. **Bigger avatar**: `size-16` → `size-24` (initials `text-lg` →
+   `text-2xl`); loading skeleton's avatar circle enlarged to match.
+
 ## Out of scope
 
 - Dashboard, contacts grid/index, channels, settings, create flows.
