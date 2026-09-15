@@ -33,3 +33,41 @@ func TestOneCycleExactHolidays(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeHolidayName(t *testing.T) {
+	cases := map[string]string{
+		"Saraswati":                      "saraswati",
+		"Hari Saraswati":                 "saraswati",
+		"Hari Raya Galungan":             "galungan",
+		"Galungan":                       "galungan",
+		"Hari Raya Nyepi":                "nyepi",
+		"Hari Nyepi (Tahun Baru Saka)":   "nyepi",
+		"Hari Raya Waisak 2570":          "waisak 2570",
+		"Umanis Galungan":                "umanis galungan",
+		"Penampahan Galungan":            "penampahan galungan",
+		"Hari Proklamasi Kemerdekaan RI": "proklamasi kemerdekaan ri",
+		"  Hari   Raya   Kuningan ":      "kuningan",
+	}
+	for in, want := range cases {
+		if got := NormalizeHolidayName(in); got != want {
+			t.Errorf("NormalizeHolidayName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHolidayDedupeKey(t *testing.T) {
+	pawukon := Holiday{Date: NewDate(2026, 10, 31), Name: "Saraswati"}
+	saka := Holiday{Date: NewDate(2026, 10, 31), Name: "Hari Saraswati"}
+	if pawukon.DedupeKey() != saka.DedupeKey() {
+		t.Errorf("same day + normalized name must share a key: %q vs %q",
+			pawukon.DedupeKey(), saka.DedupeKey())
+	}
+	umanis := Holiday{Date: NewDate(2026, 10, 31), Name: "Umanis Galungan"}
+	if pawukon.DedupeKey() == umanis.DedupeKey() {
+		t.Error("distinct days (Umanis vs the holiday itself) must not share a key")
+	}
+	otherDay := Holiday{Date: NewDate(2026, 6, 17), Name: "Hari Raya Galungan"}
+	if pawukon.DedupeKey() == otherDay.DedupeKey() {
+		t.Error("different dates must not share a key")
+	}
+}

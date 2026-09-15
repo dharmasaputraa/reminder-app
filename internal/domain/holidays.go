@@ -1,6 +1,10 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
 
 // HolidayDef: one Pawukon holiday = a combination of (saptawara, pancawara, wuku).
 type HolidayDef struct {
@@ -28,6 +32,34 @@ type Holiday struct {
 	// MultiProvider from the producing provider. Empty when a provider is used
 	// directly. Drives per-category reminder offsets in /upcoming.
 	Category string `json:"category,omitempty"`
+}
+
+// Name normalization for cross-source dedup (spec 2026-09-15-holiday-dedup):
+// the saka API spells Balinese holidays with honorifics — "Hari Raya
+// Galungan", "Hari Saraswati", "Hari Nyepi (Tahun Baru Saka)" — while the
+// pawukon defs are bare ("Galungan"). Strip parentheticals and the leading
+// "Hari Raya"/"Hari" honorific, lowercase, collapse whitespace. Distinct
+// neighboring days never collapse: "Umanis Galungan" keeps its prefix.
+var (
+	holidayParenRe = regexp.MustCompile(`\([^)]*\)`)
+	hariRayaRe     = regexp.MustCompile(`(?i)^\s*hari\s+raya\s+`)
+	hariRe         = regexp.MustCompile(`(?i)^\s*hari\s+`)
+)
+
+// NormalizeHolidayName reduces an Indonesian holiday name to a comparable
+// form. Only for matching (dedup keys), never for display.
+func NormalizeHolidayName(name string) string {
+	s := holidayParenRe.ReplaceAllString(name, " ")
+	s = hariRayaRe.ReplaceAllString(s, "")
+	s = hariRe.ReplaceAllString(s, "")
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// DedupeKey: cross-source identity of a holiday — date + normalized name.
+// "Saraswati" (pawukon) and "Hari Saraswati" (saka) share a key on the same
+// date; "Umanis Galungan" never shares with "Galungan".
+func (h Holiday) DedupeKey() string {
+	return h.Date.String() + "|" + NormalizeHolidayName(h.Name)
 }
 
 // PawukonHolidaysBetween returns Pawukon-based holidays in [from, to].
