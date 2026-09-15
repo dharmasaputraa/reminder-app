@@ -40,11 +40,17 @@ export interface ContactDetailSearch {
 /** Route `validateSearch` for the contact detail page. Accepts `?edit=1`,
  *  `?edit=true`, and the bare `?edit` form. Writing undefined clears the
  *  key so the URL cleans itself up (same validator-merge note as
- *  validateContactsSearch above). */
+ *  validateContactsSearch above).
+ *  NOTE: the router's default type-preserving search parser
+ *  (JSON.parse-based) delivers plain `?edit=1` as the NUMBER 1, so the
+ *  numeric check is the path plain deep links actually take; the string
+ *  forms cover the quoted `?edit=%221%22` / `?edit=%22true%22` URLs for
+ *  robustness. */
 export function validateContactDetailSearch(
   search: Record<string, unknown>
 ): ContactDetailSearch {
   const raw = search.edit
-  const edit = raw === true || raw === '1' || raw === 'true' || raw === ''
+  const edit =
+    raw === true || raw === 1 || raw === '1' || raw === 'true' || raw === ''
   return { edit: edit || undefined }
 }
