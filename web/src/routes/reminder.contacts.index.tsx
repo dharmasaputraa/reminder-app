@@ -74,7 +74,7 @@ function Contacts() {
   const showPanel = isLg && c !== undefined
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-0">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4">
       <div className="min-w-0 flex-1">
         {contacts.isLoading ? (
           <div className="space-y-3">
@@ -104,13 +104,16 @@ function Contacts() {
           <motion.aside
             key="contact-detail"
             aria-label="Contact detail"
-            initial={{ width: 0, opacity: 0, marginLeft: 0 }}
-            animate={{ width: 'auto', opacity: 1, marginLeft: 16 }}
-            exit={{ width: 0, opacity: 0, marginLeft: 0 }}
+            initial={{ opacity: 0, x: 32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 32 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="hidden shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
+            className="hidden h-[560px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
           >
-            <div className="h-full w-96 xl:w-[28rem]">
+            {/* Same fixed-width inner as the dashboard's agenda panel. The
+                slide+fade entrance (no width tween) avoids measuring 'auto'
+                on mount, which collapsed the panel on first selection. */}
+            <div className="h-full w-[280px] xl:w-[340px]">
               {/* key={c}: switching contacts cross-fades the content inside
                   the open panel instead of snapping. */}
               <motion.div
@@ -118,7 +121,7 @@ function Contacts() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
-                className="h-full overflow-y-auto p-4"
+                className="h-full overflow-y-auto"
               >
                 <ContactDetailContent contactId={c === 'new' ? 'new' : c} variant="docked" />
               </motion.div>
