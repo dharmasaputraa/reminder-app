@@ -108,7 +108,7 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-              Delete contact
+              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
