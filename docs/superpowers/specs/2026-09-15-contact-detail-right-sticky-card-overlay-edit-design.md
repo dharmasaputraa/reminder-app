@@ -130,6 +130,19 @@ All in `ContactSummaryCard` only; route, docked panel, and edit form untouched.
 4. **Bigger avatar**: `size-16` → `size-24` (initials `text-lg` →
    `text-2xl`); loading skeleton's avatar circle enlarged to match.
 
+## Revision 3 (2026-09-15, user follow-up — approved in chat)
+
+1. **Equal heights**: the card wrapper's `lg:min-h-[400px]` (the edit
+   form's natural fit) applies in BOTH states — measured card 361px vs
+   open 400px previously made the panel visibly resize when toggling
+   edit; now closed and open are both 400px. Replaces Revision-decision
+   5's "floor only while open".
+2. **Menu divider**: a `DropdownMenuSeparator` between the Edit item and
+   the destructive Delete contact item.
+3. **Iconless menu items**: Edit and Delete contact render text only
+   (Pencil/Trash icons removed from the menu; the ⋮ trigger keeps its
+   icon).
+
 ## Out of scope
 
 - Dashboard, contacts grid/index, channels, settings, create flows.

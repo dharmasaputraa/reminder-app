@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react'
+import { MoreHorizontalIcon } from 'lucide-react'
 import { ApiError, api, type Contact } from '@/lib/api'
 import { initials } from '@/lib/initials'
 import {
@@ -21,6 +21,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -32,12 +33,12 @@ interface ContactSummaryCardProps {
   onEdit?: () => void
 }
 
-/** The right-hand sticky summary card of the detail page: the actions row
- *  (Edit + ⋮ holding the destructive delete) above the read-only identity
- *  block (avatar, name, nickname, notes). Content only — the host supplies
- *  the card chrome so the edit overlay can slide within one visual card.
- *  Shares the ['contact', id] query key with the sections column
- *  (ContactDetailContent); react-query serves both from one fetch. */
+/** The right-hand sticky summary card of the detail page: the ⋮ actions row
+ *  (edit + destructive delete, divider between) above the read-only
+ *  identity block (avatar, name, nickname, notes). Content only — the host
+ *  supplies the card chrome so the edit overlay can slide within one
+ *  visual card. Shares the ['contact', id] query key with the sections
+ *  column (ContactDetailContent); react-query serves both from one fetch. */
 export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProps) {
   const id = String(contactId)
   const qc = useQueryClient()
@@ -103,14 +104,11 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
               which wraps the item labels onto two lines. */}
           <DropdownMenuContent align="end" className="min-w-40">
             {onEdit && (
-              <DropdownMenuItem onClick={onEdit}>
-                <PencilIcon aria-hidden="true" />
-                Edit
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-              <Trash2Icon aria-hidden="true" />
-              Delete
+              Delete contact
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useIsLg } from '@/hooks/use-lg'
-import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/reminder/contacts/$id')({
   beforeLoad: ({ params }) => {
@@ -62,16 +61,12 @@ function ContactDetailPage() {
           visual card; the edit overlay is absolute inset-0 within it. The
           base layer goes inert while covered so Tab can't land on the
           hidden Edit/⋮ buttons (the agenda panel's pattern). The min-h
-          floor while open keeps the 3-field form from being cramped inside
-          a short (notes-less) card. The overlay is lg-only; below lg the
+          floor holds the column at the edit form's natural height in BOTH
+          states, so switching edit on/off never resizes the card (user
+          revision: equal heights). The overlay is lg-only; below lg the
           dialog replaces it (same ?edit param). */}
       <div className="order-1 shrink-0 lg:order-2 lg:sticky lg:top-0 lg:w-[340px] xl:w-[400px]">
-        <div
-          className={cn(
-            'relative overflow-hidden rounded-xl border bg-card',
-            editOpen && 'lg:min-h-[400px]',
-          )}
-        >
+        <div className="relative overflow-hidden rounded-xl border bg-card lg:min-h-[400px]">
           <div inert={editOpen}>
             <ContactSummaryCard contactId={Number(id)} onEdit={openEdit} />
           </div>
