@@ -103,7 +103,13 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   /** Identity block: avatar above the name (+ nickname) — the subject,
    *  centered like a profile header in both variants. */
   const identityBlock = (
-    <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center">
+    <div
+      className={
+        variant === 'page'
+          ? 'flex flex-col items-center gap-2 px-4 pb-5 pt-14 text-center sm:pt-6'
+          : 'flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center'
+      }
+    >
       <Avatar className="size-16">
         <AvatarFallback className="text-lg">{initials(c.name)}</AvatarFallback>
       </Avatar>
