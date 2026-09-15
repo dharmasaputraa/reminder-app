@@ -142,9 +142,12 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   const addOcc = useMutation({
     mutationFn: () => api(`/contacts/${id}/occasions`, { method: 'POST', body: JSON.stringify({ type, date }) }),
     onSuccess: () => { setDate(''); setDateSel(undefined); setPawukon(''); invalidate() },
+    onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })
   const delOcc = useMutation({
-    mutationFn: (oid: number) => api(`/occasions/${oid}`, { method: 'DELETE' }), onSuccess: invalidate,
+    mutationFn: (oid: number) => api(`/occasions/${oid}`, { method: 'DELETE' }),
+    onSuccess: invalidate,
+    onError: (e) => toast.error(`Failed to delete occasion: ${String(e)}`),
   })
   const savePrefs = useMutation({
     mutationFn: (body: Record<string, unknown>) => api(`/contacts/${id}/prefs`, { method: 'PUT', body: JSON.stringify(body) }),
@@ -191,7 +194,8 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
   }))
 
   /** Identity block: avatar above the name (+ nickname) — the subject,
-   *  centered like a profile header. Notes render beneath when present.
+   *  centered like a profile header. Notes render in this block on the page
+   *  variant only; docked shows them via its own Notes PanelSection.
    *  Identity is read-only here: editing lives in the side section. */
   const identityBlock = (
     <div
@@ -428,24 +432,29 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
                       <span className="truncate">{longDate(o.base_date)}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
+                      {/* Remind needs an actual occurrence date: the backend
+                          matches `date` exactly, and a base date is not an
+                          occurrence for otonan (base+210n). */}
                       {up && (
-                        <Badge
-                          variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
-                          className="shrink-0"
-                        >
-                          {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
-                        </Badge>
+                        <>
+                          <Badge
+                            variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
+                            className="shrink-0"
+                          >
+                            {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
+                          </Badge>
+                          <ReminderTrigger
+                            kind="occasion"
+                            occasionId={o.id}
+                            contactId={c.id}
+                            date={up.date}
+                            title={`${c.name}'s ${o.type}`}
+                            variant="ghost"
+                            compact
+                            className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
+                          />
+                        </>
                       )}
-                      <ReminderTrigger
-                        kind="occasion"
-                        occasionId={o.id}
-                        contactId={c.id}
-                        date={o.base_date}
-                        title={`${c.name}'s ${o.type}`}
-                        variant="ghost"
-                        compact
-                        className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
-                      />
                       <AlertDialog>
                         <AlertDialogTrigger
                           render={

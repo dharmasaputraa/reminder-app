@@ -214,9 +214,10 @@ export function ReminderTrigger({
           </Button>
         }
       />
-      {/* min-w overrides the shell's min-w-32 and restores the default anchor
-          width: the menu tracks the full-width trigger and only grows */}
-      <DropdownMenuContent align="start" className="min-w-(--anchor-width)">
+      {/* Panel trigger: the menu tracks the full-width anchor. The compact
+          28px icon trigger would inherit that width, so it gets a readable
+          fixed minimum instead. */}
+      <DropdownMenuContent align="start" className={compact ? 'w-max min-w-40' : 'min-w-(--anchor-width)'}>
         {enabledChannels.map((c) => (
           <DropdownMenuItem key={c.id} onClick={() => send.mutate([c.id])}>
             <span className="truncate">{c.name}</span>
