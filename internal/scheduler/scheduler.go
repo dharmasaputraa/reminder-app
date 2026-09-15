@@ -221,6 +221,16 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	}
 
 	// ---- holidays ----
+	// Gather: every enabled provider contributes its holidays stamped with its
+	// category and effective offsets. A failing provider is skipped (computed
+	// pawukon keeps working). Dedup below keeps the FIRST occurrence, so the
+	// provider slice order is the priority: pawukon wins over API sources
+	// (spec 2026-09-15-holiday-dedup).
+	type holidayWithOffsets struct {
+		h    domain.Holiday
+		offs []int
+	}
+	var gathered []holidayWithOffsets
 	for _, p := range s.Providers {
 		if !snap.HolidayCategories[p.Category()] {
 			continue
@@ -237,48 +247,63 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 			continue
 		}
 		for _, h := range hs {
-			hkey := HolidayKey(p.Category(), h)
-			for _, off := range offs {
-				rDate := h.Date.AddDays(-off)
-				sendAt := time.Date(rDate.Year, time.Month(rDate.Month), rDate.Day, sendHH, sendMM, 0, 0, loc)
-				if sendAt.After(now) {
-					continue
-				}
-				entry := store.NotificationEntry{HolidayKey: &hkey,
-					OccurrenceDate: h.Date, OffsetDays: off}
-				if sendAt.Before(dueStart) {
-					// holiday → all channels of ALL users (broadcast)
-					users, err := s.St.ListUsers(ctx)
-					if err != nil {
-						continue
-					}
-					for _, u := range users {
-						chs, _ := s.St.ListChannels(ctx, u.ID)
-						for _, ch := range chs {
-							if ch.Enabled {
-								entry.ChannelID, entry.Status = ch.ID, "missed"
-								s.record(ctx, entry, &res, "holiday")
-							}
-						}
-					}
-					continue
-				}
-				late := now.Sub(sendAt) > time.Hour
-				msg := notify.HolidayMessage(h, h.Date.JDN()-today.JDN(), late)
+			h.Category = p.Category()
+			gathered = append(gathered, holidayWithOffsets{h: h, offs: offs})
+		}
+	}
+	// Schedule: the same send loop as before, over the deduped list. The
+	// winner's category/offsets drive the reminders; its HolidayKey is
+	// identical to the pre-dedup key, so notification_log dedupe never
+	// re-sends, and dropped duplicates simply stop being generated.
+	seen := map[string]bool{}
+	for _, g := range gathered {
+		dk := g.h.DedupeKey()
+		if seen[dk] {
+			continue
+		}
+		seen[dk] = true
+		h := g.h
+		hkey := HolidayKey(h.Category, h)
+		for _, off := range g.offs {
+			rDate := h.Date.AddDays(-off)
+			sendAt := time.Date(rDate.Year, time.Month(rDate.Month), rDate.Day, sendHH, sendMM, 0, 0, loc)
+			if sendAt.After(now) {
+				continue
+			}
+			entry := store.NotificationEntry{HolidayKey: &hkey,
+				OccurrenceDate: h.Date, OffsetDays: off}
+			if sendAt.Before(dueStart) {
+				// holiday → all channels of ALL users (broadcast)
 				users, err := s.St.ListUsers(ctx)
 				if err != nil {
 					continue
 				}
 				for _, u := range users {
 					chs, _ := s.St.ListChannels(ctx, u.ID)
-					var enabled []store.Channel
 					for _, ch := range chs {
 						if ch.Enabled {
-							enabled = append(enabled, ch)
+							entry.ChannelID, entry.Status = ch.ID, "missed"
+							s.record(ctx, entry, &res, "holiday")
 						}
 					}
-					s.deliver(ctx, enabled, entry, msg, &res, "holiday")
 				}
+				continue
+			}
+			late := now.Sub(sendAt) > time.Hour
+			msg := notify.HolidayMessage(h, h.Date.JDN()-today.JDN(), late)
+			users, err := s.St.ListUsers(ctx)
+			if err != nil {
+				continue
+			}
+			for _, u := range users {
+				chs, _ := s.St.ListChannels(ctx, u.ID)
+				var enabled []store.Channel
+				for _, ch := range chs {
+					if ch.Enabled {
+						enabled = append(enabled, ch)
+					}
+				}
+				s.deliver(ctx, enabled, entry, msg, &res, "holiday")
 			}
 		}
 	}

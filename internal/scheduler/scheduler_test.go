@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -27,12 +28,29 @@ func (s *stubNotifier) Send(_ context.Context, m notify.Message) error {
 }
 func (s *stubNotifier) Test(_ context.Context) error { return nil }
 
-type stubProvider struct{ hs []domain.Holiday }
+type stubProvider struct {
+	hs  []domain.Holiday
+	cat string // optional; "" → pawukon
+}
 
-func (s *stubProvider) Name() string     { return "stub" }
-func (s *stubProvider) Category() string { return "pawukon" }
+func (s *stubProvider) Name() string { return "stub" }
+func (s *stubProvider) Category() string {
+	if s.cat == "" {
+		return "pawukon"
+	}
+	return s.cat
+}
 func (s *stubProvider) HolidaysBetween(_ context.Context, _, _ domain.Date) ([]domain.Holiday, error) {
 	return s.hs, nil
+}
+
+// failProvider: always errors — models the remote being down.
+type failProvider struct{ cat string }
+
+func (f failProvider) Name() string     { return "fail" }
+func (f failProvider) Category() string { return f.cat }
+func (f failProvider) HolidaysBetween(_ context.Context, _, _ domain.Date) ([]domain.Holiday, error) {
+	return nil, errors.New("remote down")
 }
 
 func snapUTC() Snapshot {
@@ -268,6 +286,57 @@ func TestHolidayReminder(t *testing.T) {
 	// PRE-SEND dedupe: total stub calls stay 2 (otonan + Galungan).
 	if len(h.notif.sent) != 2 {
 		t.Errorf("stub called %d times after run 2, must stay 2 (double spam)", len(h.notif.sent))
+	}
+}
+
+// Two providers emitting the same normalized holiday — pawukon "Saraswati"
+// vs saka "Hari Saraswati" on 2026-10-31. Dedup keeps the FIRST provider's
+// entry: exactly one holiday row, using the WINNER's offsets (pawukon {1}
+// → sendAt beyond the 24h catch-up window → recorded "missed"); saka's {0}
+// copy must not exist. Offsets {0} for the otonan seed → 1 sent.
+func TestHolidayDedupAcrossProviders(t *testing.T) {
+	now := time.Date(2026, 10, 31, 8, 2, 0, 0, time.UTC)
+	h := newHarness(t, now)
+	h.svc.Providers = []calendarprov.Provider{
+		&stubProvider{cat: "pawukon", hs: []domain.Holiday{
+			{Date: domain.NewDate(2026, 10, 31), Name: "Saraswati"}}},
+		&stubProvider{cat: "saka", hs: []domain.Holiday{
+			{Date: domain.NewDate(2026, 10, 31), Name: "Hari Saraswati"}}},
+	}
+	snap := snapUTC()
+	snap.DefaultOffsets = []int{0}
+	snap.HolidayOffsets = map[string][]int{"pawukon": {1}, "saka": {0}}
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sent != 1 || res.Missed != 1 {
+		t.Fatalf("res = %+v, want Sent 1 (otonan) Missed 1 (pawukon Saraswati D-1)", res)
+	}
+	res, _ = h.svc.RunOnce(context.Background(), snap)
+	if res.Sent != 0 || res.Missed != 0 {
+		t.Errorf("second run must be fully deduped: %+v", res)
+	}
+}
+
+// A failing provider must not take the others down: saka errors → skipped,
+// pawukon still delivers (and would still win any dedup against it).
+func TestHolidayProviderFailureStillSendsOthers(t *testing.T) {
+	now := time.Date(2026, 10, 31, 8, 2, 0, 0, time.UTC)
+	h := newHarness(t, now)
+	h.svc.Providers = []calendarprov.Provider{
+		failProvider{cat: "saka"},
+		&stubProvider{cat: "pawukon", hs: []domain.Holiday{
+			{Date: domain.NewDate(2026, 10, 31), Name: "Saraswati"}}},
+	}
+	snap := snapUTC()
+	snap.DefaultOffsets = []int{0}
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sent != 2 || res.Missed != 0 {
+		t.Fatalf("res = %+v, want Sent 2 (otonan + pawukon Saraswati), Missed 0", res)
 	}
 }
 
