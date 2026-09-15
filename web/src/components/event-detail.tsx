@@ -14,6 +14,33 @@ import {
 import { DetailRow } from '@/components/panel-section'
 import { ChevronDownIcon, SendIcon } from 'lucide-react'
 
+/** Whole days between today's local midnight and an ISO date — negative in
+ *  the past. Recomputed from the occurrence date instead of trusting the
+ *  API's days_until, which only means something for upcoming items and
+ *  collapses every past occurrence into <= 0. */
+function daysFromToday(date: string): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((Date.parse(`${date}T00:00:00`) - today.getTime()) / 86_400_000)
+}
+
+/** Countdown badge for one occurrence: "today", "in Nd", "Nd ago" — past
+ *  events only badge within the first week, then the badge disappears. */
+export function CountdownBadge({ date, className }: { date: string; className?: string }) {
+  const days = daysFromToday(date)
+  if (days < -7) return null
+  const label =
+    days === 0 ? 'today' : days > 0 ? `in ${days}d` : `${-days}d ago`
+  return (
+    <Badge
+      variant={days >= 0 && days <= 7 ? 'warning-outline' : 'secondary'}
+      className={className}
+    >
+      {label}
+    </Badge>
+  )
+}
+
 /** Local midnight — avoids the UTC offset shift of `new Date("YYYY-MM-DD")`. */
 export function localMidnight(date: string): Date {
   return new Date(`${date}T00:00:00`)

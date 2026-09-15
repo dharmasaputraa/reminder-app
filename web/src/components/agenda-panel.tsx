@@ -4,9 +4,9 @@ import { format } from 'date-fns'
 import type { CalendarEvent } from '@/components/reui/event-calendar/event-calendar-types'
 import type { UpcomingItem } from '../lib/api'
 import { cn } from '../lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  CountdownBadge,
   EventDetailFacts,
   EventRemindersRow,
   ReminderTrigger,
@@ -67,17 +67,22 @@ export function eventDisplayTitle(it: UpcomingItem): string {
   return it.title
 }
 
-/** The detail identity block's centered avatar: the contact's own avatar for
- *  occasions (same as the contacts panel's profile header), a calendar icon
- *  for holidays and anything without a contact. */
-function identityAvatar(it: UpcomingItem) {
+/** The event's own avatar: the contact's for occasions, the calendar-icon
+ *  avatar for holidays and contact-less occasions — one leading element per
+ *  row and for the detail identity block, so everything aligns. */
+function eventAvatar(
+  it: UpcomingItem,
+  className: string,
+  fallbackClassName: string,
+  iconClassName: string,
+) {
   if (it.kind === 'occasion' && it.contact_name) {
-    return contactAvatar(it, 'size-16', 'text-lg')
+    return contactAvatar(it, className, fallbackClassName)
   }
   return (
-    <Avatar className="size-16">
-      <AvatarFallback className="text-lg">
-        <CalendarIcon aria-hidden="true" className="size-6" />
+    <Avatar className={className}>
+      <AvatarFallback className={fallbackClassName}>
+        <CalendarIcon aria-hidden="true" className={iconClassName} />
       </AvatarFallback>
     </Avatar>
   )
@@ -135,9 +140,13 @@ export function AgendaPanel({
   const allCollapsed = groups.length > 0 && groups.every((g) => collapsedDays.has(g.key))
 
   return (
-    <div className="flex h-full flex-col text-sm">
+    <div className="relative h-full text-sm">
+      {/* Underlying surface — header + agenda list. Inert while the detail
+          layer covers it, so the collapse-all button needs no disabled
+          state: it is simply unreachable until the detail slides away. */}
+      <div className="flex h-full flex-col" inert={!!detailItem}>
       {/* Panel title bar — same height as the calendar's toolbar row (h-11) */}
-      <div className="flex h-11 items-center justify-between gap-2 border-b px-4">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
         <span className="font-semibold">Agenda</span>
         <div className="flex items-center gap-1">
           <span className="text-muted-foreground text-xs font-medium tabular-nums">
@@ -148,7 +157,6 @@ export function AgendaPanel({
               variant="ghost"
               size="icon-sm"
               className="-me-1.5"
-              disabled={!!detailItem}
               aria-label={allCollapsed ? 'Expand all days' : 'Collapse all days'}
               onClick={() => onSetAllCollapsed(!allCollapsed)}
             >
@@ -162,10 +170,10 @@ export function AgendaPanel({
         </div>
       </div>
       <div className="relative min-h-0 flex-1">
-      {/* Agenda list layer */}
+      {/* Agenda list layer — the wrapper's inert covers a11y; invisible
+          keeps the slide-in from ghosting over the list */}
       <div
         data-agenda-scroll
-        inert={!!detailItem}
         className={cn('absolute inset-0 overflow-y-auto', detailItem && 'invisible')}
       >
         {groups.length === 0 && (
@@ -228,7 +236,7 @@ export function AgendaPanel({
                       onClick={() => onOpenEvent(it)}
                       className="hover:bg-accent/40 flex w-full items-center gap-2.5 border-b px-4 py-2 text-start transition-colors"
                     >
-                      {contactAvatar(it, 'size-6', 'text-[10px]')}
+                      {eventAvatar(it, 'size-6', 'text-[10px]', 'size-3.5')}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{eventDisplayTitle(it)}</span>
                         {subtitle && (
@@ -245,11 +253,13 @@ export function AgendaPanel({
           )
         })}
       </div>
-      {/* Detail layer — sweeps in from the right edge covering the agenda, and
-          slides back out to the right on back, revealing the agenda beneath.
-          Chrome mirrors the contacts docked panel: h-11 title bar with the
-          dismiss action, centered identity block, hairline sections, and the
-          pinned footer. */}
+      </div>
+      </div>
+      {/* Detail layer — sweeps in from the right edge covering the whole
+          panel, header included, and slides back out to the right on back,
+          revealing the agenda beneath. Chrome mirrors the contacts docked
+          panel: h-11 title bar with the dismiss action, centered identity
+          block, hairline sections, and the pinned footer. */}
       <AnimatePresence>
         {detailItem && (
           <motion.div
@@ -273,21 +283,22 @@ export function AgendaPanel({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {/* Identity block — the contacts panel's profile header: avatar
-                  above the title, the long date as the muted subtitle */}
+                  above a tight title+date group (small inner gap, not the
+                  outer gap-2) */}
               <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-6 text-center">
-                {identityAvatar(detailItem)}
-                <h2 className="text-pretty text-lg leading-snug font-semibold">
-                  {eventDisplayTitle(detailItem)}
-                </h2>
-                <p className="text-muted-foreground">
-                  {format(localMidnight(detailItem.date), 'EEEE, d MMMM yyyy')}
-                </p>
-                {/* Countdown badge — the contacts panel's occasion-badge style
-                    ("in 5d" / "today", warning within a week) so both right
-                    panels read the same */}
-                <Badge variant={detailItem.days_until <= 7 ? 'warning-outline' : 'secondary'}>
-                  {detailItem.days_until <= 0 ? 'today' : `in ${detailItem.days_until}d`}
-                </Badge>
+                {eventAvatar(detailItem, 'size-16', 'text-lg', 'size-6')}
+                <div className="min-w-0 space-y-1">
+                  <h2 className="text-pretty text-lg leading-snug font-semibold">
+                    {eventDisplayTitle(detailItem)}
+                  </h2>
+                  <p className="text-muted-foreground">
+                    {format(localMidnight(detailItem.date), 'EEEE, d MMMM yyyy')}
+                  </p>
+                </div>
+                {/* Countdown — the contacts panel's badge style ("in 5d" /
+                    "today"), computed from the occurrence date so past
+                    events read "Nd ago" and disappear after a week */}
+                <CountdownBadge date={detailItem.date} />
               </div>
               <PanelSection title="Details">
                 <EventDetailFacts item={detailItem} />
@@ -304,7 +315,6 @@ export function AgendaPanel({
           </motion.div>
         )}
       </AnimatePresence>
-      </div>
     </div>
   )
 }

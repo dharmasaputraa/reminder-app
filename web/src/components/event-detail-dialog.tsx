@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { EventDetailBody, localMidnight } from '@/components/event-detail'
+import { CountdownBadge, EventDetailBody, localMidnight } from '@/components/event-detail'
 
 /**
  * Mobile / below-lg fallback for the event detail — at lg the agenda side
@@ -33,11 +33,7 @@ export function EventDetailDialog({
               <Badge variant={item.kind === 'holiday' ? 'secondary' : 'default'} className="uppercase">
                 {item.kind}
               </Badge>
-              {item.days_until <= 0 ? (
-                <Badge className="bg-destructive text-white">TODAY</Badge>
-              ) : (
-                <Badge variant="outline">D-{item.days_until}</Badge>
-              )}
+              <CountdownBadge date={item.date} />
             </div>
             <DialogTitle className="text-left">{item.title}</DialogTitle>
             <DialogDescription className="text-left">

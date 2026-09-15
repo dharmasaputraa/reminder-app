@@ -231,7 +231,7 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
           {isNew ? <UserPlusIcon aria-hidden="true" className="size-6" /> : initials(c!.name)}
         </AvatarFallback>
       </Avatar>
-      <div className="min-w-0">
+      <div className="min-w-0 space-y-1">
         <h1 className="text-pretty text-lg leading-snug font-semibold">
           {isNew ? 'New contact' : c?.name}
         </h1>
