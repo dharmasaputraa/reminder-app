@@ -121,7 +121,10 @@ export function ContactsGrid({
 }: ContactsGridProps) {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({ notes: false })
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
+    occasions: false,
+    notes: false,
+  })
   const [searchQuery, setSearchQuery] = useState('')
 
   const rows = useMemo<ContactRow[]>(

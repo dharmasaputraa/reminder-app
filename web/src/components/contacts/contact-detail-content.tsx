@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Maximize2Icon, Minimize2Icon } from 'lucide-react'
+import { Minimize2Icon, PencilIcon, XIcon } from 'lucide-react'
 import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
 import { initials } from '@/lib/initials'
 import { hydratePrefsForm } from '@/lib/prefs'
@@ -53,7 +53,8 @@ function longDate(iso: string): string {
 interface ContactDetailContentProps {
   /** Numeric contact id, or 'new' for the create form. */
   contactId: number | 'new'
-  /** docked = right section of /reminder/contacts; page = fullscreen route. */
+  /** docked = read-only right section of /reminder/contacts;
+   *  page = fullscreen route, the only place editing happens. */
   variant: 'docked' | 'page'
 }
 
@@ -71,7 +72,7 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
   const channels = useQuery({ queryKey: ['channels'], queryFn: () => api<{ channels: Channel[] }>('/channels') })
   const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
 
-  // --- identity form (new capability; dirty-gated explicit save) ---
+  // --- identity form (create on both variants; edit only on the page) ---
   const [name, setName] = useState('')
   const [nickname, setNickname] = useState('')
   const [notes, setNotes] = useState('')
@@ -87,7 +88,7 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
     ? name.trim() !== '' // create: ready as soon as there is a name
     : name !== contact.data.name || nickname !== contact.data.nickname || notes !== contact.data.notes
 
-  // --- occasions + preferences form state (moved from the detail page) ---
+  // --- occasions + preferences form state (page variant only) ---
   const [type, setType] = useState('otonan')
   const [date, setDate] = useState('')
   const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
@@ -127,10 +128,10 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
     onSuccess: (saved) => {
       const savedId = 'id' in saved ? saved.id : null
       if (isNew && savedId != null) {
-        // Spec: after create, replace so no `new` URL stays in history.
-        if (variant === 'docked')
-          nav({ to: '/reminder/contacts', search: { c: savedId }, replace: true })
-        else nav({ to: '/reminder/contacts/$id', params: { id: String(savedId) }, replace: true })
+        // Flow (revision): after create, land on the fullscreen detail page —
+        // occasions/preferences are managed there. Replace so no `new` URL
+        // stays in history.
+        nav({ to: '/reminder/contacts/$id', params: { id: String(savedId) }, replace: true })
         toast.success('Contact created')
         qc.invalidateQueries({ queryKey: ['contact', String(savedId)] })
       } else if (!isNew) {
@@ -157,12 +158,11 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
     mutationFn: () => api(`/contacts/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       toast.success('Contact deleted')
-      // Spec: docked drops ?c (replace); fullscreen goes back to the list.
-      if (variant === 'docked') nav({ to: '/reminder/contacts', search: {}, replace: true })
-      else nav({ to: '/reminder/contacts', replace: true })
       // The grid (and next-reminder column) must drop the deleted contact.
       qc.invalidateQueries({ queryKey: ['contacts'] })
       qc.invalidateQueries({ queryKey: ['upcoming'] })
+      if (variant === 'docked') nav({ to: '/reminder/contacts', search: {}, replace: true })
+      else nav({ to: '/reminder/contacts', replace: true })
     },
     onError: (e) => toast.error(`Failed to delete contact: ${String(e)}`),
   })
@@ -198,6 +198,35 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
     disabled: existingTypes.has(t.value),
   }))
 
+  /** Header action shared by every variant: close (docked) collapses the
+   *  panel by dropping ?c; collapse (page) returns to the docked view. */
+  const backAction =
+    variant === 'docked' ? (
+      <Button
+        variant="outline"
+        size="icon-sm"
+        aria-label="Close panel"
+        onClick={() => nav(isNew ? { to: '/reminder/contacts', replace: true } : { to: '/reminder/contacts', search: {}, replace: true })}
+      >
+        <XIcon aria-hidden="true" />
+      </Button>
+    ) : (
+      <Button
+        variant="outline"
+        size="icon-sm"
+        aria-label="Back to list"
+        onClick={() =>
+          nav(
+            isNew
+              ? { to: '/reminder/contacts', replace: true }
+              : { to: '/reminder/contacts', search: { c: contactId }, replace: true },
+          )
+        }
+      >
+        <Minimize2Icon aria-hidden="true" />
+      </Button>
+    )
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
@@ -207,42 +236,31 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
               <AvatarFallback>{initials(c.name)}</AvatarFallback>
             </Avatar>
           )}
-          <h1 className="truncate text-xl font-bold">{isNew ? 'New contact' : c?.name}</h1>
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold">{isNew ? 'New contact' : c?.name}</h1>
+            {!isNew && c?.nickname && (
+              <p className="text-muted-foreground truncate text-sm">{c.nickname}</p>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {/* Expand (docked → fullscreen, push) / Collapse (fullscreen →
-              docked, replace) — history contract in the spec. */}
-          {variant === 'docked' ? (
+          {backAction}
+          {/* Docked is read-only (revision): editing happens on the fullscreen
+              detail URL. Pencil navigates there. */}
+          {variant === 'docked' && !isNew && (
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Expand to fullscreen"
-              onClick={() =>
-                nav(isNew ? { to: '/reminder/contacts/new' } : { to: '/reminder/contacts/$id', params: { id } })
-              }
+              aria-label="Edit contact"
+              onClick={() => nav({ to: '/reminder/contacts/$id', params: { id } })}
             >
-              <Maximize2Icon aria-hidden="true" />
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Back to list"
-              onClick={() =>
-                nav(
-                  contactId === 'new'
-                    ? { to: '/reminder/contacts', replace: true }
-                    : { to: '/reminder/contacts', search: { c: contactId }, replace: true },
-                )
-              }
-            >
-              <Minimize2Icon aria-hidden="true" />
+              <PencilIcon aria-hidden="true" />
             </Button>
           )}
           {!isNew && (
             <AlertDialog>
               <AlertDialogTrigger
-                render={<Button variant="destructive" size="sm">Delete contact</Button>}
+                render={<Button variant="destructive" size="icon-sm" aria-label="Delete contact" />}
               />
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -263,57 +281,81 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
 
       {isNew && (
         <p className="text-sm text-muted-foreground">
-          Occasions and reminder preferences can be added after saving.
+          Occasions and reminder preferences can be added on the detail page after saving.
         </p>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{isNew ? 'Identity' : 'Details'}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={`${variant}-contact-name`}>Name</Label>
-              <Input
-                id={`${variant}-contact-name`}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Name (e.g. Made Wijaya)"
-              />
+      {/* ============ Identity: a form for create + page edit; the docked
+          panel shows read-only details instead. ============ */}
+      {isNew || variant === 'page' ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{isNew ? 'Identity' : 'Details'}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor={`${variant}-contact-name`}>Name</Label>
+                <Input
+                  id={`${variant}-contact-name`}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Name (e.g. Made Wijaya)"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`${variant}-contact-nickname`}>Nickname</Label>
+                <Input
+                  id={`${variant}-contact-nickname`}
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="optional"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`${variant}-contact-nickname`}>Nickname</Label>
-              <Input
-                id={`${variant}-contact-nickname`}
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
+              <Label htmlFor={`${variant}-contact-notes`}>Notes</Label>
+              <Textarea
+                id={`${variant}-contact-notes`}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
                 placeholder="optional"
+                rows={3}
               />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${variant}-contact-notes`}>Notes</Label>
-            <Textarea
-              id={`${variant}-contact-notes`}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="optional"
-              rows={3}
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button
-              disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
-              onClick={() => saveIdentity.mutate()}
-            >
-              {isNew ? 'Create contact' : 'Save'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex justify-end">
+              <Button
+                disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
+                onClick={() => saveIdentity.mutate()}
+              >
+                {isNew ? 'Create contact' : 'Save'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        c && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">Nickname</span>
+                <span>{c.nickname || '—'}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">Notes</span>
+                <span className="whitespace-pre-wrap">{c.notes || '—'}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      )}
 
-      {!isNew && c && (
+      {/* ============ Occasions + preferences: managed on the page; the
+          docked panel lists them read-only. ============ */}
+      {isNew ? null : !c ? null : variant === 'page' ? (
         <>
           <Card>
             <CardHeader>
@@ -439,6 +481,67 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
               >
                 Save preferences
               </Button>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <>
+          {/* Read-only occasion list — editing lives on the detail page. */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Occasions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {c.occasions.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  No occasions yet — use the edit page to add one.
+                </p>
+              ) : (
+                c.occasions.map((o) => (
+                  <div key={o.id} className="flex items-center gap-2 border-b py-2 text-sm last:border-b-0">
+                    <Badge variant="secondary" className="uppercase">{o.type}</Badge>
+                    {longDate(o.base_date)}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Reminder Preferences</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">Offsets</span>
+                <span>
+                  {c.prefs?.offsets?.length
+                    ? c.prefs.offsets.map((n) => `D-${n}`).join(', ')
+                    : `Global default${settings.data ? ` (${settings.data.default_offsets.map((n) => `D-${n}`).join(', ')})` : ''}`}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">Status</span>
+                <span>
+                  {c.prefs?.enabled === false ? (
+                    <Badge variant="warning-outline">Paused</Badge>
+                  ) : (
+                    <Badge variant="success-outline">Active</Badge>
+                  )}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-20 shrink-0">Channels</span>
+                <span className="flex flex-wrap gap-1">
+                  {(() => {
+                    const chosen = (channels.data?.channels ?? []).filter((ch) => c.prefs?.channel_ids.includes(ch.id))
+                    if (chosen.length === 0) return <span>—</span>
+                    return chosen.map((ch) => (
+                      <Badge key={ch.id} variant="secondary">{ch.name} ({ch.type})</Badge>
+                    ))
+                  })()}
+                </span>
+              </div>
             </CardContent>
           </Card>
         </>

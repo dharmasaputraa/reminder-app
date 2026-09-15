@@ -3,6 +3,29 @@
 Date: 2026-09-14
 Status: approved (design discussion), pending implementation
 
+## Revision (2026-09-15): read-only docked panel
+
+User-requested flow change, superseding the sections below where they conflict:
+
+- The docked right section is **read-only** — identity, occasions list, and
+  preferences display as text/badges. Editing happens ONLY on the fullscreen
+  detail URL (`/reminder/contacts/$id`), reached via a pencil (Edit) button
+  in the panel header.
+- The panel has a **Close (X) button** that drops `?c` and animates the
+  panel closed (exit animation via AnimatePresence).
+- Create stays a docked panel (`?c=new`) but only shows name/nickname/notes.
+  After a successful create the app navigates to the fullscreen detail page
+  of the new contact (replace), regardless of where the create started.
+- The docked panel still shows Delete (with confirm); occasions/preferences
+  are displayed read-only (no add/delete forms there).
+- Grid defaults: the **Occasions column is hidden** by default (besides
+  Notes); both are re-enableable through the column-visibility menu.
+- Pagination controls always render, even for a single page (local
+  adaptation of the reui primitive).
+- History contract additions: Close → replace-drop `?c` (exit animation);
+  Edit (docked → fullscreen) → push; after create → replace to
+  `/reminder/contacts/<id>`.
+
 ## Problem
 
 The contacts page is a bare card list with an add-by-name form:
