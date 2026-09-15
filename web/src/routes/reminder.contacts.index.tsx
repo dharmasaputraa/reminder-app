@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { AnimatePresence, motion } from 'motion/react'
 import { api, type Contact } from '../lib/api'
 import { validateContactsSearch, type ContactsSearch } from '../lib/contacts-search'
 import { pageTitle } from '../lib/page-title'
@@ -95,18 +96,36 @@ function Contacts() {
         )}
       </div>
 
-      {/* Docked right section (lg+ only): full detail, own scroll, fixed width.
-          When ?c is absent the grid takes the full width (spec). */}
-      {showPanel && (
-        <aside
-          aria-label="Contact detail"
-          className="border-border shrink-0 overflow-hidden border-t lg:mt-0 lg:w-96 lg:border-t-0 lg:border-s xl:w-[28rem]"
-        >
-          <div className="h-full overflow-y-auto p-4">
-            <ContactDetailContent contactId={c === 'new' ? 'new' : c} variant="docked" />
-          </div>
-        </aside>
-      )}
+      {/* Docked right section (lg+ only): full detail in its own card, in the
+          dashboard's agenda-panel style — animated open/close, rounded card,
+          fixed-width inner. When ?c is absent the grid takes the full width. */}
+      <AnimatePresence initial={false}>
+        {showPanel && (
+          <motion.aside
+            key="contact-detail"
+            aria-label="Contact detail"
+            initial={{ width: 0, opacity: 0, marginLeft: 0 }}
+            animate={{ width: 'auto', opacity: 1, marginLeft: 16 }}
+            exit={{ width: 0, opacity: 0, marginLeft: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="hidden shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
+          >
+            <div className="h-full w-96 xl:w-[28rem]">
+              {/* key={c}: switching contacts cross-fades the content inside
+                  the open panel instead of snapping. */}
+              <motion.div
+                key={String(c)}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="h-full overflow-y-auto p-4"
+              >
+                <ContactDetailContent contactId={c === 'new' ? 'new' : c} variant="docked" />
+              </motion.div>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => { if (!o) setPendingDelete(null) }}>
         <AlertDialogContent>

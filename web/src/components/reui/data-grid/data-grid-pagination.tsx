@@ -194,39 +194,40 @@ function DataGridPagination(props: DataGridPaginationProps): JSX.Element {
             <div className="text-muted-foreground order-2 text-sm text-nowrap sm:order-1">
               {paginationInfo}
             </div>
-            {pageCount > 1 && (
-              <div className="order-1 flex items-center space-x-1">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className={btnArrowClasses}
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                >
-                  <span className="sr-only">
-                    {mergedProps.previousPageLabel}
-                  </span>
-                  <ChevronLeftIcon className="size-4" />
-                </Button>
+            {/* LOCAL ADAPTATION (contacts): always render the page controls —
+                upstream hides them at pageCount <= 1, but a single-page grid
+                should still show the current page + disabled arrows. */}
+            <div className="order-1 flex items-center space-x-1">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className={btnArrowClasses}
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                <span className="sr-only">
+                  {mergedProps.previousPageLabel}
+                </span>
+                <ChevronLeftIcon className="size-4" />
+              </Button>
 
-                {renderEllipsisPrevButton()}
+              {renderEllipsisPrevButton()}
 
-                {renderPageButtons()}
+              {renderPageButtons()}
 
-                {renderEllipsisNextButton()}
+              {renderEllipsisNextButton()}
 
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className={btnArrowClasses}
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                >
-                  <span className="sr-only">{mergedProps.nextPageLabel}</span>
-                  <ChevronRightIcon className="size-4" />
-                </Button>
-              </div>
-            )}
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className={btnArrowClasses}
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                <span className="sr-only">{mergedProps.nextPageLabel}</span>
+                <ChevronRightIcon className="size-4" />
+              </Button>
+            </div>
           </>
         )}
       </div>
