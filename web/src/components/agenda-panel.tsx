@@ -9,7 +9,13 @@ import { Button } from '@/components/ui/button'
 import { EventDetailRows, ReminderTrigger, localMidnight } from '@/components/event-detail'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { IconStack } from '@/components/reui/icon-stack'
-import { ArrowLeftIcon, CalendarIcon, ChevronRightIcon } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  CalendarIcon,
+  ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+} from 'lucide-react'
 
 function initials(name: string): string {
   return name
@@ -74,6 +80,8 @@ interface AgendaPanelProps {
   /** Day keys (event-start ms) whose groups are folded. */
   collapsedDays: Set<string>
   onToggleDay: (key: string) => void
+  /** Fold/unfold every day group at once (header button). */
+  onSetAllCollapsed: (collapsed: boolean) => void
   onOpenEvent: (item: UpcomingItem) => void
 }
 
@@ -91,6 +99,7 @@ export function AgendaPanel({
   onBack,
   collapsedDays,
   onToggleDay,
+  onSetAllCollapsed,
   onOpenEvent,
 }: AgendaPanelProps) {
   const groups = useMemo(() => {
@@ -105,14 +114,36 @@ export function AgendaPanel({
     return [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime())
   }, [events])
 
+  // Command shows the action it performs: fold everything while any day is
+  // open, unfold everything once all are folded.
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsedDays.has(g.key))
+
   return (
     <div className="flex h-full flex-col text-sm">
       {/* Panel title bar — same height as the calendar's toolbar row (h-11) */}
       <div className="flex h-11 items-center justify-between gap-2 border-b px-4">
         <span className="font-semibold">Agenda</span>
-        <span className="text-muted-foreground text-xs font-medium tabular-nums">
-          {format(month, 'MMMM yyyy')}
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground text-xs font-medium tabular-nums">
+            {format(month, 'MMMM yyyy')}
+          </span>
+          {groups.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="-me-1.5"
+              disabled={!!detailItem}
+              aria-label={allCollapsed ? 'Expand all days' : 'Collapse all days'}
+              onClick={() => onSetAllCollapsed(!allCollapsed)}
+            >
+              {allCollapsed ? (
+                <ChevronsUpDownIcon aria-hidden="true" />
+              ) : (
+                <ChevronsDownUpIcon aria-hidden="true" />
+              )}
+            </Button>
+          )}
+        </div>
       </div>
       <div className="relative min-h-0 flex-1">
       {/* Agenda list layer */}
@@ -166,6 +197,10 @@ export function AgendaPanel({
                 animate={{ height: collapsed ? 0 : 'auto', opacity: collapsed ? 0 : 1 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="overflow-hidden"
+                // height:0 alone leaves the rows focusable and announced; drop
+                // them from the a11y tree while folded (same pattern as the
+                // panel/detail layers above).
+                inert={collapsed}
               >
                 {g.items.map((e) => {
                   const it = e.data!

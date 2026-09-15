@@ -441,6 +441,13 @@ function Dashboard() {
                   return next
                 })
               }
+              onSetAllCollapsed={(collapsed) =>
+                setCollapsedDays(
+                  collapsed
+                    ? new Set(monthEvents.map((e) => String(e.start.getTime())))
+                    : new Set()
+                )
+              }
               onOpenEvent={openDetail}
             />
           </div>
