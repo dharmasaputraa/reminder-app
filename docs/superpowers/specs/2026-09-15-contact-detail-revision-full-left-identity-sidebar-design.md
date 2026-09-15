@@ -80,7 +80,11 @@ docked panel on the contacts index keeps it.
   accepts the minimal payload fields (kind, occasion_id, contact_id, date,
   title) instead of a whole `UpcomingItem` — existing dashboard callers
   keep working. The backend requires `occasion_id`, `contact_id`, and a
-  valid occurrence `date`; the occasion's `base_date` qualifies.
+  date that EXACTLY matches a computed occurrence of the occasion (see
+  `internal/api/upcomingnotify.go`): for `otonan` the base date itself is
+  NOT an occurrence (occurrences are base + 210n), so the row's trigger
+  passes the next occurrence date from the upcoming map
+  (`up.date`) and renders only when that occurrence is known.
 
 ## Out of scope
 
