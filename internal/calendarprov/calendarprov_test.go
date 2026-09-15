@@ -69,3 +69,56 @@ func TestMultiProviderTagsCategory(t *testing.T) {
 		t.Errorf("hs = %+v, want one holiday tagged Category=pawukon", hs)
 	}
 }
+
+func TestDeduplicateHolidaysFirstWins(t *testing.T) {
+	in := []domain.Holiday{
+		{Date: domain.NewDate(2026, 10, 31), Name: "Saraswati", Category: "pawukon"},
+		{Date: domain.NewDate(2026, 10, 31), Name: "Hari Saraswati", Category: "saka"},
+		{Date: domain.NewDate(2026, 12, 25), Name: "Hari Raya Natal", Category: "national"},
+	}
+	out := DeduplicateHolidays(in)
+	if len(out) != 2 {
+		t.Fatalf("out = %+v, want 2 survivors", out)
+	}
+	if out[0].Name != "Saraswati" || out[0].Category != "pawukon" {
+		t.Errorf("first occurrence must win: %+v", out[0])
+	}
+	if out[1].Name != "Hari Raya Natal" {
+		t.Errorf("unrelated holiday must survive: %+v", out[1])
+	}
+	if len(in) != 3 {
+		t.Errorf("input must not be modified: %+v", in)
+	}
+}
+
+func TestMultiProviderDeduplicatesAcrossSources(t *testing.T) {
+	m := MultiProvider{Providers: []Provider{
+		stubProvider{name: "paw", cat: "pawukon", hs: []domain.Holiday{
+			{Date: domain.NewDate(2026, 10, 31), Name: "Saraswati"}}},
+		stubProvider{name: "saka", cat: "saka", hs: []domain.Holiday{
+			{Date: domain.NewDate(2026, 10, 31), Name: "Hari Saraswati"},
+			{Date: domain.NewDate(2026, 1, 17), Name: "Hari Siwa Ratri"}}},
+	}}
+	hs, err := m.HolidaysBetween(context.Background(),
+		domain.NewDate(2026, 1, 1), domain.NewDate(2026, 12, 31),
+		map[string]bool{"pawukon": true, "saka": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 2 || hs[0].Name != "Saraswati" || hs[0].Category != "pawukon" {
+		t.Errorf("pawukon entry must win the merge: %+v", hs)
+	}
+	if hs[1].Name != "Hari Siwa Ratri" {
+		t.Errorf("non-colliding saka holiday must survive: %+v", hs)
+	}
+	// Settings-aware: pawukon off → saka's copy of the same day survives.
+	hs, err = m.HolidaysBetween(context.Background(),
+		domain.NewDate(2026, 1, 1), domain.NewDate(2026, 12, 31),
+		map[string]bool{"pawukon": false, "saka": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 2 || hs[0].Name != "Hari Saraswati" || hs[0].Category != "saka" {
+		t.Errorf("saka copy must survive when pawukon is disabled: %+v", hs)
+	}
+}

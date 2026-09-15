@@ -23,7 +23,29 @@ func (computedPawukon) HolidaysBetween(_ context.Context, from, to domain.Date) 
 	return domain.PawukonHolidaysBetween(from, to), nil
 }
 
+// DeduplicateHolidays merges holidays sharing a DedupeKey (same date, same
+// normalized name): the FIRST occurrence wins and keeps its name, category,
+// and position; later duplicates are dropped. Callers pass slices in provider
+// priority order (pawukon → national → saka), so the locally computed entry
+// wins. The input slice is not modified.
+func DeduplicateHolidays(hs []domain.Holiday) []domain.Holiday {
+	seen := make(map[string]bool, len(hs))
+	var out []domain.Holiday
+	for _, h := range hs {
+		k := h.DedupeKey()
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, h)
+	}
+	return out
+}
+
 // MultiProvider combines providers and filters them by the settings categories.
+// Cross-source duplicates (same date, same normalized name — pawukon
+// "Saraswati" vs saka "Hari Saraswati") are merged first-wins, so provider
+// slice order is the priority: pawukon must come first.
 type MultiProvider struct{ Providers []Provider }
 
 func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date, enabled map[string]bool) ([]domain.Holiday, error) {
@@ -41,5 +63,5 @@ func (m MultiProvider) HolidaysBetween(ctx context.Context, from, to domain.Date
 			out = append(out, h)
 		}
 	}
-	return out, nil
+	return DeduplicateHolidays(out), nil
 }
