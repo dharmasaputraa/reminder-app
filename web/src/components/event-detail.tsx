@@ -121,14 +121,31 @@ export function EventDetailRows({ item }: { item: UpcomingItem }) {
 /**
  * The manual "send the reminder now" trigger. One enabled channel → the button
  * IS the trigger; several → the button opens the channel picker, which also
- * has an "all" action. Empty channel_ids = every enabled channel.
+ * has an "all" action. Empty channel_ids = every enabled channel. Takes the
+ * minimal notify payload fields so non-Upcoming callers (an occasion row) can
+ * use it too; compact renders an icon-only trigger for tight rows.
  */
 export function ReminderTrigger({
-  item,
+  kind,
+  occasionId,
+  contactId,
+  date,
+  title,
   className,
+  variant = 'default',
+  compact = false,
 }: {
-  item: UpcomingItem
+  kind: UpcomingItem['kind']
+  /** Required when kind is 'occasion'. */
+  occasionId?: number
+  /** Required when kind is 'occasion'. */
+  contactId?: number
+  date: string
+  /** Holiday sends match on the title; occasions carry it for completeness. */
+  title: string
   className?: string
+  variant?: 'default' | 'ghost' | 'outline'
+  compact?: boolean
 }) {
   const channels = useQuery({
     queryKey: ['channels'],
@@ -139,11 +156,11 @@ export function ReminderTrigger({
       api<{ sent: number; failed: number }>('/upcoming/notify', {
         method: 'POST',
         body: JSON.stringify({
-          kind: item.kind,
-          occasion_id: item.occasion_id,
-          contact_id: item.contact_id,
-          date: item.date,
-          title: item.title,
+          kind,
+          occasion_id: occasionId,
+          contact_id: contactId,
+          date,
+          title,
           channel_ids: channelIds,
         }),
       }),
@@ -165,12 +182,14 @@ export function ReminderTrigger({
   if (enabledChannels.length === 1) {
     return (
       <Button
+        variant={variant}
         className={className}
+        aria-label={compact ? `Remind now — ${title}` : undefined}
         onClick={() => send.mutate([enabledChannels[0].id])}
         disabled={send.isPending}
       >
         <SendIcon aria-hidden="true" className="size-3.5" />
-        {send.isPending ? 'Sending…' : 'Remind Now'}
+        {!compact && (send.isPending ? 'Sending…' : 'Remind Now')}
       </Button>
     )
   }
@@ -179,10 +198,19 @@ export function ReminderTrigger({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button className={className} disabled={send.isPending}>
+          <Button
+            variant={variant}
+            className={className}
+            aria-label={compact ? `Remind now — ${title}` : undefined}
+            disabled={send.isPending}
+          >
             <SendIcon aria-hidden="true" className="size-3.5" />
-            {send.isPending ? 'Sending…' : 'Remind Now'}
-            <ChevronDownIcon aria-hidden="true" className="ms-0.5 opacity-60" />
+            {!compact && (
+              <>
+                {send.isPending ? 'Sending…' : 'Remind Now'}
+                <ChevronDownIcon aria-hidden="true" className="ms-0.5 opacity-60" />
+              </>
+            )}
           </Button>
         }
       />
@@ -214,7 +242,14 @@ export function EventDetailBody({ item }: { item: UpcomingItem }) {
   return (
     <div className="space-y-4">
       <EventDetailRows item={item} />
-      <ReminderTrigger item={item} className="w-full" />
+      <ReminderTrigger
+        kind={item.kind}
+        occasionId={item.occasion_id}
+        contactId={item.contact_id}
+        date={item.date}
+        title={item.title}
+        className="w-full"
+      />
     </div>
   )
 }

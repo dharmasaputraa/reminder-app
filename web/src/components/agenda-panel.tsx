@@ -310,7 +310,14 @@ export function AgendaPanel({
             {/* Send trigger pinned to the bottom, full width — the contacts
                 panel's pinned action slot */}
             <div className="border-t p-3">
-              <ReminderTrigger item={detailItem} className="w-full" />
+              <ReminderTrigger
+                kind={detailItem.kind}
+                occasionId={detailItem.occasion_id}
+                contactId={detailItem.contact_id}
+                date={detailItem.date}
+                title={detailItem.title}
+                className="w-full"
+              />
             </div>
           </motion.div>
         )}
