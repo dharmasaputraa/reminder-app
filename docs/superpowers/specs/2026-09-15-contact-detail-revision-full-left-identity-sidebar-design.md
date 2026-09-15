@@ -44,16 +44,19 @@ pushes, close replace-drops, Back closes), the docked aside tween and
 
 ## Page structure (left section, page variant)
 
-Old-editor composition, minus inline identity editing:
+Old-editor composition, minus inline identity editing, wrapped in ONE card
+(user follow-up to the original separate-cards decision: everything sits
+inside a single `rounded-xl border bg-card` with PanelSection hairlines —
+no nested cards):
 
-- **Actions row**: right-aligned in-flow `[Edit] [⋮]` with bottom padding.
+- **Actions row**: right-aligned in-flow `[Edit] [⋮]` at the card's top.
 - **Identity header** (read-only): centered avatar, name, nickname; notes
   rendered as a read-only paragraph beneath when present.
-- **Card: Occasions** — one row per occasion:
+- **Section: Occasions** — one row per occasion:
   `[type badge] [long date] [countdown badge] [Remind] [delete]`; the add
   row (type select + date selector + Add) and the one-per-type /
   pawukon-preview / Feb-29 hints return verbatim from the old editor.
-- **Card: Reminder Preferences** — verbatim from the old editor: global
+- **Section: Reminder Preferences** — verbatim from the old editor: global
   default line, custom offsets input, Active switch, channel checkboxes
   (autosave), "Save preferences".
 
