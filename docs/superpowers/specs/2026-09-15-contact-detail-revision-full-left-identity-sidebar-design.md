@@ -44,19 +44,19 @@ pushes, close replace-drops, Back closes), the docked aside tween and
 
 ## Page structure (left section, page variant)
 
-Old-editor composition, minus inline identity editing, wrapped in ONE card
-(user follow-up to the original separate-cards decision: everything sits
-inside a single `rounded-xl border bg-card` with PanelSection hairlines —
-no nested cards):
+Old-editor composition, minus inline identity editing, as three stacked
+surfaces (user follow-up: "card on each section"):
 
-- **Actions row**: right-aligned in-flow `[Edit] [⋮]` at the card's top.
-- **Identity header** (read-only): centered avatar, name, nickname; notes
-  rendered as a read-only paragraph beneath when present.
-- **Section: Occasions** — one row per occasion:
+- **Header card** (`rounded-xl border bg-card`): the right-aligned in-flow
+  `[Edit] [⋮]` actions row above the read-only identity header (centered
+  avatar, name, nickname; notes as a read-only paragraph when present).
+  The ⋮ `DropdownMenuContent` carries `min-w-40` so "Delete contact" stays
+  on one line despite the 28px icon anchor.
+- **Card: Occasions** — one row per occasion:
   `[type badge] [long date] [countdown badge] [Remind] [delete]`; the add
   row (type select + date selector + Add) and the one-per-type /
   pawukon-preview / Feb-29 hints return verbatim from the old editor.
-- **Section: Reminder Preferences** — verbatim from the old editor: global
+- **Card: Reminder Preferences** — verbatim from the old editor: global
   default line, custom offsets input, Active switch, channel checkboxes
   (autosave), "Save preferences".
 

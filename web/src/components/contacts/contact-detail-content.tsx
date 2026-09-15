@@ -33,6 +33,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
@@ -363,39 +364,42 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
     )
   }
 
-  // ============ PAGE: one wrap card (revision follow-up) — the static
-  // actions row, the read-only identity header, and the editable Occasions /
-  // Reminder Preferences sections all live inside a single bordered card,
-  // separated by PanelSection hairlines (no nested cards). ============
+  // ============ PAGE: a header card (actions row + read-only identity),
+  // then one card per editable section — Occasions and Reminder Preferences
+  // (revision follow-up: card on each section). ============
   return (
-    <div className="rounded-xl border bg-card text-sm">
-      {/* In-flow actions row: takes layout space, so it can never paint over
-          the avatar below (revision decision 4). */}
-      <div className="flex items-center justify-end gap-1.5 px-4 pt-4">
-        {onEdit && (
-          <Button size="sm" onClick={onEdit}>
-            <PencilIcon aria-hidden="true" />
-            Edit
-          </Button>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="outline" size="icon-sm" aria-label="More actions">
-                <MoreHorizontalIcon aria-hidden="true" />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-              <Trash2Icon aria-hidden="true" />
-              Delete contact
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+    <div className="space-y-5 text-sm">
+      <div className="rounded-xl border bg-card">
+        {/* In-flow actions row: takes layout space, so it can never paint over
+            the avatar below (revision decision 4). */}
+        <div className="flex items-center justify-end gap-1.5 px-4 pt-4">
+          {onEdit && (
+            <Button size="sm" onClick={onEdit}>
+              <PencilIcon aria-hidden="true" />
+              Edit
+            </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="outline" size="icon-sm" aria-label="More actions">
+                  <MoreHorizontalIcon aria-hidden="true" />
+                </Button>
+              }
+            />
+            {/* min-w-40: the menu tracks its 28px icon anchor by default,
+                which wraps "Delete contact" onto two lines. */}
+            <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2Icon aria-hidden="true" />
+                Delete contact
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-      {identityBlock}
+        {identityBlock}
+      </div>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
@@ -412,8 +416,11 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
         </AlertDialogContent>
       </AlertDialog>
 
-      <PanelSection title="Occasions">
-        <div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Occasions</CardTitle>
+        </CardHeader>
+        <CardContent>
           {c.occasions.length === 0 && (
             <p className="text-muted-foreground text-sm">No occasions yet — add the first one below.</p>
           )}
@@ -537,11 +544,14 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
           {type === 'birthday' && date.endsWith('-02-29') && (
             <p className="text-muted-foreground mt-3 text-xs">Feb 29 in non-leap years is observed on March 1.</p>
           )}
-        </div>
-      </PanelSection>
+        </CardContent>
+      </Card>
 
-      <PanelSection title="Reminder Preferences">
-        <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Reminder Preferences</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <p className="text-muted-foreground text-sm">
             Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
           </p>
@@ -594,8 +604,8 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
               Save preferences
             </Button>
           </div>
-        </div>
-      </PanelSection>
+        </CardContent>
+      </Card>
     </div>
   )
 }
