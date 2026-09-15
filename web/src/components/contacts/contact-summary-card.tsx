@@ -65,7 +65,7 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
   if (contact.isLoading)
     return (
       <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-6">
-        <Skeleton className="size-16 rounded-full" />
+        <Skeleton className="size-24 rounded-full" />
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-4 w-24" />
       </div>
@@ -88,14 +88,9 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
   return (
     <>
       {/* In-flow actions row: takes layout space, so it can never paint over
-          the avatar below. */}
-      <div className="flex items-center justify-end gap-1.5 px-4 pt-4">
-        {onEdit && (
-          <Button size="sm" onClick={onEdit}>
-            <PencilIcon aria-hidden="true" />
-            Edit
-          </Button>
-        )}
+          the avatar below. Edit lives in the menu so the row stays a single
+          compact control. */}
+      <div className="flex items-center justify-end px-4 pt-4">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -105,8 +100,14 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
             }
           />
           {/* min-w-40: the menu tracks its 28px icon anchor by default,
-              which wraps "Delete contact" onto two lines. */}
+              which wraps the item labels onto two lines. */}
           <DropdownMenuContent align="end" className="min-w-40">
+            {onEdit && (
+              <DropdownMenuItem onClick={onEdit}>
+                <PencilIcon aria-hidden="true" />
+                Edit
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2Icon aria-hidden="true" />
               Delete contact
@@ -115,22 +116,30 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
         </DropdownMenu>
       </div>
 
-      {/* Identity block: avatar above the name (+ nickname) — centered like a
-          profile header; notes render beneath when present. Read-only:
+      {/* Identity block: avatar above the name (+ nickname) — centered like
+          a profile header, generous air above the avatar. Read-only:
           editing lives in the overlay (lg) / dialog (below lg). */}
-      <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-2 text-center">
-        <Avatar className="size-16">
-          <AvatarFallback className="text-lg">{initials(c.name)}</AvatarFallback>
+      <div className="flex flex-col items-center gap-2 px-4 pt-8 pb-5 text-center">
+        <Avatar className="size-24">
+          <AvatarFallback className="text-2xl">{initials(c.name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 space-y-1">
           <h1 className="text-pretty text-lg leading-snug font-semibold">{c.name}</h1>
           {c.nickname && <p className="text-muted-foreground text-sm">{c.nickname}</p>}
         </div>
-        {c.notes && (
-          <p className="text-pretty max-w-2xl whitespace-pre-wrap text-muted-foreground">
-            {c.notes}
-          </p>
-        )}
+        {/* Notes section — box height matches the edit form's Notes
+            textarea (min-h-16, same padding/border/text sizing) so the
+            read-only and editing surfaces read as the same field. */}
+        <div className="w-full space-y-1.5 pt-4 text-left">
+          <p className="text-muted-foreground text-xs font-medium">Notes</p>
+          <div className="flex min-h-16 items-start rounded-lg border bg-muted/30 px-3 py-2">
+            {c.notes ? (
+              <p className="text-pretty whitespace-pre-wrap">{c.notes}</p>
+            ) : (
+              <p className="text-muted-foreground">No notes yet.</p>
+            )}
+          </div>
+        </div>
       </div>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
