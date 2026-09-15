@@ -6,12 +6,16 @@ import type { ReactNode } from 'react'
 export function PanelSection({
   title,
   children,
+  className = 'px-4 py-4',
 }: {
   title: string
   children: ReactNode
+  /** Replaces the default padding — the edit dialog passes "pt-4" because
+   *  DialogContent already pads its content. */
+  className?: string
 }) {
   return (
-    <section className="border-t px-4 py-4">
+    <section className={`border-t ${className}`}>
       <h2 className="text-sm font-semibold">{title}</h2>
       <div className="mt-3 space-y-2.5">{children}</div>
     </section>
