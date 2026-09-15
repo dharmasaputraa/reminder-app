@@ -1138,6 +1138,8 @@ And change the aside block (keep the `isLg` gate, tween, `inert`, and children e
 
 i.e. drop `h-[640px]` from the aside and drop `h-full` from the inner wrapper (the identity-only form is short; the panel hugs its content). Update the aside's leading comment to say the panel height is content-driven since the form is identity-only.
 
+Also fix the now-stale dialog copy in the same file (the edit dialog is identity-only): change the `DialogDescription` text from `Identity, occasions, and preferences — saved in place.` to `Name, nickname, and notes — saved in place.`
+
 - [ ] **Step 2: Verify typecheck + lint**
 
 Run: `pnpm exec tsc -b && pnpm lint`
