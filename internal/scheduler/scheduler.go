@@ -32,10 +32,13 @@ func (f *FakeClock) Now() time.Time      { return f.T }
 func (f *FakeClock) Add(d time.Duration) { f.T = f.T.Add(d) }
 
 type Snapshot struct {
-	Timezone          string
-	SendTime          string
-	CatchUpHours      int
-	DefaultOffsets    []int
+	Timezone       string
+	SendTime       string
+	CatchUpHours   int
+	DefaultOffsets []int
+	// Channels used by contacts without their own selection. Empty/nil →
+	// every enabled channel (the pre-default behavior).
+	DefaultChannelIDs []int64
 	HolidayCategories map[string]bool
 	// Per holiday source (pawukon/saka/national) reminder offsets. Empty/nil
 	// for a category falls back to DefaultOffsets.
@@ -85,8 +88,9 @@ func maxOffset(offsets []int) int {
 	return m
 }
 
-// targetChannels lists the destination channels for one contact.
-func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions) []store.Channel {
+// targetChannels lists the destination channels for one contact: the contact's
+// own selection, else the system default channels, else every enabled channel.
+func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions, defaultIDs []int64) []store.Channel {
 	all, err := s.St.ListChannels(ctx, cw.OwnerID)
 	if err != nil {
 		return nil
@@ -97,9 +101,9 @@ func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasi
 			enabled = append(enabled, ch)
 		}
 	}
-	if cw.Prefs != nil && len(cw.Prefs.ChannelIDs) > 0 {
+	filter := func(ids []int64) []store.Channel {
 		want := map[int64]bool{}
-		for _, id := range cw.Prefs.ChannelIDs {
+		for _, id := range ids {
 			want[id] = true
 		}
 		filtered := enabled[:0:0]
@@ -109,6 +113,15 @@ func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasi
 			}
 		}
 		return filtered
+	}
+	if cw.Prefs != nil && len(cw.Prefs.ChannelIDs) > 0 {
+		return filter(cw.Prefs.ChannelIDs)
+	}
+	if len(defaultIDs) > 0 {
+		if filtered := filter(defaultIDs); len(filtered) > 0 {
+			return filtered
+		}
+		// A default that matches nothing enabled → fall through to all.
 	}
 	return enabled
 }
@@ -173,7 +186,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		if cw.Prefs != nil && len(cw.Prefs.Offsets) > 0 {
 			offsets = cw.Prefs.Offsets
 		}
-		channels := s.targetChannels(ctx, cw)
+		channels := s.targetChannels(ctx, cw, snap.DefaultChannelIDs)
 		oOff := maxOffset(offsets)
 		fromO := today.AddDays(-(oOff + catchUpDays + 2))
 		toO := today.AddDays(oOff + 2)

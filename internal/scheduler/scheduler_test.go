@@ -161,6 +161,84 @@ func TestRunOnceRetryAfterFailure(t *testing.T) {
 	}
 }
 
+// targetChannels: the contact's own selection wins; without one, the system
+// default channels apply; a default matching nothing enabled falls back to
+// every enabled channel.
+//
+// OpenInMemory shares one in-memory DB across the package's tests (dedupe is
+// what keeps re-runs quiet), so this test brings its own user, contact and
+// channels instead of relying on seed()'s state.
+func TestTargetChannelsSystemDefault(t *testing.T) {
+	h := newHarness(t, time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC))
+	ctx := context.Background()
+	u, err := h.st.GetOrCreateUser(ctx, "target-channels@x.id", "Tc", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chA, err := h.st.CreateChannel(ctx, u.ID, "gotify", "a", []byte("enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	chB, err := h.st.CreateChannel(ctx, u.ID, "telegram", "b", []byte("enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.st.CreateContact(ctx, u.ID, "Made", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.st.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(2026, 6, 17), ""); err != nil {
+		t.Fatal(err)
+	}
+
+	cw := func(t *testing.T) store.ContactWithOccasions {
+		t.Helper()
+		got, err := h.st.GetContact(ctx, u.ID, c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return *got
+	}
+	same := func(got []store.Channel, want ...int64) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		set := map[int64]bool{}
+		for _, ch := range got {
+			set[ch.ID] = true
+		}
+		for _, id := range want {
+			if !set[id] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// no default configured → every enabled channel
+	if got := h.svc.targetChannels(ctx, cw(t), nil); !same(got, chA.ID, chB.ID) {
+		t.Errorf("no default: got %v", got)
+	}
+	// system default → just that channel
+	if got := h.svc.targetChannels(ctx, cw(t), []int64{chB.ID}); !same(got, chB.ID) {
+		t.Errorf("default [B]: got %v", got)
+	}
+	// default matching nothing enabled → falls back to every enabled channel
+	if got := h.svc.targetChannels(ctx, cw(t), []int64{999}); !same(got, chA.ID, chB.ID) {
+		t.Errorf("unknown default: got %v", got)
+	}
+
+	// the contact's own selection beats the system default
+	if err := h.st.SetReminderPrefs(ctx, store.ReminderPrefs{
+		ContactID: c.ID, ChannelIDs: []int64{chA.ID}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.svc.targetChannels(ctx, cw(t), []int64{chB.ID}); !same(got, chA.ID) {
+		t.Errorf("explicit selection: got %v", got)
+	}
+}
+
 func TestHolidayReminder(t *testing.T) {
 	now := time.Date(2026, 6, 17, 8, 2, 0, 0, time.UTC)
 	h := newHarness(t, now)

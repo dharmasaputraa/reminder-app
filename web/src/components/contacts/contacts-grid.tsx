@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDays, format } from 'date-fns'
 import { useTable } from '@tanstack/react-table'
 import type { ColumnDef, PaginationState, Row, SortingState } from '@tanstack/react-table'
-import { MoreHorizontalIcon, PlusIcon, SearchIcon, Settings2Icon, StickyNoteIcon, XIcon } from 'lucide-react'
+import { MoreHorizontalIcon, SearchIcon, Settings2Icon, StickyNoteIcon, XIcon } from 'lucide-react'
 import { api, type Contact, type UpcomingItem } from '@/lib/api'
 import { initials } from '@/lib/initials'
 import { Badge } from '@/components/reui/badge'
@@ -13,7 +13,7 @@ import { DataGridColumnVisibility } from '@/components/reui/data-grid/data-grid-
 import { DataGridPagination } from '@/components/reui/data-grid/data-grid-pagination'
 import { DataGridScrollArea } from '@/components/reui/data-grid/data-grid-scroll-area'
 import { DataGridTable } from '@/components/reui/data-grid/data-grid-table'
-import { Frame, FrameFooter, FrameHeader, FramePanel, FrameTitle } from '@/components/reui/frame'
+import { Frame, FrameFooter, FrameHeader, FramePanel } from '@/components/reui/frame'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -52,6 +52,32 @@ export function useNextReminderMap(): {
       .filter((it) => it.kind === 'occasion' && it.contact_id != null)
       .sort((a, b) => a.date.localeCompare(b.date))
     for (const it of items) if (!m.has(it.contact_id!)) m.set(it.contact_id!, it)
+    return m
+  }, [q.data])
+  return { map, isLoading: q.isLoading }
+}
+
+/** occasion_id → its earliest upcoming occurrence in the window. Covers every
+ *  occasion (unlike useNextReminderMap, which keeps only each contact's next)
+ *  — used for per-occasion countdown chips. Shares the grid's query key, so
+ *  mounting it costs no extra fetch. */
+export function useUpcomingByOccasion(): {
+  map: Map<number, UpcomingItem>
+  isLoading: boolean
+} {
+  const today = new Date()
+  const from = format(today, 'yyyy-MM-dd')
+  const to = format(addDays(today, 400), 'yyyy-MM-dd')
+  const q = useQuery({
+    queryKey: ['upcoming', 'grid', from],
+    queryFn: () => api<{ items: UpcomingItem[] }>(`/upcoming?from=${from}&to=${to}`),
+  })
+  const map = useMemo(() => {
+    const m = new Map<number, UpcomingItem>()
+    const items = (q.data?.items ?? [])
+      .filter((it) => it.kind === 'occasion' && it.occasion_id != null)
+      .sort((a, b) => a.date.localeCompare(b.date))
+    for (const it of items) if (!m.has(it.occasion_id!)) m.set(it.occasion_id!, it)
     return m
   }, [q.data])
   return { map, isLoading: q.isLoading }
@@ -103,7 +129,6 @@ export interface ContactsGridProps {
   isLoading?: boolean
   /** Row click / Open — the parent decides docked selection vs. navigation. */
   onSelect: (id: number) => void
-  onAdd: () => void
   /** Called after the confirm dialog; the parent owns the DELETE mutation. */
   onRequestDelete: (contact: Contact) => void
 }
@@ -116,7 +141,6 @@ export function ContactsGrid({
   // selection feedback.
   isLoading,
   onSelect,
-  onAdd,
   onRequestDelete,
 }: ContactsGridProps) {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
@@ -295,44 +319,37 @@ export function ContactsGrid({
       }
     >
       <Frame className="w-full" stacked dense>
-        <FrameHeader className="flex w-full flex-row flex-wrap items-center justify-between gap-3">
-          <FrameTitle>Contacts</FrameTitle>
-          <div className="flex items-center gap-2.5">
-            <InputGroup className="w-48 bg-background">
-              <InputGroupAddon align="inline-start">
-                <SearchIcon aria-hidden="true" />
-              </InputGroupAddon>
-              <InputGroupInput
-                placeholder="Search name or nickname…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery.length > 0 && (
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    aria-label="Clear search"
-                    title="Clear"
-                    size="icon-xs"
-                    onClick={() => setSearchQuery('')}
-                  >
-                    <XIcon aria-hidden="true" />
-                  </InputGroupButton>
-                </InputGroupAddon>
-              )}
-            </InputGroup>
-            <DataGridColumnVisibility
-              table={table}
-              trigger={
-                <Button variant="outline" size="icon" aria-label="Toggle columns">
-                  <Settings2Icon aria-hidden="true" />
-                </Button>
-              }
+        <FrameHeader className="flex w-full flex-row flex-wrap items-center justify-end gap-3">
+          <InputGroup className="w-full max-w-64 bg-background sm:w-64">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              placeholder="Search name or nickname…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <Button onClick={onAdd}>
-              <PlusIcon aria-hidden="true" />
-              Add contact
-            </Button>
-          </div>
+            {searchQuery.length > 0 && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label="Clear search"
+                  title="Clear"
+                  size="icon-xs"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <XIcon aria-hidden="true" />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+          <DataGridColumnVisibility
+            table={table}
+            trigger={
+              <Button variant="outline" size="icon" aria-label="Toggle columns">
+                <Settings2Icon aria-hidden="true" />
+              </Button>
+            }
+          />
         </FrameHeader>
         <FramePanel className="p-0 shadow-none">
           <DataGridScrollArea>

@@ -44,6 +44,7 @@ export interface Contact { id: number; name: string; nickname: string; notes: st
 export interface Channel { id: number; type: string; name: string; enabled: boolean }
 export interface Settings {
   timezone: string; send_time: string; catch_up_hours: number
-  default_offsets: number[]; holiday_categories: Record<string, boolean>
+  default_offsets: number[]; default_channel_ids: number[] | null
+  holiday_categories: Record<string, boolean>
   holiday_offsets: Record<string, number[]>
 }

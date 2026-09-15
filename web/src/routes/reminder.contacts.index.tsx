@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { api, type Contact } from '../lib/api'
 import { validateContactsSearch, type ContactsSearch } from '../lib/contacts-search'
 import { pageTitle } from '../lib/page-title'
@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export const Route = createFileRoute('/reminder/contacts/')({
@@ -73,62 +74,78 @@ function Contacts() {
 
   const showPanel = isLg && c !== undefined
 
+  // The aside stays mounted so the close tween runs on a fully-rendered panel;
+  // keep the last opened value rendered while `?c` is gone, so the collapsing
+  // panel doesn't blank out mid-animation.
+  const [lastC, setLastC] = useState<number | 'new' | null>(null)
+  if (c !== undefined && c !== lastC) setLastC(c)
+  const panelC = c ?? lastC
+
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4">
-      <div className="min-w-0 flex-1">
-        {contacts.isLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-10 w-64" />
-            <Skeleton className="h-[420px] w-full rounded-xl" />
-          </div>
-        ) : contacts.isError ? (
-          <p className="text-red-600">{String(contacts.error)}</p>
-        ) : (
-          <ContactsGrid
-            contacts={contacts.data?.contacts ?? []}
-            nextById={next.map}
-            selectedId={selectedId}
-            isLoading={next.isLoading}
-            onSelect={select}
-            onAdd={openCreate}
-            onRequestDelete={setPendingDelete}
-          />
-        )}
+    <div className="space-y-4">
+      {/* Page header — the dashboard's pattern: title left, primary action
+          right. Every reminder page leads with this row. */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">Contacts</h1>
+        <Button size="sm" onClick={openCreate}>
+          Add contact
+        </Button>
       </div>
 
-      {/* Docked right section (lg+ only): full detail in its own card, in the
-          dashboard's agenda-panel style — animated open/close, rounded card,
-          fixed-width inner. When ?c is absent the grid takes the full width. */}
-      <AnimatePresence initial={false}>
-        {showPanel && (
-          <motion.aside
-            key="contact-detail"
-            aria-label="Contact detail"
-            initial={{ opacity: 0, x: 32 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 32 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="hidden h-[560px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
-          >
-            {/* Same fixed-width inner as the dashboard's agenda panel. The
-                slide+fade entrance (no width tween) avoids measuring 'auto'
-                on mount, which collapsed the panel on first selection. */}
-            <div className="h-full w-[280px] xl:w-[340px]">
-              {/* key={c}: switching contacts cross-fades the content inside
-                  the open panel instead of snapping. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-0">
+        <div className="min-w-0 flex-1">
+          {contacts.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-64" />
+              <Skeleton className="h-[420px] w-full rounded-xl" />
+            </div>
+          ) : contacts.isError ? (
+            <p className="text-red-600">{String(contacts.error)}</p>
+          ) : (
+            <ContactsGrid
+              contacts={contacts.data?.contacts ?? []}
+              nextById={next.map}
+              selectedId={selectedId}
+              isLoading={next.isLoading}
+              onSelect={select}
+              onRequestDelete={setPendingDelete}
+            />
+          )}
+        </div>
+
+        {/* Docked right section (lg+ only): the dashboard agenda panel's exact
+            collapse — width + opacity tween in place, fixed-width inner so the
+            panel never squishes mid-transition, and the lg gap living on the
+            animated marginLeft so a closed panel leaves no dead space. When ?c
+            is absent the grid takes the full width. */}
+        <motion.aside
+          aria-label="Contact detail"
+          aria-hidden={!showPanel}
+          inert={!showPanel}
+          initial={false}
+          animate={{
+            width: showPanel ? 'auto' : 0,
+            opacity: showPanel ? 1 : 0,
+            marginLeft: showPanel ? 16 : 0,
+          }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="hidden h-[560px] shrink-0 overflow-hidden rounded-xl border bg-card lg:block"
+        >
+          <div className="h-full w-[280px] xl:w-[340px]">
+            {panelC !== null && (
               <motion.div
-                key={String(c)}
+                key={String(panelC)}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="h-full overflow-y-auto"
               >
-                <ContactDetailContent contactId={c === 'new' ? 'new' : c} variant="docked" />
+                <ContactDetailContent contactId={panelC} variant="docked" />
               </motion.div>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
+            )}
+          </div>
+        </motion.aside>
+      </div>
 
       <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => { if (!o) setPendingDelete(null) }}>
         <AlertDialogContent>

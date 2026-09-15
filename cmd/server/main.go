@@ -71,8 +71,9 @@ func main() {
 		set := srv.LoadSettings(ctx)
 		return scheduler.Snapshot{
 			Timezone: set.Timezone, SendTime: set.SendTime, CatchUpHours: set.CatchUpHours,
-			DefaultOffsets: set.DefaultOffsets, HolidayCategories: set.HolidayCategories,
-			HolidayOffsets: set.HolidayOffsets,
+			DefaultOffsets: set.DefaultOffsets, DefaultChannelIDs: set.DefaultChannelIDs,
+			HolidayCategories: set.HolidayCategories,
+			HolidayOffsets:    set.HolidayOffsets,
 		}
 	}
 	srv.SetRunner(api.SchedulerRunnerFunc(func(ctx context.Context) (api.RunResult, error) {

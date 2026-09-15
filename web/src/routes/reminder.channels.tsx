@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { api, type Channel } from '../lib/api'
+import { api, type Channel, type Settings } from '../lib/api'
 import { pageTitle } from '../lib/page-title'
 import {
   AlertDialog,
@@ -19,6 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -58,11 +59,29 @@ const FIELDS: Record<string, { key: string; label: string; type?: string }[]> = 
 function Channels() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['channels'], queryFn: () => api<{ channels: Channel[] }>('/channels') })
+  const settings = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
   const [type, setType] = useState<(typeof TIPE)[number]>('gotify')
   const [name, setName] = useState('')
   const [cfg, setCfg] = useState<Record<string, string | number>>({})
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['channels'] })
+
+  // Toggling a channel's "Default" saves immediately — same inline-edit model
+  // as the card's active switch. The default channels receive the reminders of
+  // contacts without their own selection.
+  const setDefault = useMutation({
+    mutationFn: (ids: number[]) =>
+      api('/settings', { method: 'PUT', body: JSON.stringify({ ...settings.data, default_channel_ids: ids }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    onError: (e) => toast.error(`Failed to save default channel: ${String(e)}`),
+  })
+  const isDefault = (id: number) => (settings.data?.default_channel_ids ?? []).includes(id)
+  const toggleDefault = (id: number, on: boolean) => {
+    const cur = new Set(settings.data?.default_channel_ids ?? [])
+    if (on) cur.add(id)
+    else cur.delete(id)
+    setDefault.mutate([...cur])
+  }
   const create = useMutation({
     mutationFn: () => api('/channels', { method: 'POST', body: JSON.stringify({ type, name, config: cfg }) }),
     onSuccess: () => { setName(''); setCfg({}); invalidate() },
@@ -85,6 +104,9 @@ function Channels() {
   return (
     <div className="space-y-3">
       <h1 className="text-xl font-bold">Notification Channels</h1>
+      <p className="text-sm text-muted-foreground">
+        Contacts without their own channel selection use the default ones. No default — every enabled channel is used.
+      </p>
 
       {q.data?.channels.map((ch) => (
         <Card key={ch.id} className="flex flex-row items-center gap-3 p-3">
@@ -93,6 +115,14 @@ function Channels() {
             <p className="truncate font-medium">{ch.name}</p>
             <p className="text-xs text-muted-foreground">{ch.enabled ? 'active' : 'inactive'}</p>
           </div>
+          <label className="flex items-center gap-1.5 text-sm">
+            <Checkbox
+              checked={isDefault(ch.id)}
+              disabled={!settings.data || setDefault.isPending}
+              onCheckedChange={(v) => toggleDefault(ch.id, v === true)}
+            />
+            Default
+          </label>
           <label className="flex items-center gap-1.5 text-sm">
             <Switch
               checked={ch.enabled}

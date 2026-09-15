@@ -10,12 +10,15 @@ import (
 )
 
 type Settings struct {
-	Timezone          string              `json:"timezone"`
-	SendTime          string              `json:"send_time"`
-	CatchUpHours      int                 `json:"catch_up_hours"`
-	DefaultOffsets    []int               `json:"default_offsets"`
-	HolidayCategories map[string]bool     `json:"holiday_categories"`
-	HolidayOffsets    map[string][]int    `json:"holiday_offsets"`
+	Timezone       string `json:"timezone"`
+	SendTime       string `json:"send_time"`
+	CatchUpHours   int    `json:"catch_up_hours"`
+	DefaultOffsets []int  `json:"default_offsets"`
+	// Channels used by contacts without their own selection. Empty/nil →
+	// every enabled channel (the pre-default behavior).
+	DefaultChannelIDs []int64          `json:"default_channel_ids"`
+	HolidayCategories map[string]bool  `json:"holiday_categories"`
+	HolidayOffsets    map[string][]int `json:"holiday_offsets"`
 }
 
 func DefaultSettings() Settings {
@@ -52,6 +55,9 @@ func (s *Server) LoadSettings(ctx context.Context) Settings {
 	}
 	if len(stored.DefaultOffsets) > 0 {
 		out.DefaultOffsets = append([]int(nil), stored.DefaultOffsets...)
+	}
+	if stored.DefaultChannelIDs != nil {
+		out.DefaultChannelIDs = append([]int64(nil), stored.DefaultChannelIDs...)
 	}
 	if stored.HolidayCategories != nil {
 		out.HolidayCategories = stored.HolidayCategories
