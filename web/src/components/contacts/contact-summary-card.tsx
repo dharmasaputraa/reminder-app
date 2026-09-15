@@ -117,7 +117,7 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
       {/* Identity block: avatar above the name (+ nickname) — centered like
           a profile header, generous air above the avatar. Read-only:
           editing lives in the overlay (lg) / dialog (below lg). */}
-      <div className="flex flex-col items-center gap-2 px-4 pt-8 pb-5 text-center">
+      <div className="flex flex-col items-center gap-2 px-4 pt-7 pb-5 text-center">
         <Avatar className="size-20">
           <AvatarFallback className="text-xl">{initials(c.name)}</AvatarFallback>
         </Avatar>
