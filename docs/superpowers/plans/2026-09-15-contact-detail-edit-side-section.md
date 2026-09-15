@@ -772,7 +772,7 @@ git commit -m "feat(contacts): create flows use ContactEditForm"
 
 ```tsx
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { ChevronRightIcon, Maximize2Icon, PencilIcon, XIcon } from 'lucide-react'
@@ -961,7 +961,10 @@ export function ContactDetailContent({ contactId, variant, onEdit }: ContactDeta
               variant="ghost"
               size="icon-sm"
               aria-label="Open fullscreen detail"
-              onClick={() => nav({ to: '/reminder/contacts/$id', params: { id } })}
+              // Rendered as a real link: cmd/ctrl+click, middle-click and
+              // the context menu open the fullscreen page in a new tab
+              // natively (30e6655); a plain click is the Link's SPA nav.
+              render={<Link to="/reminder/contacts/$id" params={{ id }} />}
             >
               <Maximize2Icon aria-hidden="true" className="size-3.5" />
             </Button>
