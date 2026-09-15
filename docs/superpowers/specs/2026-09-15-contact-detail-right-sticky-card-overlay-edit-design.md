@@ -145,6 +145,10 @@ All in `ContactSummaryCard` only; route, docked panel, and edit form untouched.
    (Pencil/Trash icons removed from the menu; the ⋮ trigger keeps its
    icon).
 
+4. **Compact pass (user follow-up)**: avatar `size-24` → `size-20`
+   (initials `text-2xl` → `text-xl`); right column `lg:w-[340px]
+   xl:w-[400px]` → `lg:w-[300px] xl:w-[340px]`.
+
 ## Out of scope
 
 - Dashboard, contacts grid/index, channels, settings, create flows.

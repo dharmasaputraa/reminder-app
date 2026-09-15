@@ -66,7 +66,7 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
   if (contact.isLoading)
     return (
       <div className="flex flex-col items-center gap-2 px-4 pb-5 pt-6">
-        <Skeleton className="size-24 rounded-full" />
+        <Skeleton className="size-20 rounded-full" />
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-4 w-24" />
       </div>
@@ -118,8 +118,8 @@ export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProp
           a profile header, generous air above the avatar. Read-only:
           editing lives in the overlay (lg) / dialog (below lg). */}
       <div className="flex flex-col items-center gap-2 px-4 pt-8 pb-5 text-center">
-        <Avatar className="size-24">
-          <AvatarFallback className="text-2xl">{initials(c.name)}</AvatarFallback>
+        <Avatar className="size-20">
+          <AvatarFallback className="text-xl">{initials(c.name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 space-y-1">
           <h1 className="text-pretty text-lg leading-snug font-semibold">{c.name}</h1>

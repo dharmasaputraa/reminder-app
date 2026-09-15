@@ -66,7 +66,7 @@ function ContactDetailPage() {
           edit on/off never resizes the card and the form has no dead space
           below Notes. Longer notes grow both naturally. The overlay is
           lg-only; below lg the dialog replaces it (same ?edit param). */}
-      <div className="order-1 shrink-0 lg:order-2 lg:sticky lg:top-0 lg:w-[340px] xl:w-[400px]">
+      <div className="order-1 shrink-0 lg:order-2 lg:sticky lg:top-0 lg:w-[300px] xl:w-[340px]">
         <div className="relative overflow-hidden rounded-xl border bg-card lg:min-h-[361px]">
           <div inert={editOpen}>
             <ContactSummaryCard contactId={Number(id)} onEdit={openEdit} />
