@@ -107,8 +107,10 @@ flows (`?c=new` docked panel, `/new` page), and the docked variant of
   mounts (same param) — identical to today's behavior.
 - Delete navigates back to the index (unchanged); the ⋮ menu and confirm
   now live in the sticky card.
-- No focus management is added on overlay open (parity with the current
-  panel; the dialog keeps Radix's automatic focus trap below lg).
+- While the overlay is open, the base card goes `inert` (the agenda
+  panel's pattern) so Tab cannot land on the visually covered Edit/⋮
+  buttons. No focus is moved programmatically; the dialog keeps Radix's
+  automatic focus trap below lg.
 
 ## Out of scope
 
