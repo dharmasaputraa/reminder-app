@@ -1,12 +1,20 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { routeTree } from './routeTree.gen'
+import { queryClient } from './lib/query-client'
+import { RouteError } from './components/route-error'
+import { RouteNotFound } from './components/route-not-found'
 import './index.css'
 
-const queryClient = new QueryClient()
-const router = createRouter({ routeTree, context: { queryClient }, defaultPreload: 'intent' })
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  defaultPreload: 'intent',
+  defaultErrorComponent: RouteError,
+  defaultNotFoundComponent: RouteNotFound,
+})
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
