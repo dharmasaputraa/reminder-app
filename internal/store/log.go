@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"wimember/internal/domain"
 )
 
 type NotificationEntry struct {
-	OccasionID     *int64
+	OccasionID     *string
 	HolidayKey     *string
 	OccurrenceDate domain.Date
 	OffsetDays     int
-	ChannelID      int64
+	ChannelID      string
 	Status         string
 	Error          string
 }
@@ -20,7 +22,7 @@ type NotificationEntry struct {
 // HasNotification: true if a row with the same dedupe key already exists —
 // (occasion XOR holiday key) + occurrence_date + offset_days + channel_id,
 // mirroring the two partial unique indexes that make RecordNotification
-// idempotent. NULL binding matches exactly (pointer *int64/string → NULL), and
+// idempotent. NULL binding matches exactly (pointer *string → NULL), and
 // the both-nil guard is the same: used by the scheduler to check dedupe
 // BEFORE sending (prevents double pushes), not as a replacement for INSERT OR IGNORE.
 func (s *Store) HasNotification(ctx context.Context, e NotificationEntry) (bool, error) {
@@ -48,8 +50,9 @@ func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (bo
 		return false, fmt.Errorf("notification entry must have OccasionID or HolidayKey")
 	}
 	r, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO notification_log
-		(occasion_id, holiday_key, occurrence_date, offset_days, channel_id, status, error)
-		VALUES (?,?,?,?,?,?,?)`,
+		(id, occasion_id, holiday_key, occurrence_date, offset_days, channel_id, status, error)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		uuid.Must(uuid.NewV7()).String(),
 		e.OccasionID, e.HolidayKey, e.OccurrenceDate.String(), e.OffsetDays, e.ChannelID, e.Status, e.Error)
 	if err != nil {
 		return false, err

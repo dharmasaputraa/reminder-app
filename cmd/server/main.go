@@ -74,6 +74,7 @@ func main() {
 			DefaultOffsets: set.DefaultOffsets, DefaultChannelIDs: set.DefaultChannelIDs,
 			HolidayCategories: set.HolidayCategories,
 			HolidayOffsets:    set.HolidayOffsets,
+			RecurrenceOffsets: set.RecurrenceOffsets,
 		}
 	}
 	srv.SetRunner(api.SchedulerRunnerFunc(func(ctx context.Context) (api.RunResult, error) {

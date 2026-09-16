@@ -37,7 +37,7 @@ export interface ContactRow extends Contact {
  *  first reminder send, and paused contacts still appear (spec). Failure
  *  degrades to an empty map — the column shows "—", the grid still works. */
 export function useNextReminderMap(): {
-  map: Map<number, UpcomingItem>
+  map: Map<string, UpcomingItem>
   isLoading: boolean
 } {
   const today = new Date()
@@ -48,7 +48,7 @@ export function useNextReminderMap(): {
     queryFn: () => api<{ items: UpcomingItem[] }>(`/upcoming?from=${from}&to=${to}`),
   })
   const map = useMemo(() => {
-    const m = new Map<number, UpcomingItem>()
+    const m = new Map<string, UpcomingItem>()
     const items = (q.data?.items ?? [])
       .filter((it) => it.kind === 'occasion' && it.contact_id != null)
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -63,7 +63,7 @@ export function useNextReminderMap(): {
  *  — used for per-occasion countdown chips. Shares the grid's query key, so
  *  mounting it costs no extra fetch. */
 export function useUpcomingByOccasion(): {
-  map: Map<number, UpcomingItem>
+  map: Map<string, UpcomingItem>
   isLoading: boolean
 } {
   const today = new Date()
@@ -74,7 +74,7 @@ export function useUpcomingByOccasion(): {
     queryFn: () => api<{ items: UpcomingItem[] }>(`/upcoming?from=${from}&to=${to}`),
   })
   const map = useMemo(() => {
-    const m = new Map<number, UpcomingItem>()
+    const m = new Map<string, UpcomingItem>()
     const items = (q.data?.items ?? [])
       .filter((it) => it.kind === 'occasion' && it.occasion_id != null)
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -90,7 +90,7 @@ function ActionsCell({
   onRequestDelete,
 }: {
   row: Row<DataGridFeatures, ContactRow>
-  onSelect: (id: number) => void
+  onSelect: (id: string) => void
   onRequestDelete: (contact: Contact) => void
 }) {
   return (
@@ -126,12 +126,12 @@ function ActionsCell({
 
 export interface ContactsGridProps {
   contacts: Contact[]
-  nextById: Map<number, UpcomingItem>
+  nextById: Map<string, UpcomingItem>
   /** Currently docked contact, when the parent has one open. */
-  selectedId?: number
+  selectedId?: string
   isLoading?: boolean
   /** Row click / Open — the parent decides docked selection vs. navigation. */
-  onSelect: (id: number) => void
+  onSelect: (id: string) => void
   /** Called after the confirm dialog; the parent owns the DELETE mutation. */
   onRequestDelete: (contact: Contact) => void
 }
@@ -197,7 +197,7 @@ export function ContactsGrid({
                 select (below lg: ordinary navigation) as the only handler. */}
             <Link
               to="/reminder/contacts/$id"
-              params={{ id: String(row.original.id) }}
+              params={{ id: row.original.id }}
               className="absolute inset-0 rounded-lg outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               onClick={(e) => {
                 if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
@@ -316,7 +316,7 @@ export function ContactsGrid({
     columns,
     data: filtered,
     pageCount: Math.max(1, Math.ceil(filtered.length / pagination.pageSize)),
-    getRowId: (row: ContactRow) => String(row.id),
+    getRowId: (row: ContactRow) => row.id,
     state: { pagination, sorting, columnVisibility },
     onPaginationChange: setPagination,
     onSortingChange: setSorting,

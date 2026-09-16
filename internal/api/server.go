@@ -69,6 +69,12 @@ func NewServer(cfg config.Config, st *store.Store, providers []calendarprov.Prov
 	apiG.DELETE("/contacts/:id", s.handleDeleteContact)
 	apiG.POST("/contacts/:id/occasions", s.handleAddOccasion)
 	apiG.DELETE("/occasions/:id", s.handleDeleteOccasion)
+	// gin ≥1.7 routes static and param siblings: /occasions/types coexists
+	// with /occasions/:id without a registration conflict.
+	apiG.GET("/occasions/types", s.handleOccasionTypes)
+	apiG.GET("/occasions/:id/prefs", s.handleGetOccasionPrefs)
+	apiG.PUT("/occasions/:id/prefs", s.handleSetOccasionPrefs)
+	apiG.DELETE("/occasions/:id/prefs", s.handleDeleteOccasionPrefs)
 	apiG.PUT("/contacts/:id/prefs", s.handleSetPrefs)
 	apiG.GET("/upcoming", s.handleUpcoming)
 	apiG.POST("/upcoming/notify", s.handleUpcomingNotify)

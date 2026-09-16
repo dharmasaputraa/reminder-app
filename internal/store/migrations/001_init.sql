@@ -1,5 +1,5 @@
 CREATE TABLE users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin','member')),
@@ -7,8 +7,8 @@ CREATE TABLE users (
 );
 
 CREATE TABLE contacts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   nickname TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
@@ -17,24 +17,33 @@ CREATE TABLE contacts (
 CREATE INDEX idx_contacts_owner ON contacts(owner_id);
 
 CREATE TABLE occasions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('birthday','otonan','anniversary')),
+  id TEXT PRIMARY KEY,
+  contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  recurrence TEXT NOT NULL CHECK (recurrence IN ('once','yearly','monthly','anniversary','otonan')),
   base_date TEXT NOT NULL,
-  label TEXT NOT NULL DEFAULT ''
+  label TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_occasions_contact ON occasions(contact_id);
 
 CREATE TABLE reminder_prefs (
-  contact_id INTEGER PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+  contact_id TEXT PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+  offsets TEXT NOT NULL,
+  channel_ids TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE occasion_prefs (
+  occasion_id TEXT PRIMARY KEY REFERENCES occasions(id) ON DELETE CASCADE,
   offsets TEXT NOT NULL,
   channel_ids TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE channels (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('gotify','telegram','email')),
   name TEXT NOT NULL,
   config_enc BLOB NOT NULL,
@@ -43,12 +52,12 @@ CREATE TABLE channels (
 );
 
 CREATE TABLE notification_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  occasion_id INTEGER REFERENCES occasions(id) ON DELETE SET NULL,
+  id TEXT PRIMARY KEY,
+  occasion_id TEXT REFERENCES occasions(id) ON DELETE SET NULL,
   holiday_key TEXT,
   occurrence_date TEXT NOT NULL,
   offset_days INTEGER NOT NULL,
-  channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
   status TEXT NOT NULL CHECK (status IN ('sent','failed','missed')),
   error TEXT NOT NULL DEFAULT '',
   sent_at TEXT NOT NULL DEFAULT (datetime('now'))

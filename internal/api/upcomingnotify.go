@@ -12,12 +12,12 @@ import (
 )
 
 type upcomingNotifyIn struct {
-	Kind       string  `json:"kind"` // "occasion" | "holiday"
-	OccasionID int64   `json:"occasion_id"`
-	ContactID  int64   `json:"contact_id"`
-	Date       string  `json:"date"` // YYYY-MM-DD, the occurrence date from /upcoming
-	Title      string  `json:"title"`
-	ChannelIDs []int64 `json:"channel_ids"` // empty → every enabled channel of the caller
+	Kind       string   `json:"kind"` // "occasion" | "holiday"
+	OccasionID string   `json:"occasion_id"`
+	ContactID  string   `json:"contact_id"`
+	Date       string   `json:"date"` // YYYY-MM-DD, the occurrence date from /upcoming
+	Title      string   `json:"title"`
+	ChannelIDs []string `json:"channel_ids"` // empty → every enabled channel of the caller
 }
 
 // handleUpcomingNotify pushes the reminder for one /upcoming item immediately,
@@ -70,7 +70,7 @@ func (s *Server) handleUpcomingNotify(c *gin.Context) {
 		}
 		msg = notify.HolidayMessage(*h, h.Date.JDN()-today.JDN(), false)
 	case "occasion":
-		if in.OccasionID == 0 || in.ContactID == 0 {
+		if in.OccasionID == "" || in.ContactID == "" {
 			c.JSON(400, gin.H{"error": "occasion_id and contact_id are required"})
 			return
 		}
@@ -79,18 +79,16 @@ func (s *Server) handleUpcomingNotify(c *gin.Context) {
 			respondErr(c, err)
 			return
 		}
-		var occ *store.Occasion
-		for i := range cw.Occasions {
-			if cw.Occasions[i].ID == in.OccasionID {
-				occ = &cw.Occasions[i]
-				break
-			}
+		occ, err := s.st.OccasionByID(ctx, s.scope(c), in.OccasionID)
+		if err != nil {
+			respondErr(c, err)
+			return
 		}
-		if occ == nil {
+		if occ.ContactID != cw.ID {
 			c.JSON(404, gin.H{"error": "occasion not found on this contact"})
 			return
 		}
-		occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, from, to)
+		occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, occ.Recurrence, from, to)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -120,7 +118,7 @@ func (s *Server) handleUpcomingNotify(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
-	want := make(map[int64]bool, len(in.ChannelIDs))
+	want := make(map[string]bool, len(in.ChannelIDs))
 	for _, id := range in.ChannelIDs {
 		want[id] = true
 	}

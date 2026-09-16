@@ -38,11 +38,14 @@ type Snapshot struct {
 	DefaultOffsets []int
 	// Channels used by contacts without their own selection. Empty/nil →
 	// every enabled channel (the pre-default behavior).
-	DefaultChannelIDs []int64
+	DefaultChannelIDs []string
 	HolidayCategories map[string]bool
 	// Per holiday source (pawukon/saka/national) reminder offsets. Empty/nil
 	// for a category falls back to DefaultOffsets.
 	HolidayOffsets map[string][]int
+	// Per-stream default offset sets (settings.recurrence_offsets). Consumed by
+	// the per-stream resolution in RunOnce.
+	RecurrenceOffsets domain.OffsetMap
 }
 
 type Resolver func(ctx context.Context, ch store.Channel) (notify.Notifier, error)
@@ -63,7 +66,7 @@ type Service struct {
 	Resolve   Resolver
 
 	mu        sync.Mutex
-	failUntil map[int64]time.Time
+	failUntil map[string]time.Time
 }
 
 func HolidayKey(category string, h domain.Holiday) string {
@@ -88,9 +91,25 @@ func maxOffset(offsets []int) int {
 	return m
 }
 
+// filterChannels narrows a channel list to the given ids, keeping the input
+// order. Ids matching nothing yield an empty list (caller decides the fallback).
+func filterChannels(all []store.Channel, ids []string) []store.Channel {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	var out []store.Channel
+	for _, ch := range all {
+		if want[ch.ID] {
+			out = append(out, ch)
+		}
+	}
+	return out
+}
+
 // targetChannels lists the destination channels for one contact: the contact's
 // own selection, else the system default channels, else every enabled channel.
-func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions, defaultIDs []int64) []store.Channel {
+func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions, defaultIDs []string) []store.Channel {
 	all, err := s.St.ListChannels(ctx, cw.OwnerID)
 	if err != nil {
 		return nil
@@ -101,8 +120,8 @@ func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasi
 			enabled = append(enabled, ch)
 		}
 	}
-	filter := func(ids []int64) []store.Channel {
-		want := map[int64]bool{}
+	filter := func(ids []string) []store.Channel {
+		want := map[string]bool{}
 		for _, id := range ids {
 			want[id] = true
 		}
@@ -133,7 +152,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	// the package (main.go), which cannot fill the unexported failUntil field —
 	// without this, the first failed send = nil-map panic inside the mutex → scan dies.
 	if s.failUntil == nil {
-		s.failUntil = make(map[int64]time.Time)
+		s.failUntil = make(map[string]time.Time)
 	}
 	var res Result
 
@@ -174,7 +193,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	horizon := today.AddDays(holidayMaxOff + 2)
 
 	// ---- occasions ----
-	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: all contacts
+	contacts, err := s.St.ListContacts(ctx, "") // admin scope: all contacts
 	if err != nil {
 		return res, err
 	}
@@ -182,21 +201,50 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		if cw.Prefs != nil && !cw.Prefs.Enabled {
 			continue
 		}
-		offsets := snap.DefaultOffsets
-		if cw.Prefs != nil && len(cw.Prefs.Offsets) > 0 {
-			offsets = cw.Prefs.Offsets
-		}
-		channels := s.targetChannels(ctx, cw, snap.DefaultChannelIDs)
-		oOff := maxOffset(offsets)
-		fromO := today.AddDays(-(oOff + catchUpDays + 2))
-		toO := today.AddDays(oOff + 2)
+		defaultChannels := s.targetChannels(ctx, cw, snap.DefaultChannelIDs)
 		for _, occ := range cw.Occasions {
-			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, fromO, toO)
+			if occ.Prefs != nil && !occ.Prefs.Enabled {
+				continue // per-occasion kill switch
+			}
+			// Channels: occasion override → contact cascade (already resolved).
+			channels := defaultChannels
+			if occ.Prefs != nil && len(occ.Prefs.ChannelIDs) > 0 {
+				if byID := filterChannels(defaultChannels, occ.Prefs.ChannelIDs); len(byID) > 0 {
+					channels = byID
+				}
+			}
+			// Offsets per stream: occasion → contact → settings → DefaultOffsets.
+			// Prefs rows are optional, so the offsets maps are read through the
+			// pointers (nil prefs = pure inherit).
+			var occOff, contactOff domain.OffsetMap
+			if occ.Prefs != nil {
+				occOff = occ.Prefs.Offsets
+			}
+			if cw.Prefs != nil {
+				contactOff = cw.Prefs.Offsets
+			}
+			resolved := domain.ResolveOccasionStreams(occ.Recurrence, occOff, contactOff, snap.RecurrenceOffsets)
+			// The scan window covers the widest resolved stream: a monthly [0]
+			// does not widen it, a yearly [30] does.
+			maxOff := 0
+			for _, offs := range resolved {
+				if m := maxOffset(offs); m > maxOff {
+					maxOff = m
+				}
+			}
+			catchUpDays := (snap.CatchUpHours + 23) / 24
+			fromO := today.AddDays(-(maxOff + catchUpDays + 2))
+			toO := today.AddDays(maxOff + 2)
+			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, occ.Recurrence, fromO, toO)
 			if err != nil {
 				continue
 			}
 			for _, o := range occs {
-				for _, off := range offsets {
+				offs := resolved[o.Stream]
+				if o.Stream == domain.StreamEvent && len(offs) == 0 {
+					offs = domain.DefaultOffsets
+				}
+				for _, off := range offs {
 					rDate := o.Date.AddDays(-off)
 					sendAt := time.Date(rDate.Year, time.Month(rDate.Month), rDate.Day, sendHH, sendMM, 0, 0, loc)
 					if sendAt.After(now) {

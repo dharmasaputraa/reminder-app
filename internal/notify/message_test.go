@@ -31,7 +31,8 @@ func TestOccurrenceMessageOtonan(t *testing.T) {
 }
 
 func TestOccurrenceMessageBirthdayToday(t *testing.T) {
-	occ := domain.Occurrence{Date: domain.NewDate(2026, 6, 17), Type: domain.Birthday, Number: 36}
+	occ := domain.Occurrence{Date: domain.NewDate(2026, 6, 17), Type: domain.Birthday,
+		Stream: domain.StreamYearly, Number: 36, Label: "Birthday #36"}
 	m := OccurrenceMessage("Budi", occ, 0, false)
 	if !strings.Contains(m.Title, "🎂") || !strings.Contains(m.Title, "today") {
 		t.Errorf("title = %q", m.Title)
@@ -41,9 +42,32 @@ func TestOccurrenceMessageBirthdayToday(t *testing.T) {
 	}
 }
 
+func TestOccurrenceMessagesStreams(t *testing.T) {
+	anniv := domain.Occurrence{Date: domain.NewDate(2026, 8, 16), Type: domain.Anniversary,
+		Stream: domain.StreamMonthly, Number: 14, Label: "Anniversary 1 year 2 months"}
+	m := OccurrenceMessage("Ani", anniv, 3, false)
+	if m.Title != "🎊 Ani — Anniversary 1 year 2 months in 3 days" {
+		t.Errorf("monthly title: %q", m.Title)
+	}
+	y := OccurrenceMessage("Ani", anniv, 0, false) // same struct, daysUntil 0
+	if y.Priority != 8 {
+		t.Errorf("day-of priority: %d", y.Priority)
+	}
+	b := OccurrenceMessage("Ben", domain.Occurrence{Date: domain.NewDate(2026, 1, 1), Type: domain.Birthday,
+		Stream: domain.StreamYearly, Number: 30, Label: "Birthday #30"}, 7, false)
+	if b.Title != "🎂 Ben — Birthday #30 in 7 days" {
+		t.Errorf("birthday title: %q", b.Title)
+	}
+	g := OccurrenceMessage("Cy", domain.Occurrence{Date: domain.NewDate(2026, 5, 10), Type: "graduation",
+		Stream: domain.StreamEvent, Label: "Graduation"}, 2, false)
+	if g.Title != "🎉 Cy — Graduation in 2 days" {
+		t.Errorf("once title: %q", g.Title)
+	}
+}
+
 func TestLateSuffix(t *testing.T) {
 	m := OccurrenceMessage("Budi", domain.Occurrence{Date: domain.NewDate(2026, 6, 17),
-		Type: domain.Birthday, Number: 30}, 1, true)
+		Type: domain.Birthday, Stream: domain.StreamYearly, Number: 30, Label: "Birthday #30"}, 1, true)
 	if !strings.Contains(m.Body, "Sent late") {
 		t.Errorf("late flag not visible: %q", m.Body)
 	}

@@ -4,10 +4,11 @@ import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ChevronRightIcon, Maximize2Icon, Trash2Icon, XIcon } from 'lucide-react'
-import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
+import { ApiError, api, type Channel, type Contact, type Occasion, type Settings } from '@/lib/api'
 import { initials } from '@/lib/initials'
-import { hydratePrefsForm } from '@/lib/prefs'
+import { hydratePrefsForm, parseList } from '@/lib/prefs'
 import { useUpcomingByOccasion } from '@/components/contacts/contacts-grid'
+import { OccasionPrefsEditor } from '@/components/contacts/occasion-prefs-editor'
 import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-selector-popover'
 import type { DateSelectorValue } from '@/components/reui/date-selector'
 import { ReminderTrigger } from '@/components/event-detail'
@@ -41,10 +42,29 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 
-const TIPE: { value: string; label: string }[] = [
+/** Occasion type control: the three built-ins plus a free-text "Custom…"
+ *  (suggestions for it come from GET /occasions/types). */
+const TYPE_ITEMS: { value: string; label: string }[] = [
   { value: 'otonan', label: 'Otonan (210-day Pawukon)' },
   { value: 'birthday', label: 'Birthday' },
   { value: 'anniversary', label: 'Anniversary' },
+  { value: 'custom', label: 'Custom…' },
+]
+
+/** The recurrence a built-in type implies. "Custom…" has no entry — it keeps
+ *  the user's current choice (untouched → yearly). */
+const TYPE_RECURRENCE: Record<string, Occasion['recurrence']> = {
+  otonan: 'otonan',
+  birthday: 'yearly',
+  anniversary: 'anniversary',
+}
+
+const RECURRENCE_ITEMS: { value: Occasion['recurrence']; label: string }[] = [
+  { value: 'once', label: 'One-time' },
+  { value: 'yearly', label: 'Every year' },
+  { value: 'monthly', label: 'Every month' },
+  { value: 'anniversary', label: 'Every year + every month' },
+  { value: 'otonan', label: 'Otonan (every 210 days)' },
 ]
 
 /** ISO yyyy-MM-dd → "Wednesday, 18 June 2003" (page occasion rows). */
@@ -57,8 +77,22 @@ function shortDate(iso: string): string {
   return format(new Date(`${iso}T00:00:00`), 'EEE, d MMM yyyy')
 }
 
+/** "[30, 7, 0]" → "D-30, D-7, on the day" — the copy form for offset lists. */
+function offsetsSummary(list?: number[]): string {
+  return (list ?? []).map((n) => (n === 0 ? 'on the day' : `D-${n}`)).join(', ')
+}
+
+/** The per-recurrence default sets the contact form edits, as copy:
+ *  "Yearly: D-30, D-7, … · Monthly: on the day". */
+function defaultSummary(settings?: Settings): string {
+  return (
+    `Yearly: ${offsetsSummary(settings?.recurrence_offsets?.yearly)} · ` +
+    `Monthly: ${offsetsSummary(settings?.recurrence_offsets?.monthly)}`
+  )
+}
+
 interface ContactDetailContentProps {
-  contactId: number
+  contactId: string
   /** docked = read-only right section of /reminder/contacts;
    *  page = the editable sections column of /reminder/contacts/$id —
    *  occasions/preferences are edited in place; identity + actions live
@@ -67,7 +101,7 @@ interface ContactDetailContentProps {
 }
 
 export function ContactDetailContent({ contactId, variant }: ContactDetailContentProps) {
-  const id = String(contactId)
+  const id = contactId
   const qc = useQueryClient()
   const nav = useNavigate()
 
@@ -82,25 +116,63 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
   const { map: upcomingByOccasion } = useUpcomingByOccasion()
 
   // --- occasions + preferences form state (page variant only) ---
-  const [type, setType] = useState('otonan')
+  const [type, setType] = useState('otonan') // built-in value or 'custom'
+  const [customType, setCustomType] = useState('') // free text when type === 'custom'
+  const [recurrence, setRecurrence] = useState<Occasion['recurrence']>('yearly')
+  const [label, setLabel] = useState('')
   const [date, setDate] = useState('')
   const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
   const [pawukon, setPawukon] = useState('')
-  const [offsets, setOffsets] = useState('')
+  const [yearly, setYearly] = useState('')
+  const [monthly, setMonthly] = useState('')
   const [enabled, setEnabled] = useState(true)
+
+  const custom = type === 'custom'
+  const effectiveType = custom ? customType.trim() : type
+
+  // Built-in types imply their recurrence (birthday → yearly, otonan →
+  // otonan, anniversary → anniversary); "Custom…" leaves the current pick.
+  useEffect(() => {
+    const auto = TYPE_RECURRENCE[type]
+    if (auto) setRecurrence(auto)
+  }, [type])
+
+  // Custom-type suggestions: the caller's own previously used types (the
+  // built-ins already have select options), fetched only while custom.
+  const occasionTypes = useQuery({
+    queryKey: ['occasion-types'],
+    queryFn: () => api<{ types: string[] }>('/occasions/types'),
+    enabled: custom,
+  })
+  const typeSuggestions = [...new Set(occasionTypes.data?.types ?? [])].filter(
+    (t) => !TYPE_ITEMS.some((i) => i.value === t),
+  )
 
   useEffect(() => {
     if (!contact.data) return
     const form = hydratePrefsForm(contact.data.prefs)
-    setOffsets(form.offsets)
+    setYearly(form.yearly)
+    setMonthly(form.monthly)
     setEnabled(form.enabled)
   }, [contact.data])
 
-  async function previewPawukon(d: string) {
+  // Pawukon preview for otonan recurrences — recomputed when the date or the
+  // recurrence changes, so switching a picked date to otonan updates it.
+  useEffect(() => {
     setPawukon('')
-    if (!d || type !== 'otonan') return
-    try { setPawukon((await api<{ label: string }>(`/pawukon?date=${d}`)).label) } catch { /* stay silent */ }
-  }
+    if (!date || recurrence !== 'otonan') return
+    let alive = true
+    api<{ label: string }>(`/pawukon?date=${date}`)
+      .then((r) => {
+        if (alive) setPawukon(r.label)
+      })
+      .catch(() => {
+        /* stay silent */
+      })
+    return () => {
+      alive = false
+    }
+  }, [date, recurrence])
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['contact', id] })
@@ -111,12 +183,23 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
   }
 
   const addOcc = useMutation({
-    mutationFn: () => api(`/contacts/${id}/occasions`, { method: 'POST', body: JSON.stringify({ type, date }) }),
-    onSuccess: () => { setDate(''); setDateSel(undefined); setPawukon(''); invalidate() },
+    mutationFn: () =>
+      api(`/contacts/${id}/occasions`, {
+        method: 'POST',
+        body: JSON.stringify({ type: effectiveType, recurrence, date, label: label.trim() }),
+      }),
+    onSuccess: () => {
+      setDate('')
+      setDateSel(undefined)
+      setPawukon('')
+      setLabel('')
+      setCustomType('')
+      invalidate()
+    },
     onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })
   const delOcc = useMutation({
-    mutationFn: (oid: number) => api(`/occasions/${oid}`, { method: 'DELETE' }),
+    mutationFn: (oid: string) => api(`/occasions/${oid}`, { method: 'DELETE' }),
     onSuccess: invalidate,
     onError: (e) => toast.error(`Failed to delete occasion: ${String(e)}`),
   })
@@ -178,15 +261,6 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
   }
   const c = contact.data!
 
-  // One occasion per type: types the contact already has are disabled in the
-  // type select and the Add button locks.
-  const existingTypes = new Set(c.occasions.map((o) => o.type))
-  const typeItems = TIPE.map((t) => ({
-    label: t.label,
-    value: t.value,
-    disabled: existingTypes.has(t.value),
-  }))
-
   /** Identity block (docked panel only): avatar above the name (+ nickname)
    *  — the centered profile header. The page variant has no identity block
    *  here; it lives in the sticky ContactSummaryCard. */
@@ -218,22 +292,30 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
         )}
       </DetailRow>
       <DetailRow label="Offsets">
-        {c.prefs?.offsets?.length ? (
-          <span className="flex flex-wrap justify-end gap-1">
-            {[...c.prefs.offsets].sort((a, b) => b - a).map((n, i) => (
-              <Badge key={`${n}-${i}`} variant="secondary">D-{n}</Badge>
-            ))}
-          </span>
-        ) : (
-          <>
-            Default
-            {settings.data && (
-              <span className="text-muted-foreground font-normal">
-                {' '}({settings.data.default_offsets.map((n) => `D-${n}`).join(', ')})
-              </span>
-            )}
-          </>
-        )}
+        {(() => {
+          // Offsets are a per-stream map now; this read-only row shows the
+          // union of every stream's list (the per-stream editor is Task 10).
+          const offs = [...new Set(Object.values(c.prefs?.offsets ?? {}).flat())].sort((a, b) => b - a)
+          if (offs.length === 0) {
+            return (
+              <>
+                Default
+                {settings.data && (
+                  <span className="text-muted-foreground font-normal">
+                    {' '}({defaultSummary(settings.data)})
+                  </span>
+                )}
+              </>
+            )
+          }
+          return (
+            <span className="flex flex-wrap justify-end gap-1">
+              {offs.map((n) => (
+                <Badge key={n} variant="secondary">D-{n}</Badge>
+              ))}
+            </span>
+          )
+        })()}
       </DetailRow>
       <DetailRow label="Channels">
         {(() => {
@@ -315,14 +397,20 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
                             </p>
                             <p className="mt-0.5 text-sm font-medium tabular-nums">{shortDate(o.base_date)}</p>
                           </div>
-                          {up && (
-                            <Badge
-                              variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
-                              className="shrink-0"
-                            >
-                              {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
-                            </Badge>
-                          )}
+                          <span className="flex shrink-0 flex-col items-end gap-1">
+                            {/* Per-occasion override: paused occasions notify nothing. */}
+                            {o.prefs?.enabled === false && (
+                              <Badge variant="warning-outline">Paused</Badge>
+                            )}
+                            {up && (
+                              <Badge
+                                variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
+                                className="shrink-0"
+                              >
+                                {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
+                              </Badge>
+                            )}
+                          </span>
                         </div>
                       </div>
                     )
@@ -366,121 +454,183 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
               {c.occasions.map((o) => {
                 const up = upcomingByOccasion.get(o.id)
                 return (
-                  <div key={o.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <Badge variant="secondary" className="uppercase">{o.type}</Badge>
-                      <span className="truncate">{longDate(o.base_date)}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1">
-                      {/* Remind needs an actual occurrence date: the backend
-                          matches `date` exactly, and a base date is not an
-                          occurrence for otonan (base+210n). */}
-                      {up && (
-                        <>
-                          <Badge
-                            variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
-                            className="shrink-0"
-                          >
-                            {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
-                          </Badge>
-                          <ReminderTrigger
-                            kind="occasion"
-                            occasionId={o.id}
-                            contactId={c.id}
-                            date={up.date}
-                            title={`${c.name}'s ${o.type}`}
-                            variant="ghost"
-                            compact
-                            className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
-                          />
-                        </>
-                      )}
-                      <AlertDialog>
-                        <AlertDialogTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Delete ${o.type} occasion`}
-                              className="text-muted-foreground hover:text-destructive"
+                  <div key={o.id} className="py-2.5 first:pt-0 last:pb-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <Badge variant="secondary" className="uppercase">{o.type}</Badge>
+                        <Badge variant="outline" className="capitalize">{o.recurrence}</Badge>
+                        {o.prefs?.enabled === false && <Badge variant="warning-outline">Paused</Badge>}
+                        <span className="truncate">
+                          {longDate(o.base_date)}
+                          {o.label && <span className="text-muted-foreground"> · {o.label}</span>}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        {/* Remind needs an actual occurrence date: the backend
+                            matches `date` exactly, and a base date is not an
+                            occurrence for otonan (base+210n). */}
+                        {up && (
+                          <>
+                            <Badge
+                              variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}
+                              className="shrink-0"
                             >
-                              <Trash2Icon aria-hidden="true" />
-                            </Button>
-                          }
-                        />
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {o.type} on {longDate(o.base_date)} will be permanently deleted.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </span>
+                              {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
+                            </Badge>
+                            <ReminderTrigger
+                              kind="occasion"
+                              occasionId={o.id}
+                              contactId={c.id}
+                              date={up.date}
+                              title={`${c.name}'s ${o.type}`}
+                              variant="ghost"
+                              compact
+                              className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
+                            />
+                          </>
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Delete ${o.type} occasion`}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2Icon aria-hidden="true" />
+                              </Button>
+                            }
+                          />
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {o.type} on {longDate(o.base_date)} will be permanently deleted.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </span>
+                    </div>
+                    {/* Per-occasion overrides: PUT full-replace / DELETE inherit. */}
+                    <OccasionPrefsEditor
+                      contactId={c.id}
+                      occasion={o}
+                      channels={channels.data?.channels ?? []}
+                    />
                   </div>
                 )
               })}
             </div>
           )}
-          {/* flex-wrap: the two w-56 controls share the row only when there
-              is room and stack on narrow viewports. */}
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-            <Select
-              items={typeItems}
-              value={type}
-              onValueChange={(v) => {
-                if (!v) return
-                setType(v)
-              }}
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                <SelectGroup>
-                  {typeItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <DateSelectorPopover
-              value={dateSel}
-              onApply={(v) => {
-                setDateSel(v)
-                const d = dateSelectorValueToDate(v)
-                const iso = d ? format(d, 'yyyy-MM-dd') : ''
-                setDate(iso)
-                previewPawukon(iso)
-              }}
-              placeholder="Pick a date"
-              minYear={1800}
-              maxYear={new Date().getFullYear() + 10}
-              weekStartsOn={1}
-              allowRange={false}
-              periodTypes={['day', 'month', 'year']}
-              monthCascadesToDay
-              showFilterTypes={false}
-              className="w-56 justify-start"
-            />
-            <Button disabled={!date || existingTypes.has(type) || addOcc.isPending} onClick={() => addOcc.mutate()}>Add</Button>
+          {/* flex-wrap: the w-56 controls share the row only when there is
+              room and stack on narrow viewports. Custom types reveal a
+              free-text input in place, with the previously used types as
+              clickable suggestion chips underneath. */}
+          <div className="mt-4 space-y-2 border-t pt-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                items={TYPE_ITEMS}
+                value={type}
+                onValueChange={(v) => {
+                  if (!v) return
+                  // "Custom…" falls back to yearly while the recurrence is
+                  // still the previous type's default — a manual pick is kept.
+                  if (v === 'custom' && recurrence === TYPE_RECURRENCE[type]) setRecurrence('yearly')
+                  setType(v)
+                }}
+              >
+                <SelectTrigger className="w-56" aria-label="Occasion type">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {TYPE_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {custom && (
+                <Input
+                  value={customType}
+                  onChange={(e) => setCustomType(e.target.value)}
+                  placeholder="Custom type, e.g. graduation"
+                  aria-label="Custom occasion type"
+                  className="w-56"
+                />
+              )}
+              <Select
+                items={RECURRENCE_ITEMS}
+                value={recurrence}
+                onValueChange={(v) => {
+                  if (!v) return
+                  setRecurrence(v)
+                }}
+              >
+                <SelectTrigger className="w-52" aria-label="Recurrence">
+                  <SelectValue placeholder="Recurrence" />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {RECURRENCE_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <DateSelectorPopover
+                value={dateSel}
+                onApply={(v) => {
+                  setDateSel(v)
+                  const d = dateSelectorValueToDate(v)
+                  setDate(d ? format(d, 'yyyy-MM-dd') : '')
+                }}
+                placeholder="Pick a date"
+                minYear={1800}
+                maxYear={new Date().getFullYear() + 10}
+                weekStartsOn={1}
+                allowRange={false}
+                periodTypes={['day', 'month', 'year']}
+                monthCascadesToDay
+                showFilterTypes={false}
+                className="w-56 justify-start"
+              />
+              <Input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Label (optional)"
+                aria-label="Occasion label"
+                className="w-44"
+              />
+              <Button disabled={!date || !effectiveType || addOcc.isPending} onClick={() => addOcc.mutate()}>
+                Add
+              </Button>
+            </div>
+            {custom && typeSuggestions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground text-xs">Previously used:</span>
+                {typeSuggestions.map((t) => (
+                  <Button key={t} type="button" variant="outline" size="xs" onClick={() => setCustomType(t)}>
+                    {t}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {pawukon && <p className="text-sm text-emerald-700 dark:text-emerald-400">{pawukon}</p>}
+            {effectiveType === 'birthday' && date.endsWith('-02-29') && (
+              <p className="text-muted-foreground text-xs">Feb 29 in non-leap years is observed on March 1.</p>
+            )}
           </div>
-          {existingTypes.has(type) && (
-            <p className="text-muted-foreground mt-3 text-xs">
-              This contact already has this type of occasion — only one of each type is allowed.
-            </p>
-          )}
-          {pawukon && <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{pawukon}</p>}
-          {type === 'birthday' && date.endsWith('-02-29') && (
-            <p className="text-muted-foreground mt-3 text-xs">Feb 29 in non-leap years is observed on March 1.</p>
-          )}
         </CardContent>
       </Card>
 
@@ -490,21 +640,35 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground text-sm">
-            Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
+            Global defaults — {defaultSummary(settings.data)} · send time {settings.data?.send_time}
           </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="pref-offsets">Custom offsets</Label>
-            <Input
-              id="pref-offsets"
-              value={offsets}
-              onChange={(e) => setOffsets(e.target.value)}
-              placeholder="e.g. 7, 4, 2, 1, 0"
-              className="w-full sm:max-w-xs"
-            />
-            <p className="text-muted-foreground text-xs">
-              Days before the occasion. Empty uses the global default.
-            </p>
+          {/* Offsets are a per-stream map; the minimal contact form edits the
+              yearly + monthly lists and leaves other streams untouched. */}
+          <div className="grid gap-3 sm:grid-cols-2 sm:max-w-md">
+            <div className="space-y-1.5">
+              <Label htmlFor="pref-yearly-offsets">Yearly offsets</Label>
+              <Input
+                id="pref-yearly-offsets"
+                value={yearly}
+                onChange={(e) => setYearly(e.target.value)}
+                placeholder="e.g. 30, 7, 0"
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pref-monthly-offsets">Monthly offsets</Label>
+              <Input
+                id="pref-monthly-offsets"
+                value={monthly}
+                onChange={(e) => setMonthly(e.target.value)}
+                placeholder="e.g. 1, 0"
+                className="w-full"
+              />
+            </div>
           </div>
+          <p className="text-muted-foreground text-xs">
+            Days before the occasion. Empty uses the global default for that stream.
+          </p>
           <label className="flex items-center gap-2 text-sm font-medium">
             <Switch checked={enabled} onCheckedChange={(v) => setEnabled(v === true)} />
             Active
@@ -534,7 +698,9 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
           <div className="flex justify-end">
             <Button
               onClick={() => savePrefs.mutate({
-                offsets: offsets.trim() ? offsets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)) : [],
+                // Non-lossy: only the two edited lists change, any other
+                // stream the contact has an override for is preserved.
+                offsets: { ...(c.prefs?.offsets ?? {}), yearly: parseList(yearly), monthly: parseList(monthly) },
                 enabled,
               })}
             >

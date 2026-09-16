@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"wimember/internal/domain"
 )
 
@@ -17,7 +19,7 @@ func TestRecordNotificationDedupe(t *testing.T) {
 	ctx := context.Background()
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(ctx, u.ID, "Made", "", "")
-	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), "")
 	ch, _ := s.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc"))
 	occID := oc.ID
 	e := NotificationEntry{OccasionID: &occID, OccurrenceDate: domain.NewDate(2026, 6, 17),
@@ -26,6 +28,15 @@ func TestRecordNotificationDedupe(t *testing.T) {
 	inserted, err := s.RecordNotification(ctx, e)
 	if err != nil || !inserted {
 		t.Fatalf("first: inserted=%v err=%v", inserted, err)
+	}
+	// The row id must be a UUIDv7: SQLite allows NULL in a TEXT PRIMARY KEY, so
+	// a missing id would slip through silently (Scan into string errors on NULL).
+	var id string
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM notification_log LIMIT 1`).Scan(&id); err != nil {
+		t.Fatalf("notification_log id: %v", err)
+	}
+	if _, err := uuid.Parse(id); err != nil {
+		t.Errorf("notification_log id not a uuid: %q", id)
 	}
 	inserted, err = s.RecordNotification(ctx, e)
 	if err != nil {
@@ -45,7 +56,7 @@ func TestHasNotification(t *testing.T) {
 	ctx := context.Background()
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(ctx, u.ID, "Made", "", "")
-	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), "")
 	ch, _ := s.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc"))
 	occID := oc.ID
 	e := NotificationEntry{OccasionID: &occID, OccurrenceDate: domain.NewDate(2026, 6, 17),
@@ -70,8 +81,12 @@ func TestHasNotification(t *testing.T) {
 	}
 
 	// different channel → not a duplicate
+	ch2, err := s.CreateChannel(ctx, u.ID, "gotify", "other", []byte("enc2"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	e2 := e
-	e2.ChannelID = ch.ID + 999
+	e2.ChannelID = ch2.ID
 	if got, err := s.HasNotification(ctx, e2); err != nil || got {
 		t.Errorf("other channel must be false: got=%v err=%v", got, err)
 	}

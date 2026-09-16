@@ -16,9 +16,12 @@ type Settings struct {
 	DefaultOffsets []int  `json:"default_offsets"`
 	// Channels used by contacts without their own selection. Empty/nil →
 	// every enabled channel (the pre-default behavior).
-	DefaultChannelIDs []int64          `json:"default_channel_ids"`
+	DefaultChannelIDs []string         `json:"default_channel_ids"`
 	HolidayCategories map[string]bool  `json:"holiday_categories"`
 	HolidayOffsets    map[string][]int `json:"holiday_offsets"`
+	// Per-stream default offset sets, keyed by recurrence stream (event,
+	// yearly, monthly, otonan). Always complete after SaveSettings.
+	RecurrenceOffsets domain.OffsetMap `json:"recurrence_offsets"`
 }
 
 func DefaultSettings() Settings {
@@ -31,7 +34,8 @@ func DefaultSettings() Settings {
 			"pawukon": true, "saka": true, "national": true,
 		},
 		// Empty per-category lists fall back to DefaultOffsets at scheduling time.
-		HolidayOffsets: map[string][]int{},
+		HolidayOffsets:    map[string][]int{},
+		RecurrenceOffsets: domain.DefaultRecurrenceOffsets(),
 	}
 }
 
@@ -57,13 +61,16 @@ func (s *Server) LoadSettings(ctx context.Context) Settings {
 		out.DefaultOffsets = append([]int(nil), stored.DefaultOffsets...)
 	}
 	if stored.DefaultChannelIDs != nil {
-		out.DefaultChannelIDs = append([]int64(nil), stored.DefaultChannelIDs...)
+		out.DefaultChannelIDs = append([]string(nil), stored.DefaultChannelIDs...)
 	}
 	if stored.HolidayCategories != nil {
 		out.HolidayCategories = stored.HolidayCategories
 	}
 	if stored.HolidayOffsets != nil {
 		out.HolidayOffsets = stored.HolidayOffsets
+	}
+	if stored.RecurrenceOffsets != nil {
+		out.RecurrenceOffsets = stored.RecurrenceOffsets
 	}
 	return out
 }
@@ -95,6 +102,14 @@ func (s *Server) SaveSettings(ctx context.Context, in Settings) (Settings, error
 	for cat, offs := range in.HolidayOffsets {
 		if err := domain.ValidateOffsets(offs); err != nil {
 			return Settings{}, fmt.Errorf("holiday_offsets[%q]: %w", cat, err)
+		}
+	}
+	if err := domain.ValidateOffsetMap(in.RecurrenceOffsets); err != nil {
+		return Settings{}, err
+	}
+	for _, s := range []domain.Stream{domain.StreamEvent, domain.StreamYearly, domain.StreamMonthly, domain.StreamOtonan} {
+		if len(in.RecurrenceOffsets[s]) == 0 {
+			return Settings{}, fmt.Errorf("recurrence_offsets[%s] is required (use a non-empty list)", s)
 		}
 	}
 	if err := s.st.PutSettingJSON(ctx, "settings", in); err != nil {

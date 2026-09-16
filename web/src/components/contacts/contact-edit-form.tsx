@@ -13,8 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 
 interface ContactEditFormProps {
-  /** Numeric contact id (edit), or 'new' (create). */
-  contactId: number | 'new'
+  /** Contact id (UUID, edit), or 'new' (create). */
+  contactId: string | 'new'
   /** panel = docked side section (the edit panel and the ?c=new create
    *  panel); page = the /new route (create only); dialog = below-lg edit
    *  dialog body (edit only — the Dialog owns the title bar). */
@@ -31,7 +31,7 @@ interface ContactEditFormProps {
  *  preferences are edited on the detail page, not here (revision spec). */
 export function ContactEditForm({ contactId, variant, onClose, onSaved }: ContactEditFormProps) {
   const isNew = contactId === 'new'
-  const id = String(contactId)
+  const id = isNew ? '' : contactId
   const qc = useQueryClient()
   const nav = useNavigate()
 
@@ -70,9 +70,9 @@ export function ContactEditForm({ contactId, variant, onClose, onSaved }: Contac
       if (isNew && savedId != null) {
         // Flow (unchanged): after create, land on the fullscreen detail page.
         // Replace so no `new` URL stays in history.
-        nav({ to: '/reminder/contacts/$id', params: { id: String(savedId) }, replace: true })
+        nav({ to: '/reminder/contacts/$id', params: { id: savedId }, replace: true })
         toast.success('Contact created')
-        qc.invalidateQueries({ queryKey: ['contact', String(savedId)] })
+        qc.invalidateQueries({ queryKey: ['contact', savedId] })
       } else if (!isNew) {
         toast.success('Contact updated')
         // The read-only identity beside/behind this form must drop the stale

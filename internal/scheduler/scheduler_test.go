@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"wimember/internal/calendarprov"
 	"wimember/internal/domain"
@@ -72,7 +75,7 @@ func seed(t *testing.T, st *store.Store, today domain.Date) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.AddOccasion(ctx, c.ID, domain.Otonan, today.AddDays(-domain.PawukonCycleDays), ""); err != nil {
+	if _, err := st.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, today.AddDays(-domain.PawukonCycleDays), ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc")); err != nil {
@@ -87,7 +90,10 @@ type harness struct {
 	svc   *Service
 }
 
-func newHarness(t *testing.T, now time.Time) *harness {
+// newBareHarness wires store, clock, notifier and service without seed(): the
+// per-occasion scenarios bring their own contact so Result counters and
+// captured pushes stay exact.
+func newBareHarness(t *testing.T, now time.Time) *harness {
 	t.Helper()
 	st, err := store.OpenInMemory()
 	if err != nil {
@@ -98,12 +104,18 @@ func newHarness(t *testing.T, now time.Time) *harness {
 		t.Fatal(err)
 	}
 	fc := &FakeClock{T: now}
-	seed(t, st, domain.DateFromTime(now))
 	n := &stubNotifier{}
 	svc := &Service{St: st, Clock: fc, Providers: []calendarprov.Provider{&stubProvider{}},
 		Resolve:   func(_ context.Context, ch store.Channel) (notify.Notifier, error) { return n, nil },
-		failUntil: map[int64]time.Time{}}
+		failUntil: map[string]time.Time{}}
 	return &harness{st: st, fc: fc, notif: n, svc: svc}
+}
+
+func newHarness(t *testing.T, now time.Time) *harness {
+	t.Helper()
+	h := newBareHarness(t, now)
+	seed(t, h.st, domain.DateFromTime(now))
+	return h
 }
 
 // today at 08:02 UTC → the D offset is sent; D-1..D-7 (the 4 other offsets) → missed.
@@ -205,7 +217,7 @@ func TestTargetChannelsSystemDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.st.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(2026, 6, 17), ""); err != nil {
+	if _, err := h.st.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(2026, 6, 17), ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,11 +229,11 @@ func TestTargetChannelsSystemDefault(t *testing.T) {
 		}
 		return *got
 	}
-	same := func(got []store.Channel, want ...int64) bool {
+	same := func(got []store.Channel, want ...string) bool {
 		if len(got) != len(want) {
 			return false
 		}
-		set := map[int64]bool{}
+		set := map[string]bool{}
 		for _, ch := range got {
 			set[ch.ID] = true
 		}
@@ -238,21 +250,21 @@ func TestTargetChannelsSystemDefault(t *testing.T) {
 		t.Errorf("no default: got %v", got)
 	}
 	// system default → just that channel
-	if got := h.svc.targetChannels(ctx, cw(t), []int64{chB.ID}); !same(got, chB.ID) {
+	if got := h.svc.targetChannels(ctx, cw(t), []string{chB.ID}); !same(got, chB.ID) {
 		t.Errorf("default [B]: got %v", got)
 	}
 	// default matching nothing enabled → falls back to every enabled channel
-	if got := h.svc.targetChannels(ctx, cw(t), []int64{999}); !same(got, chA.ID, chB.ID) {
+	if got := h.svc.targetChannels(ctx, cw(t), []string{uuid.NewString()}); !same(got, chA.ID, chB.ID) {
 		t.Errorf("unknown default: got %v", got)
 	}
 
 	// the contact's own selection beats the system default
 	if err := h.st.SetReminderPrefs(ctx, store.ReminderPrefs{
-		ContactID: c.ID, ChannelIDs: []int64{chA.ID}, Enabled: true,
+		ContactID: c.ID, ChannelIDs: []string{chA.ID}, Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got := h.svc.targetChannels(ctx, cw(t), []int64{chB.ID}); !same(got, chA.ID) {
+	if got := h.svc.targetChannels(ctx, cw(t), []string{chB.ID}); !same(got, chA.ID) {
 		t.Errorf("explicit selection: got %v", got)
 	}
 }
@@ -306,6 +318,10 @@ func TestHolidayDedupAcrossProviders(t *testing.T) {
 	snap := snapUTC()
 	snap.DefaultOffsets = []int{0}
 	snap.HolidayOffsets = map[string][]int{"pawukon": {1}, "saka": {0}}
+	// Occasions read their per-stream sets from settings.recurrence_offsets
+	// (Task 6), not the legacy global — pin the otonan to [0] so this test
+	// keeps asserting only the holiday dedup.
+	snap.RecurrenceOffsets = domain.OffsetMap{domain.StreamOtonan: {0}}
 	res, err := h.svc.RunOnce(context.Background(), snap)
 	if err != nil {
 		t.Fatal(err)
@@ -331,6 +347,8 @@ func TestHolidayProviderFailureStillSendsOthers(t *testing.T) {
 	}
 	snap := snapUTC()
 	snap.DefaultOffsets = []int{0}
+	// per-stream settings (Task 6): the otonan seed reminds on the day only.
+	snap.RecurrenceOffsets = domain.OffsetMap{domain.StreamOtonan: {0}}
 	res, err := h.svc.RunOnce(context.Background(), snap)
 	if err != nil {
 		t.Fatal(err)
@@ -355,6 +373,8 @@ func TestHolidaySakaSurvivesWithoutPawukon(t *testing.T) {
 	snap := snapUTC()
 	snap.DefaultOffsets = []int{0}
 	snap.HolidayOffsets = map[string][]int{"saka": {0}}
+	// per-stream settings (Task 6): the otonan seed reminds on the day only.
+	snap.RecurrenceOffsets = domain.OffsetMap{domain.StreamOtonan: {0}}
 	res, err := h.svc.RunOnce(context.Background(), snap)
 	if err != nil {
 		t.Fatal(err)
@@ -416,5 +436,382 @@ func TestHolidayKey(t *testing.T) {
 	got := HolidayKey("pawukon", domain.Holiday{Name: "Batu Kuning"})
 	if got != "pawukon:batu-kuning" {
 		t.Errorf("key = %q", got)
+	}
+}
+
+// ---- per-occasion reminders: recurrence, prefs, per-stream offsets ----
+
+// occasionFixture: user + contact "Made" + one anniversary occasion + one
+// enabled gotify channel, all owned by the same user. No prefs anywhere, so
+// every layer inherits until a test sets one.
+type occasionFixture struct {
+	User     store.User
+	Contact  store.Contact
+	Occasion store.Occasion
+	Channel  store.Channel
+}
+
+// seedAnniversary creates the fixture with base 2025-06-16: monthly marks on
+// the 16th (k=6 → 2025-12-16, k=7 → 2026-01-16), the k=12 mark on 2026-06-16
+// emitted as the first yearly mark (StreamYearly), and the initial event
+// (k=0) on the base date itself.
+func seedAnniversary(t *testing.T, st *store.Store, email string) occasionFixture {
+	t.Helper()
+	ctx := context.Background()
+	u, err := st.GetOrCreateUser(ctx, email, "Budi", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := st.CreateContact(ctx, u.ID, "Made", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	occ, err := st.AddOccasion(ctx, c.ID, domain.Anniversary, domain.RecurAnniversary, domain.NewDate(2025, 6, 16), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := st.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return occasionFixture{User: u, Contact: c, Occasion: occ, Channel: ch}
+}
+
+// sentMessage: one landed push stamped with its destination channel — the
+// shared stubNotifier cannot answer "which channel received this".
+type sentMessage struct {
+	ChannelID string
+	Message   notify.Message
+}
+
+type recorder struct {
+	mu   sync.Mutex
+	sent []sentMessage
+}
+
+func (r *recorder) record(channelID string, m notify.Message) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sent = append(r.sent, sentMessage{ChannelID: channelID, Message: m})
+	return nil
+}
+
+func (r *recorder) messages() []sentMessage {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]sentMessage(nil), r.sent...)
+}
+
+type recorderNotifier struct {
+	channelID string
+	r         *recorder
+}
+
+func (n *recorderNotifier) Name() string               { return "recorder" }
+func (n *recorderNotifier) Test(context.Context) error { return nil }
+func (n *recorderNotifier) Send(_ context.Context, m notify.Message) error {
+	return n.r.record(n.channelID, m)
+}
+
+// recordChannels swaps the Resolver for a channel-stamping recorder.
+func (h *harness) recordChannels() *recorder {
+	r := &recorder{}
+	h.svc.Resolve = func(_ context.Context, ch store.Channel) (notify.Notifier, error) {
+		return &recorderNotifier{channelID: ch.ID, r: r}, nil
+	}
+	return r
+}
+
+// hasNotif: the notification_log row for (occasion, occurrence date, offset,
+// channel) — the durable evidence of what the scan decided.
+func hasNotif(t *testing.T, st *store.Store, occID, channelID string, date domain.Date, offset int) bool {
+	t.Helper()
+	ok, err := st.HasNotification(context.Background(), store.NotificationEntry{
+		OccasionID: &occID, OccurrenceDate: date, OffsetDays: offset, ChannelID: channelID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ok
+}
+
+// The per-occasion kill switch: occasion_prefs.enabled = false skips the
+// occasion entirely — reminders that would otherwise fire produce neither a
+// push nor a missed row.
+func TestOccasionDisabledByOccasionPrefs(t *testing.T) {
+	// 2026-06-16 08:01 WITA: one minute after the yearly D-0 (08:00) of the
+	// first anniversary mark, so the inherited yearly set alone would fire.
+	now := time.Date(2026, 6, 16, 8, 1, 0, 0, time.FixedZone("WITA", 8*60*60))
+	h := newBareHarness(t, now)
+	f := seedAnniversary(t, h.st, "disabled-occasion@x.id")
+	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
+		OccasionID: f.Occasion.ID, Enabled: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snap := snapUTC()
+	snap.Timezone = "Asia/Makassar"
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != (Result{}) {
+		t.Fatalf("res = %+v, want zero (occasion disabled)", res)
+	}
+	if len(h.notif.sent) != 0 {
+		t.Fatalf("pushes = %d, want 0", len(h.notif.sent))
+	}
+
+	// Proof the fixture was live: dropping the prefs row sends the D-0.
+	if err := h.st.DeleteOccasionPrefs(context.Background(), f.Occasion.ID); err != nil {
+		t.Fatal(err)
+	}
+	res, err = h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sent != 1 || len(h.notif.sent) != 1 {
+		t.Fatalf("after clearing prefs: res = %+v pushes = %d, want the yearly D-0", res, len(h.notif.sent))
+	}
+	if got := h.notif.sent[0].Title; got != "🎊 Made — Anniversary 1 year today" {
+		t.Errorf("title = %q, want the first yearly mark", got)
+	}
+}
+
+// Monthly marks remind with the monthly stream set: on 2025-12-16 the k=6
+// mark (StreamMonthly, offset 0 from settings) is the day's only push.
+func TestMonthlyMarkSentOnTheDay(t *testing.T) {
+	h := newBareHarness(t, time.Date(2025, 12, 16, 8, 1, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "monthly-mark@x.id")
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Missed 1: the k=5 mark (2025-11-16) D-0 fell out of the 24h catch-up.
+	if res.Sent != 1 || res.Missed != 1 || res.Failed != 0 {
+		t.Fatalf("res = %+v, want Sent 1 (k=6 D-0) Missed 1 (k=5 D-0)", res)
+	}
+	if len(h.notif.sent) != 1 {
+		t.Fatalf("pushes = %d, want 1", len(h.notif.sent))
+	}
+	// The mark is the 6-month one: the notifier renders the domain label.
+	m := h.notif.sent[0]
+	if m.Title != "🎊 Made — Anniversary 6 months today" {
+		t.Errorf("title = %q, want the 6-month mark", m.Title)
+	}
+	if !strings.Contains(m.Body, "Tuesday, 16 December 2025") {
+		t.Errorf("body = %q, want the 16 Dec 2025 occurrence date", m.Body)
+	}
+	// The monthly set is [0] alone: no D-1 row for the k=6 mark.
+	if hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 1) {
+		t.Error("k=6 must not have a D-1 row (monthly set is [0])")
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 11, 16), 0) {
+		t.Error("k=5 D-0 missed row missing")
+	}
+}
+
+// Yearly marks use the event/yearly set from settings: D-30 fires 30 days
+// before the first anniversary, and on the mark itself only the D-0 is due.
+func TestYearlyOffsetsUseEventYearlySet(t *testing.T) {
+	h := newBareHarness(t, time.Date(2026, 5, 17, 8, 1, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "yearly-set@x.id")
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	// D-30 of the 2026-06-16 mark = 2026-05-17 08:00, clock one minute later.
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Missed 2: the out-of-window D-0 of the monthly marks k=10 and k=11.
+	if res.Sent != 1 || res.Missed != 2 {
+		t.Fatalf("D-30 run: res = %+v, want Sent 1 (yearly D-30) Missed 2", res)
+	}
+	if len(h.notif.sent) != 1 {
+		t.Fatalf("D-30 pushes = %d, want 1", len(h.notif.sent))
+	}
+	if got := h.notif.sent[0].Title; got != "🎊 Made — Anniversary 1 year in 30 days" {
+		t.Errorf("D-30 title = %q", got)
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2026, 6, 16), 30) {
+		t.Error("yearly D-30 row (reminder 2026-05-17) missing")
+	}
+
+	// On the mark day: exactly one push, the yearly D-0. The k%12==0 date is
+	// emitted as StreamYearly only, so there is no second (monthly) occurrence
+	// to double-push; a same-date/same-offset pair would collapse into one
+	// notification_log row anyway (dedupe key = occasion+date+offset+channel).
+	h.fc.T = time.Date(2026, 6, 16, 8, 1, 0, 0, time.UTC)
+	res, err = h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Missed 4: the yearly D-7/D-4/D-2/D-1 of the mark; D-30 was already sent.
+	if res.Sent != 1 || res.Missed != 4 {
+		t.Fatalf("mark-day run: res = %+v, want Sent 1 (D-0) Missed 4 (yearly D-7..D-1)", res)
+	}
+	if len(h.notif.sent) != 2 {
+		t.Fatalf("total pushes = %d, want 2 (D-30 then D-0)", len(h.notif.sent))
+	}
+	if got := h.notif.sent[1].Title; got != "🎊 Made — Anniversary 1 year today" {
+		t.Errorf("D-0 title = %q", got)
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2026, 6, 16), 0) {
+		t.Error("yearly D-0 row (reminder 2026-06-16) missing")
+	}
+}
+
+// Per-occasion channel override: occasion_prefs.channel_ids narrows the
+// contact cascade to channel B — the push and the missed bookkeeping both land
+// on B, while the other enabled channel stays untouched.
+func TestOccasionChannelOverride(t *testing.T) {
+	h := newBareHarness(t, time.Date(2025, 12, 16, 8, 1, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "channel-override@x.id")
+	chB, err := h.st.CreateChannel(context.Background(), f.User.ID, "telegram", "b", []byte("enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
+		OccasionID: f.Occasion.ID, ChannelIDs: []string{chB.ID}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec := h.recordChannels()
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// k=6 D-0 → one push; k=5 D-0 → one missed row (on B only, so Missed 1).
+	if res.Sent != 1 || res.Missed != 1 {
+		t.Fatalf("res = %+v, want Sent 1 Missed 1", res)
+	}
+	got := rec.messages()
+	if len(got) != 1 {
+		t.Fatalf("pushes = %d, want 1 (channel A must be skipped)", len(got))
+	}
+	if got[0].ChannelID != chB.ID {
+		t.Errorf("pushed to %q, want channel B %q", got[0].ChannelID, chB.ID)
+	}
+	if got[0].Message.Title != "🎊 Made — Anniversary 6 months today" {
+		t.Errorf("title = %q, want the k=6 mark", got[0].Message.Title)
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, chB.ID, domain.NewDate(2025, 11, 16), 0) {
+		t.Error("missed row for the k=5 mark missing on channel B")
+	}
+	if hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 11, 16), 0) {
+		t.Errorf("reminder leaked onto channel A (%s)", f.Channel.ID)
+	}
+}
+
+// Per-occasion offset override: occasion_prefs.offsets = {monthly: [1, 0]}
+// replaces the inherited monthly set, so the k=6 mark reminds the day before
+// (15 Dec) and on the day (16 Dec) instead of only on the day.
+func TestOccasionOffsetsOverride(t *testing.T) {
+	h := newBareHarness(t, time.Date(2025, 12, 16, 7, 0, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "offsets-override@x.id")
+	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
+		OccasionID: f.Occasion.ID, Enabled: true,
+		Offsets: domain.OffsetMap{domain.StreamMonthly: {1, 0}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	// 07:00 on the mark day: the D-1 (15 Dec 08:00, 23h ago) is inside the
+	// catch-up window → sent late; the D-0 (16 Dec 08:00) is not due yet.
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Missed 2: the k=5 mark (2025-11-16) D-1/D-0, pulled into the scan window
+	// by the widest resolved stream (yearly [30]) — window sizing per occasion.
+	if res.Sent != 1 || res.Missed != 2 {
+		t.Fatalf("D-1 run: res = %+v, want Sent 1 Missed 2", res)
+	}
+	if len(h.notif.sent) != 1 {
+		t.Fatalf("D-1 pushes = %d, want 1", len(h.notif.sent))
+	}
+	if m := h.notif.sent[0]; !strings.Contains(m.Body, "Sent late") {
+		t.Errorf("D-1 push must be late: %q", m.Body)
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 1) {
+		t.Error("D-1 row (reminder 2025-12-15) missing for the k=6 mark")
+	}
+	if hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("D-0 must not fire at 07:00 (reminder is 2025-12-16 08:00)")
+	}
+
+	// Next morning the D-0 fires (the 16 Dec reminder, 23h late).
+	h.fc.T = time.Date(2025, 12, 17, 7, 0, 0, 0, time.UTC)
+	res, err = h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Sent != 1 || res.Missed != 0 {
+		t.Fatalf("D-0 run: res = %+v, want Sent 1 Missed 0", res)
+	}
+	if len(h.notif.sent) != 2 {
+		t.Fatalf("total pushes = %d, want 2 (D-1 then D-0)", len(h.notif.sent))
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("D-0 row (reminder 2025-12-16) missing for the k=6 mark")
+	}
+}
+
+// Contact layer of the chain: reminder_prefs.offsets[monthly] is consumed
+// per stream when the occasion carries no override — the D-2 fires instead of
+// the settings' monthly [0].
+func TestContactOffsetsInheritedByOccasion(t *testing.T) {
+	h := newBareHarness(t, time.Date(2025, 12, 14, 8, 1, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "contact-offsets@x.id")
+	if err := h.st.SetReminderPrefs(context.Background(), store.ReminderPrefs{
+		ContactID: f.Contact.ID, Enabled: true,
+		Offsets: domain.OffsetMap{domain.StreamMonthly: {2, 0}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// D-2 of the k=6 mark (reminder 2025-12-14 08:00, one minute ago) → sent;
+	// the k=5 mark's D-2/D-0 are out of window → 2 missed.
+	if res.Sent != 1 || res.Missed != 2 {
+		t.Fatalf("res = %+v, want Sent 1 (contact D-2) Missed 2 (k=5)", res)
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 2) {
+		t.Error("contact D-2 row (reminder 2025-12-14) missing for the k=6 mark")
+	}
+	if hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 1) {
+		t.Error("D-1 fired — the contact monthly set [2,0] was not the one used")
+	}
+}
+
+// filterChannels: keeps input order, ignores ids that match no channel.
+func TestFilterChannels(t *testing.T) {
+	a := store.Channel{ID: "a"}
+	b := store.Channel{ID: "b"}
+	c := store.Channel{ID: "c"}
+	got := filterChannels([]store.Channel{a, b, c}, []string{"c", "a"})
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "c" {
+		t.Errorf("filter = %v, want [a c] in input order", got)
+	}
+	if got := filterChannels([]store.Channel{a, b}, []string{"nope"}); len(got) != 0 {
+		t.Errorf("unknown ids must select nothing: %v", got)
+	}
+	if got := filterChannels(nil, []string{"a"}); len(got) != 0 {
+		t.Errorf("no channels: %v", got)
 	}
 }

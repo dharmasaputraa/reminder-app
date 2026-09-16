@@ -16,6 +16,7 @@ import (
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 
 	"wimember/internal/config"
 	"wimember/internal/store"
@@ -32,7 +33,7 @@ func (s *stubProvisioner) GetOrCreateUser(_ context.Context, email, name string,
 	if admins[email] {
 		role = "admin"
 	}
-	u = store.User{ID: int64(len(s.users) + 1), Email: email, Name: name, Role: role}
+	u = store.User{ID: uuid.NewString(), Email: email, Name: name, Role: role}
 	s.users[email] = u
 	return u, nil
 }

@@ -27,7 +27,8 @@ func TestForeignKeysActive(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
 	_ = s.Migrate()
-	_, err := s.db.Exec(`INSERT INTO contacts (owner_id, name) VALUES (999, 'x')`)
+	_, err := s.db.Exec(`INSERT INTO contacts (id, owner_id, name) VALUES
+		('00000000-0000-7000-8000-000000000001', '00000000-0000-7000-8000-000000000099', 'x')`)
 	if err == nil {
 		t.Error("FK off — contact without user must be rejected")
 	}

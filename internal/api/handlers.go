@@ -3,9 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"wimember/internal/domain"
 	"wimember/internal/secret"
@@ -30,13 +30,18 @@ func respondErr(c *gin.Context, err error) {
 	}
 }
 
-func pathID(c *gin.Context) (int64, bool) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id < 1 {
-		c.JSON(400, gin.H{"error": "invalid id"})
-		return 0, false
+// pathID: ids are UUIDs; a malformed one can never exist, so it is a 404
+// (not a 400) — the route's resource simply is not there. Parsing also
+// canonicalizes the id (lowercase, hyphenated): SQLite compares ids with the
+// BINARY collation, so a pasted uppercase UUID must resolve to the same row as
+// the stored lowercase form instead of 404ing.
+func pathID(c *gin.Context) (string, bool) {
+	u, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return "", false
 	}
-	return id, true
+	return u.String(), true
 }
 
 func (s *Server) handleMe(c *gin.Context) {
@@ -50,10 +55,12 @@ type contactIn struct {
 	Notes    string `json:"notes"`
 }
 
-func (s *Server) scope(c *gin.Context) int64 {
+// scope: the owner filter for store calls — the caller's own id, or "" for
+// admins (the store treats "" as "no owner filter").
+func (s *Server) scope(c *gin.Context) string {
 	u := mustUser(c)
 	if u.Role == "admin" {
-		return 0
+		return ""
 	}
 	return u.ID
 }
@@ -126,9 +133,10 @@ func (s *Server) handleDeleteContact(c *gin.Context) {
 }
 
 type occasionIn struct {
-	Type  string `json:"type"`
-	Date  string `json:"date"` // YYYY-MM-DD
-	Label string `json:"label"`
+	Type       string `json:"type"`
+	Date       string `json:"date"` // YYYY-MM-DD
+	Recurrence string `json:"recurrence"`
+	Label      string `json:"label"`
 }
 
 func (s *Server) handleAddOccasion(c *gin.Context) {
@@ -140,10 +148,22 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 	if !ok {
 		return
 	}
-	switch domain.OccurrenceType(in.Type) {
-	case domain.Birthday, domain.Otonan, domain.Anniversary:
-	default:
-		c.JSON(400, gin.H{"error": "invalid occasion type"})
+	// Custom types are first-class: no allowlist, only a length bound.
+	typ := domain.OccurrenceType(in.Type)
+	if typ == "" {
+		c.JSON(400, gin.H{"error": "type is required"})
+		return
+	}
+	if len(typ) > 64 {
+		c.JSON(400, gin.H{"error": "type too long (max 64)"})
+		return
+	}
+	rec := domain.Recurrence(in.Recurrence)
+	if rec == "" {
+		rec = domain.DefaultRecurrence(typ)
+	}
+	if err := domain.ValidateRecurrence(rec); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 	if _, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid); err != nil {
@@ -155,7 +175,7 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	oc, err := s.st.AddOccasion(c.Request.Context(), cid, domain.OccurrenceType(in.Type), base, in.Label)
+	oc, err := s.st.AddOccasion(c.Request.Context(), cid, typ, rec, base, in.Label)
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -175,10 +195,13 @@ func (s *Server) handleDeleteOccasion(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
+// prefsIn: the per-stream map wire shape. Contact-level PUT merges (see
+// handleSetPrefs): an absent offsets key keeps the stored map, an explicit {}
+// resets to inherit-all.
 type prefsIn struct {
-	Offsets    *[]int   `json:"offsets"`
-	ChannelIDs *[]int64 `json:"channel_ids"`
-	Enabled    *bool    `json:"enabled"`
+	Offsets    domain.OffsetMap `json:"offsets"`
+	ChannelIDs *[]string        `json:"channel_ids"`
+	Enabled    *bool            `json:"enabled"`
 }
 
 func (s *Server) handleSetPrefs(c *gin.Context) {
@@ -195,14 +218,21 @@ func (s *Server) handleSetPrefs(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
-	p := store.ReminderPrefs{ContactID: cid, Offsets: s.LoadSettings(c.Request.Context()).DefaultOffsets,
-		ChannelIDs: []int64{}, Enabled: true}
+	// Merge: only the fields the client sent change, the stored row supplies
+	// the rest (the SPA toggles a channel with a channel_ids-only PUT). The
+	// non-pointer Offsets map still tells absent (nil → keep) apart from an
+	// explicit {} (reset to inherit-all).
+	p := store.ReminderPrefs{ContactID: cid, Offsets: domain.OffsetMap{},
+		ChannelIDs: []string{}, Enabled: true}
 	if cw.Prefs != nil {
 		p = *cw.Prefs
 		p.ContactID = cid
+		if p.Offsets == nil {
+			p.Offsets = domain.OffsetMap{}
+		}
 	}
 	if in.Offsets != nil {
-		p.Offsets = *in.Offsets
+		p.Offsets = in.Offsets
 	}
 	if in.ChannelIDs != nil {
 		p.ChannelIDs = *in.ChannelIDs
@@ -210,7 +240,7 @@ func (s *Server) handleSetPrefs(c *gin.Context) {
 	if in.Enabled != nil {
 		p.Enabled = *in.Enabled
 	}
-	if err := domain.ValidateOffsets(p.Offsets); err != nil {
+	if err := domain.ValidateOffsetMap(p.Offsets); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}

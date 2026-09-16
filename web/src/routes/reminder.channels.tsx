@@ -70,13 +70,13 @@ function Channels() {
   // as the card's active switch. The default channels receive the reminders of
   // contacts without their own selection.
   const setDefault = useMutation({
-    mutationFn: (ids: number[]) =>
+    mutationFn: (ids: string[]) =>
       api('/settings', { method: 'PUT', body: JSON.stringify({ ...settings.data, default_channel_ids: ids }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
     onError: (e) => toast.error(`Failed to save default channel: ${String(e)}`),
   })
-  const isDefault = (id: number) => (settings.data?.default_channel_ids ?? []).includes(id)
-  const toggleDefault = (id: number, on: boolean) => {
+  const isDefault = (id: string) => (settings.data?.default_channel_ids ?? []).includes(id)
+  const toggleDefault = (id: string, on: boolean) => {
     const cur = new Set(settings.data?.default_channel_ids ?? [])
     if (on) cur.add(id)
     else cur.delete(id)
@@ -87,16 +87,16 @@ function Channels() {
     onSuccess: () => { setName(''); setCfg({}); invalidate() },
   })
   const toggle = useMutation({
-    mutationFn: (v: { id: number; enabled: boolean }) =>
+    mutationFn: (v: { id: string; enabled: boolean }) =>
       api(`/channels/${v.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: v.enabled }) }),
     onSuccess: invalidate,
   })
   const del = useMutation({
-    mutationFn: (id: number) => api(`/channels/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => api(`/channels/${id}`, { method: 'DELETE' }),
     onSuccess: invalidate,
   })
   const test = useMutation({
-    mutationFn: (id: number) => api(`/channels/${id}/test`, { method: 'POST' }),
+    mutationFn: (id: string) => api(`/channels/${id}/test`, { method: 'POST' }),
     onSuccess: () => toast.success('Test succeeded — notification sent.'),
     onError: (e) => toast.error(`Test failed: ${String(e)}`),
   })

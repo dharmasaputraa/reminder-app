@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // The test server pins TZ=Asia/Makassar (UTC+8, no DST); occasion dates are
@@ -29,34 +31,24 @@ func TestUpcomingNotify(t *testing.T) {
 	today := makassarToday()
 
 	// Contact with a birthday occurrence TODAY (base date = today → deterministic).
-	w := httptest.NewRecorder()
-	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
-	if w.Code != 201 {
-		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
-	}
-	w = httptest.NewRecorder()
-	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
-		`{"type":"birthday","date":"`+today+`","label":"bday"}`))
-	if w.Code != 201 {
-		t.Fatalf("create occasion: %d %s", w.Code, w.Body.String())
-	}
+	cid := createContact(t, s, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, s, "admin@x.id", cid,
+		`{"type":"birthday","date":"`+today+`","label":"bday"}`)
 
-	// Two enabled channels + one disabled, all pointing at the hook.
+	// Two enabled channels + one disabled, all pointing at the hook. Ids are
+	// opaque UUIDs, so they are collected from the create responses.
+	var chIDs []string
 	for _, name := range []string{"a", "b", "off"} {
-		w = httptest.NewRecorder()
-		s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels", "admin@x.id",
+		chIDs = append(chIDs, createChannel(t, s, "admin@x.id",
 			`{"type":"gotify","name":"`+name+`","config":{"base_url":"`+hook.URL+`","token":"t"}}`))
-		if w.Code != 201 {
-			t.Fatalf("create channel %s: %d %s", name, w.Code, w.Body.String())
-		}
 	}
-	w = httptest.NewRecorder()
-	s.ServeHTTP(w, devReq(t, "PATCH", "/api/v1/channels/3", "admin@x.id", `{"enabled":false}`))
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, devReq(t, "PATCH", "/api/v1/channels/"+chIDs[2], "admin@x.id", `{"enabled":false}`))
 	if w.Code != 200 {
 		t.Fatalf("disable channel: %d %s", w.Code, w.Body.String())
 	}
 
-	notifyBody := `{"kind":"occasion","occasion_id":1,"contact_id":1,"date":"` + today + `","title":"bday"}`
+	notifyBody := `{"kind":"occasion","occasion_id":"` + occID + `","contact_id":"` + cid + `","date":"` + today + `","title":"bday"}`
 
 	// No channel_ids → every ENABLED channel of the caller (2), disabled skipped.
 	w = httptest.NewRecorder()
@@ -78,7 +70,7 @@ func TestUpcomingNotify(t *testing.T) {
 	// Explicit channel_ids narrows to that one channel.
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/upcoming/notify", "admin@x.id",
-		`{"kind":"occasion","occasion_id":1,"contact_id":1,"date":"`+today+`","channel_ids":[2]}`))
+		`{"kind":"occasion","occasion_id":"`+occID+`","contact_id":"`+cid+`","date":"`+today+`","channel_ids":["`+chIDs[1]+`"]}`))
 	if w.Code != 200 {
 		t.Fatalf("notify one: %d %s", w.Code, w.Body.String())
 	}
@@ -89,7 +81,7 @@ func TestUpcomingNotify(t *testing.T) {
 	// Unknown channel id → nothing matches → 400.
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/upcoming/notify", "admin@x.id",
-		`{"kind":"occasion","occasion_id":1,"contact_id":1,"date":"`+today+`","channel_ids":[999]}`))
+		`{"kind":"occasion","occasion_id":"`+occID+`","contact_id":"`+cid+`","date":"`+today+`","channel_ids":["`+uuid.NewString()+`"]}`))
 	if w.Code != 400 {
 		t.Errorf("unknown channel: %d %s", w.Code, w.Body.String())
 	}
@@ -113,9 +105,17 @@ func TestUpcomingNotify(t *testing.T) {
 	// Occasion on another contact → 404.
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/upcoming/notify", "admin@x.id",
-		`{"kind":"occasion","occasion_id":1,"contact_id":99,"date":"`+today+`"}`))
+		`{"kind":"occasion","occasion_id":"`+occID+`","contact_id":"`+uuid.NewString()+`","date":"`+today+`"}`))
 	if w.Code != 404 {
 		t.Errorf("missing contact: %d", w.Code)
+	}
+
+	// Missing ids → 400 (empty strings are the "not provided" signal, not 0).
+	w = httptest.NewRecorder()
+	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/upcoming/notify", "admin@x.id",
+		`{"kind":"occasion","date":"`+today+`"}`))
+	if w.Code != 400 {
+		t.Errorf("missing occasion/contact id: %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -124,18 +124,15 @@ func TestUpcomingNotifySendFailure(t *testing.T) {
 	s, _ := newTestServer(t, "admin@x.id")
 	today := makassarToday()
 
-	w := httptest.NewRecorder()
-	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
-	w = httptest.NewRecorder()
-	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
-		`{"type":"birthday","date":"`+today+`","label":"bday"}`))
-	w = httptest.NewRecorder()
-	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels", "admin@x.id",
-		`{"type":"gotify","name":"dead","config":{"base_url":"http://127.0.0.1:1","token":"t"}}`))
+	cid := createContact(t, s, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, s, "admin@x.id", cid,
+		`{"type":"birthday","date":"`+today+`","label":"bday"}`)
+	createChannel(t, s, "admin@x.id",
+		`{"type":"gotify","name":"dead","config":{"base_url":"http://127.0.0.1:1","token":"t"}}`)
 
-	w = httptest.NewRecorder()
+	w := httptest.NewRecorder()
 	s.ServeHTTP(w, devReq(t, "POST", "/api/v1/upcoming/notify", "admin@x.id",
-		`{"kind":"occasion","occasion_id":1,"contact_id":1,"date":"`+today+`"}`))
+		`{"kind":"occasion","occasion_id":"`+occID+`","contact_id":"`+cid+`","date":"`+today+`"}`))
 	if w.Code != 502 {
 		t.Errorf("dead channel: %d %s", w.Code, w.Body.String())
 	}
