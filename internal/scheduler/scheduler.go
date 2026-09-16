@@ -91,17 +91,20 @@ func maxOffset(offsets []int) int {
 	return m
 }
 
-// contactOffsets: transitional (per-stream resolution lands in Task 6) — the
-// store no longer holds a flat contact-level offsets list, so the first
-// non-empty per-stream list stands in for the old override. The fixed stream
-// order keeps the pick deterministic; ok=false → no contact-level override.
-func contactOffsets(m domain.OffsetMap) ([]int, bool) {
-	for _, s := range []domain.Stream{domain.StreamEvent, domain.StreamYearly, domain.StreamMonthly, domain.StreamOtonan} {
-		if len(m[s]) > 0 {
-			return m[s], true
+// filterChannels narrows a channel list to the given ids, keeping the input
+// order. Ids matching nothing yield an empty list (caller decides the fallback).
+func filterChannels(all []store.Channel, ids []string) []store.Channel {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	var out []store.Channel
+	for _, ch := range all {
+		if want[ch.ID] {
+			out = append(out, ch)
 		}
 	}
-	return nil, false
+	return out
 }
 
 // targetChannels lists the destination channels for one contact: the contact's
@@ -198,31 +201,50 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		if cw.Prefs != nil && !cw.Prefs.Enabled {
 			continue
 		}
-		offsets := snap.DefaultOffsets
-		// transitional: the contact-level flat offsets list is gone from the
-		// store, so the first non-empty per-stream list stands in for it until
-		// per-stream resolution lands (Task 6).
-		if cw.Prefs != nil {
-			if o, ok := contactOffsets(cw.Prefs.Offsets); ok {
-				offsets = o
-			}
-		}
-		channels := s.targetChannels(ctx, cw, snap.DefaultChannelIDs)
-		oOff := maxOffset(offsets)
-		fromO := today.AddDays(-(oOff + catchUpDays + 2))
-		toO := today.AddDays(oOff + 2)
+		defaultChannels := s.targetChannels(ctx, cw, snap.DefaultChannelIDs)
 		for _, occ := range cw.Occasions {
-			// transitional: pre-recurrence behavior (anniversary = yearly)
-			rec := domain.RecurYearly
-			if occ.Type == domain.Otonan {
-				rec = domain.RecurOtonan
+			if occ.Prefs != nil && !occ.Prefs.Enabled {
+				continue // per-occasion kill switch
 			}
-			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rec, fromO, toO)
+			// Channels: occasion override → contact cascade (already resolved).
+			channels := defaultChannels
+			if occ.Prefs != nil && len(occ.Prefs.ChannelIDs) > 0 {
+				if byID := filterChannels(defaultChannels, occ.Prefs.ChannelIDs); len(byID) > 0 {
+					channels = byID
+				}
+			}
+			// Offsets per stream: occasion → contact → settings → DefaultOffsets.
+			// Prefs rows are optional, so the offsets maps are read through the
+			// pointers (nil prefs = pure inherit).
+			var occOff, contactOff domain.OffsetMap
+			if occ.Prefs != nil {
+				occOff = occ.Prefs.Offsets
+			}
+			if cw.Prefs != nil {
+				contactOff = cw.Prefs.Offsets
+			}
+			resolved := domain.ResolveOccasionStreams(occ.Recurrence, occOff, contactOff, snap.RecurrenceOffsets)
+			// The scan window covers the widest resolved stream: a monthly [0]
+			// does not widen it, a yearly [30] does.
+			maxOff := 0
+			for _, offs := range resolved {
+				if m := maxOffset(offs); m > maxOff {
+					maxOff = m
+				}
+			}
+			catchUpDays := (snap.CatchUpHours + 23) / 24
+			fromO := today.AddDays(-(maxOff + catchUpDays + 2))
+			toO := today.AddDays(maxOff + 2)
+			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, occ.Recurrence, fromO, toO)
 			if err != nil {
 				continue
 			}
 			for _, o := range occs {
-				for _, off := range offsets {
+				offs := resolved[o.Stream]
+				if o.Stream == domain.StreamEvent && len(offs) == 0 {
+					offs = domain.DefaultOffsets
+				}
+				for _, off := range offs {
 					rDate := o.Date.AddDays(-off)
 					sendAt := time.Date(rDate.Year, time.Month(rDate.Month), rDate.Day, sendHH, sendMM, 0, 0, loc)
 					if sendAt.After(now) {

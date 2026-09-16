@@ -116,6 +116,29 @@ func TestDefaultRecurrenceOffsets(t *testing.T) {
 	}
 }
 
+func TestResolveOccasionStreams(t *testing.T) {
+	got := ResolveOccasionStreams(RecurAnniversary,
+		OffsetMap{StreamMonthly: {1, 0}},
+		nil,
+		OffsetMap{StreamEvent: {30}, StreamYearly: {30, 7, 0}, StreamMonthly: {0}, StreamOtonan: {7}})
+	if len(got) != 3 {
+		t.Fatalf("streams: %v", got)
+	}
+	if len(got[StreamMonthly]) != 2 || got[StreamMonthly][0] != 1 {
+		t.Errorf("occasion override: %v", got[StreamMonthly])
+	}
+	if len(got[StreamEvent]) != 1 || got[StreamEvent][0] != 30 {
+		t.Errorf("settings fallback: %v", got[StreamEvent])
+	}
+	if len(got[StreamYearly]) != 3 {
+		t.Errorf("settings fallback yearly: %v", got[StreamYearly])
+	}
+	all := ResolveOccasionStreams(RecurOtonan, nil, nil, nil)
+	if len(all[StreamOtonan]) != len(DefaultOffsets) {
+		t.Errorf("DefaultOffsets fallback: %v", all[StreamOtonan])
+	}
+}
+
 func TestResolveOffsets(t *testing.T) {
 	settings := OffsetMap{StreamEvent: {30}, StreamYearly: {30, 7, 0}, StreamMonthly: {0}, StreamOtonan: {7}}
 	occ := OffsetMap{StreamMonthly: {1, 0}}

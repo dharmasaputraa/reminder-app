@@ -108,6 +108,21 @@ func ResolveOffsets(stream Stream, layers ...OffsetMap) []int {
 	return nil
 }
 
+// ResolveOccasionStreams: per-stream offset lists for one occasion, applying
+// the standard precedence (occasion → contact → settings → DefaultOffsets).
+// Only the streams the recurrence emits are present.
+func ResolveOccasionStreams(rec Recurrence, occ, contact, settings OffsetMap) map[Stream][]int {
+	out := map[Stream][]int{}
+	for _, st := range StreamsFor(rec) {
+		offs := ResolveOffsets(st, occ, contact, settings)
+		if len(offs) == 0 {
+			offs = append([]int(nil), DefaultOffsets...)
+		}
+		out[st] = offs
+	}
+	return out
+}
+
 // AddMonths: k whole months after base, clamping the day to the target
 // month's length (Jan 31 + 1m → Feb 28/29). k must be ≥ 0.
 func AddMonths(base Date, k int) Date {
