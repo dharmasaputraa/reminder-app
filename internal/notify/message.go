@@ -48,18 +48,26 @@ func withLate(body string, late bool) string {
 	return body
 }
 
+// OccurrenceMessage renders one occurrence reminder from its stream-tagged
+// domain.Occurrence: otonan keeps its pawukon wording, yearly birthdays get the
+// cake, one-time events the party popper, and every other mark (monthly /
+// yearly anniversaries, custom types) the confetti. Labels come from the
+// domain ("Anniversary 1 year 2 months", "Birthday #30", "Graduation").
 func OccurrenceMessage(contactName string, occ domain.Occurrence, daysUntil int, late bool) Message {
 	var title, body string
-	switch occ.Type {
-	case domain.Otonan:
+	switch {
+	case occ.Type == domain.Otonan:
 		title = fmt.Sprintf("🛕 %s — %s %s", contactName, occ.Label, kapan(daysUntil))
 		body = fmt.Sprintf("Otonan for %s %s, on %s.", contactName, kapan(daysUntil), TanggalIndo(occ.Date))
-	case domain.Birthday:
-		title = fmt.Sprintf("🎂 %s — birthday #%d %s", contactName, occ.Number, kapan(daysUntil))
-		body = fmt.Sprintf("Birthday #%d for %s on %s.", occ.Number, contactName, TanggalIndo(occ.Date))
-	default:
-		title = fmt.Sprintf("🎊 %s — anniversary #%d %s", contactName, occ.Number, kapan(daysUntil))
-		body = fmt.Sprintf("Anniversary #%d for %s on %s.", occ.Number, contactName, TanggalIndo(occ.Date))
+	case occ.Type == domain.Birthday && occ.Stream == domain.StreamYearly:
+		title = fmt.Sprintf("🎂 %s — %s %s", contactName, occ.Label, kapan(daysUntil))
+		body = fmt.Sprintf("%s for %s on %s.", occ.Label, contactName, TanggalIndo(occ.Date))
+	case occ.Stream == domain.StreamEvent:
+		title = fmt.Sprintf("🎉 %s — %s %s", contactName, occ.Label, kapan(daysUntil))
+		body = fmt.Sprintf("%s for %s on %s.", occ.Label, contactName, TanggalIndo(occ.Date))
+	default: // monthly + yearly marks of anniversaries and custom types
+		title = fmt.Sprintf("🎊 %s — %s %s", contactName, occ.Label, kapan(daysUntil))
+		body = fmt.Sprintf("%s for %s on %s.", occ.Label, contactName, TanggalIndo(occ.Date))
 	}
 	p := 5
 	if daysUntil <= 0 {

@@ -574,7 +574,7 @@ func TestOccasionDisabledByOccasionPrefs(t *testing.T) {
 	if res.Sent != 1 || len(h.notif.sent) != 1 {
 		t.Fatalf("after clearing prefs: res = %+v pushes = %d, want the yearly D-0", res, len(h.notif.sent))
 	}
-	if got := h.notif.sent[0].Title; got != "🎊 Made — anniversary #1 today" {
+	if got := h.notif.sent[0].Title; got != "🎊 Made — Anniversary 1 year today" {
 		t.Errorf("title = %q, want the first yearly mark", got)
 	}
 }
@@ -598,10 +598,9 @@ func TestMonthlyMarkSentOnTheDay(t *testing.T) {
 	if len(h.notif.sent) != 1 {
 		t.Fatalf("pushes = %d, want 1", len(h.notif.sent))
 	}
-	// The mark is the 6-month one (domain label "Anniversary 6 months"); the
-	// notifier still renders "#6" until Task 7 switches it to occ.Label.
+	// The mark is the 6-month one: the notifier renders the domain label.
 	m := h.notif.sent[0]
-	if m.Title != "🎊 Made — anniversary #6 today" {
+	if m.Title != "🎊 Made — Anniversary 6 months today" {
 		t.Errorf("title = %q, want the 6-month mark", m.Title)
 	}
 	if !strings.Contains(m.Body, "Tuesday, 16 December 2025") {
@@ -636,7 +635,7 @@ func TestYearlyOffsetsUseEventYearlySet(t *testing.T) {
 	if len(h.notif.sent) != 1 {
 		t.Fatalf("D-30 pushes = %d, want 1", len(h.notif.sent))
 	}
-	if got := h.notif.sent[0].Title; got != "🎊 Made — anniversary #1 in 30 days" {
+	if got := h.notif.sent[0].Title; got != "🎊 Made — Anniversary 1 year in 30 days" {
 		t.Errorf("D-30 title = %q", got)
 	}
 	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2026, 6, 16), 30) {
@@ -659,7 +658,7 @@ func TestYearlyOffsetsUseEventYearlySet(t *testing.T) {
 	if len(h.notif.sent) != 2 {
 		t.Fatalf("total pushes = %d, want 2 (D-30 then D-0)", len(h.notif.sent))
 	}
-	if got := h.notif.sent[1].Title; got != "🎊 Made — anniversary #1 today" {
+	if got := h.notif.sent[1].Title; got != "🎊 Made — Anniversary 1 year today" {
 		t.Errorf("D-0 title = %q", got)
 	}
 	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2026, 6, 16), 0) {
@@ -701,7 +700,7 @@ func TestOccasionChannelOverride(t *testing.T) {
 	if got[0].ChannelID != chB.ID {
 		t.Errorf("pushed to %q, want channel B %q", got[0].ChannelID, chB.ID)
 	}
-	if got[0].Message.Title != "🎊 Made — anniversary #6 today" {
+	if got[0].Message.Title != "🎊 Made — Anniversary 6 months today" {
 		t.Errorf("title = %q, want the k=6 mark", got[0].Message.Title)
 	}
 	if !hasNotif(t, h.st, f.Occasion.ID, chB.ID, domain.NewDate(2025, 11, 16), 0) {
