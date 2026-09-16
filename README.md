@@ -195,6 +195,8 @@ Pushes image tags `1.2.3`, `1.2`, `1`, `latest`, `sha-<sha>` to GHCR (linux/amd6
 
 Point the application's image tag at an older version (e.g. `ghcr.io/dharmasaputraa/reminder-app:1.2.2`) in Dokploy → Deploy. Every release stays pullable from GHCR.
 
+> Full step-by-step setup walkthrough (registry, app, volumes, Cloudflare Access, CI wiring, backup, troubleshooting): **[docs/dokploy-setup.md](docs/dokploy-setup.md)**.
+
 ## Project structure
 
 ```
