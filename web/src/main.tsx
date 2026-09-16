@@ -29,5 +29,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {})
+  if (import.meta.env.PROD) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  } else {
+    // Dev: buang SW yang pernah terpasang — hanya menambah mode gagal.
+    navigator.serviceWorker.getRegistrations()
+      .then((rs) => rs.forEach((r) => r.unregister()))
+      .catch(() => {})
+  }
 }
