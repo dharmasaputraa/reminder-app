@@ -192,10 +192,9 @@ func (s *Server) handleDeleteOccasion(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-// prefsIn: the per-stream map wire shape. Offsets is a plain map (not a
-// pointer), so the handler always assigns it and an absent key — decoded as
-// nil — is persisted as {}: PUT is a full replace, omit offsets to inherit
-// every stream.
+// prefsIn: the per-stream map wire shape. Contact-level PUT merges (see
+// handleSetPrefs): an absent offsets key keeps the stored map, an explicit {}
+// resets to inherit-all.
 type prefsIn struct {
 	Offsets    domain.OffsetMap `json:"offsets"`
 	ChannelIDs *[]string        `json:"channel_ids"`
@@ -211,24 +210,36 @@ func (s *Server) handleSetPrefs(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid); err != nil {
+	cw, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid)
+	if err != nil {
 		respondErr(c, err)
 		return
 	}
-	if err := domain.ValidateOffsetMap(in.Offsets); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	p := store.ReminderPrefs{ContactID: cid, Offsets: in.Offsets,
+	// Merge: only the fields the client sent change, the stored row supplies
+	// the rest (the SPA toggles a channel with a channel_ids-only PUT). The
+	// non-pointer Offsets map still tells absent (nil → keep) apart from an
+	// explicit {} (reset to inherit-all).
+	p := store.ReminderPrefs{ContactID: cid, Offsets: domain.OffsetMap{},
 		ChannelIDs: []string{}, Enabled: true}
-	if p.Offsets == nil {
-		p.Offsets = domain.OffsetMap{}
+	if cw.Prefs != nil {
+		p = *cw.Prefs
+		p.ContactID = cid
+		if p.Offsets == nil {
+			p.Offsets = domain.OffsetMap{}
+		}
+	}
+	if in.Offsets != nil {
+		p.Offsets = in.Offsets
 	}
 	if in.ChannelIDs != nil {
 		p.ChannelIDs = *in.ChannelIDs
 	}
 	if in.Enabled != nil {
 		p.Enabled = *in.Enabled
+	}
+	if err := domain.ValidateOffsetMap(p.Offsets); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
 	}
 	if err := s.st.SetReminderPrefs(c.Request.Context(), p); err != nil {
 		respondErr(c, err)

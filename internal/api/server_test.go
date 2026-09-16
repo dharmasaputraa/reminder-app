@@ -453,9 +453,10 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	}
 }
 
-// The contact-level prefs wire shape is the per-stream map: a map is stored
-// verbatim, an omitted map means {} = inherit-all, while the old flat list and
-// unknown streams / out-of-range offsets are rejected.
+// The contact-level prefs wire shape is the per-stream map: a sent map replaces
+// the stored one, an omitted map keeps it (contact-level PUT merges — see
+// TestSetPrefsPartialMerge), while the old flat list and unknown streams /
+// out-of-range offsets are rejected.
 func TestSetPrefsMapShape(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
@@ -497,8 +498,9 @@ func TestSetPrefsMapShape(t *testing.T) {
 			t.Errorf("%s must be 400, got %d %s", body, w.Code, w.Body.String())
 		}
 	}
-	// An omitted offsets map is inherit-all ({}), not an error and not "keep"
-	// (a fresh decode: json.Unmarshal merges into an existing map).
+	// An omitted offsets map keeps the stored one (merge); an explicit {} is
+	// the reset to inherit-all. Fresh decodes: json.Unmarshal merges into an
+	// existing map.
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id", `{"enabled":true}`))
 	if w.Code != 200 {
@@ -510,11 +512,94 @@ func TestSetPrefsMapShape(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &after); err != nil {
 		t.Fatal(err)
 	}
-	if len(after.Offsets) != 0 {
-		t.Errorf("omitted offsets must persist {} (inherit-all), got %v", after.Offsets)
+	if !reflect.DeepEqual(after.Offsets[domain.StreamMonthly], []int{2, 0}) {
+		t.Errorf("an omitted offsets map must keep the stored one, got %v", after.Offsets)
+	}
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id", `{"offsets":{}}`))
+	if w.Code != 200 {
+		t.Fatalf("reset prefs: %d %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), `"offsets":{}`) {
-		t.Errorf(`prefs response must contain "offsets":{}: %s`, w.Body.String())
+		t.Errorf(`the reset response must contain "offsets":{}: %s`, w.Body.String())
+	}
+}
+
+// PUT at the contact level MERGES: only the fields actually sent change and the
+// stored row supplies the rest (the SPA toggles a channel with a
+// channel_ids-only PUT). An explicit "offsets":{} is the inherit-all reset.
+func TestSetPrefsPartialMerge(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	chID := createChannel(t, srv, "admin@x.id",
+		`{"type":"gotify","name":"home","config":{"base_url":"https://g.x.id","token":"t"}}`)
+
+	put := func(body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id", body))
+		return w
+	}
+	prefs := func() store.ReminderPrefs {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/"+cid, "admin@x.id", ""))
+		if w.Code != 200 {
+			t.Fatalf("get contact: %d %s", w.Code, w.Body.String())
+		}
+		var cw store.ContactWithOccasions
+		if err := json.Unmarshal(w.Body.Bytes(), &cw); err != nil {
+			t.Fatal(err)
+		}
+		if cw.Prefs == nil {
+			t.Fatal("prefs missing")
+		}
+		return *cw.Prefs
+	}
+
+	// Stored row: a custom yearly override on a PAUSED contact.
+	if w := put(`{"offsets":{"yearly":[1,0]},"enabled":false}`); w.Code != 200 {
+		t.Fatalf("seed prefs: %d %s", w.Code, w.Body.String())
+	}
+
+	// Channel-only PUT (the frontend's toggle): offsets and enabled survive.
+	if w := put(`{"channel_ids":["` + chID + `"]}`); w.Code != 200 {
+		t.Fatalf("channel-only put: %d %s", w.Code, w.Body.String())
+	}
+	p := prefs()
+	if !reflect.DeepEqual(p.Offsets[domain.StreamYearly], []int{1, 0}) {
+		t.Errorf("channel-only PUT wiped the stored offsets: %v", p.Offsets)
+	}
+	if p.Enabled {
+		t.Error("channel-only PUT must not re-enable a paused prefs row")
+	}
+	if !reflect.DeepEqual(p.ChannelIDs, []string{chID}) {
+		t.Errorf("channel_ids = %v, want [%s]", p.ChannelIDs, chID)
+	}
+
+	// Offsets-only PUT: channels and enabled stay untouched.
+	if w := put(`{"offsets":{"monthly":[0]}}`); w.Code != 200 {
+		t.Fatalf("offsets-only put: %d %s", w.Code, w.Body.String())
+	}
+	p = prefs()
+	if !reflect.DeepEqual(p.Offsets[domain.StreamMonthly], []int{0}) {
+		t.Errorf("offsets.monthly = %v, want [0]", p.Offsets[domain.StreamMonthly])
+	}
+	if _, ok := p.Offsets[domain.StreamYearly]; ok {
+		t.Errorf("a sent map must replace the stored one: %v", p.Offsets)
+	}
+	if !reflect.DeepEqual(p.ChannelIDs, []string{chID}) {
+		t.Errorf("offsets-only PUT wiped channel_ids: %v", p.ChannelIDs)
+	}
+	if p.Enabled {
+		t.Error("offsets-only PUT must not re-enable a paused prefs row")
+	}
+
+	// Explicit {} is the reset to inherit-all.
+	if w := put(`{"offsets":{}}`); w.Code != 200 {
+		t.Fatalf("reset put: %d %s", w.Code, w.Body.String())
+	}
+	if p = prefs(); len(p.Offsets) != 0 {
+		t.Errorf(`explicit "offsets":{} must reset to inherit-all, got %v`, p.Offsets)
 	}
 }
 
