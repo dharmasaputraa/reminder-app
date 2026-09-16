@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Settings } from '../lib/api'
 import { pageTitle } from '../lib/page-title'
+import { parseList } from '../lib/prefs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -28,6 +29,15 @@ const KATEGORI = [
   { key: 'pawukon', label: 'Pawukon holidays (computed locally)' },
   { key: 'saka', label: 'Balinese & Saka holidays (API)' },
   { key: 'national', label: 'National holidays (API)' },
+]
+
+/** Per-stream fallback offsets. Every stream needs a non-empty list — the
+ *  backend rejects an empty one (it would make the fallback meaningless). */
+const RECURRENCE_STREAMS = [
+  { key: 'event', label: 'Event (one-time)', placeholder: '30,7,4,2,1,0' },
+  { key: 'yearly', label: 'Yearly marks', placeholder: '30,7,4,2,1,0' },
+  { key: 'monthly', label: 'Monthly marks', placeholder: '0' },
+  { key: 'otonan', label: 'Otonan marks', placeholder: '7,4,2,1,0' },
 ]
 
 /** Indonesian time zones — WIB/WITA/WIT labels are shown in the option. */
@@ -84,6 +94,7 @@ function SettingsPage() {
   const [form, setForm] = useState<Settings | null>(null)
   const [offsetsText, setOffsetsText] = useState('')
   const [holidayOffsetTexts, setHolidayOffsetTexts] = useState<Record<string, string>>({})
+  const [recurrenceTexts, setRecurrenceTexts] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (q.data && !form) {
@@ -95,6 +106,12 @@ function SettingsPage() {
         if (offs?.length) texts[k.key] = offs.join(',')
       }
       setHolidayOffsetTexts(texts)
+      // The GET always carries all four streams (stored blob or defaults).
+      setRecurrenceTexts(
+        Object.fromEntries(
+          RECURRENCE_STREAMS.map((s) => [s.key, (q.data!.recurrence_offsets?.[s.key] ?? []).join(',')]),
+        ),
+      )
     }
   }, [q.data, form])
 
@@ -118,6 +135,10 @@ function SettingsPage() {
     )
   if (!form) return <p className="text-muted-foreground">Loading…</p>
   const set = (patch: Partial<Settings>) => setForm({ ...form, ...patch })
+  const recurrenceOffsets: Record<string, number[]> = Object.fromEntries(
+    RECURRENCE_STREAMS.map((s) => [s.key, parseList(recurrenceTexts[s.key] ?? '')]),
+  )
+  const recurrenceOffsetsValid = RECURRENCE_STREAMS.every((s) => (recurrenceOffsets[s.key] ?? []).length > 0)
   const saveNow = () => {
     const holiday_offsets: Record<string, number[]> = {}
     for (const k of KATEGORI) {
@@ -130,6 +151,9 @@ function SettingsPage() {
       ...form,
       default_offsets: offsetsText.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)),
       holiday_offsets,
+      // Required by the API — the old frontend omitted it and every settings
+      // PUT 400ed; all four lists ride along with every save.
+      recurrence_offsets: recurrenceOffsets,
     })
   }
 
@@ -243,7 +267,37 @@ function SettingsPage() {
             </div>
           </fieldset>
 
-          <Button onClick={saveNow} disabled={save.isPending}>Save</Button>
+          <Button onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recurrence offsets</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground text-sm">
+            Default reminder offsets per occurrence stream, used when neither the occasion nor the
+            contact sets a list. Days before the date, comma-separated; every stream needs at least
+            one offset (0 = on the day). Saved with the Settings above.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {RECURRENCE_STREAMS.map((s) => (
+              <Field key={s.key}>
+                <FieldLabel htmlFor={`rec-offsets-${s.key}`}>{s.label}</FieldLabel>
+                <Input
+                  id={`rec-offsets-${s.key}`}
+                  value={recurrenceTexts[s.key] ?? ''}
+                  onChange={(e) => setRecurrenceTexts((t) => ({ ...t, [s.key]: e.target.value }))}
+                  placeholder={s.placeholder}
+                />
+              </Field>
+            ))}
+          </div>
+          {!recurrenceOffsetsValid && (
+            <p className="text-sm text-red-600">Every stream needs at least one offset.</p>
+          )}
+          <Button onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
         </CardContent>
       </Card>
 

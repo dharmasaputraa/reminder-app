@@ -54,19 +54,6 @@ export function contactAvatar(
   )
 }
 
-function typeLabel(it: UpcomingItem): string {
-  return it.type ? it.type.charAt(0).toUpperCase() + it.type.slice(1) : 'Event'
-}
-
-/** Occasions read "{Type} #{years/married}" (e.g. "Anniversary #32"); holidays
- *  keep their name. */
-export function eventDisplayTitle(it: UpcomingItem): string {
-  if (it.kind === 'occasion' && it.number !== null && it.number !== undefined) {
-    return `${typeLabel(it)} #${it.number}`
-  }
-  return it.title
-}
-
 /** The event's own avatar: the contact's for occasions, the calendar-icon
  *  avatar for holidays and contact-less occasions — one leading element per
  *  row and for the detail identity block, so everything aligns. */
@@ -238,7 +225,10 @@ export function AgendaPanel({
                     >
                       {eventAvatar(it, 'size-6', 'text-[10px]', 'size-3.5')}
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate">{eventDisplayTitle(it)}</span>
+                        {/* Backend label carries the mark count, e.g.
+                            "Anniversary 1 year 2 months"; the pawukon label
+                            for otonan items stays a facts row in the detail. */}
+                        <span className="block truncate">{it.title}</span>
                         {subtitle && (
                           <span className="text-muted-foreground block truncate text-xs">
                             {subtitle}
@@ -289,7 +279,7 @@ export function AgendaPanel({
                 {eventAvatar(detailItem, 'size-16', 'text-lg', 'size-6')}
                 <div className="min-w-0 space-y-1">
                   <h2 className="text-pretty text-lg leading-snug font-semibold">
-                    {eventDisplayTitle(detailItem)}
+                    {detailItem.title}
                   </h2>
                   <p className="text-muted-foreground">
                     {format(localMidnight(detailItem.date), 'EEEE, d MMMM yyyy')}
