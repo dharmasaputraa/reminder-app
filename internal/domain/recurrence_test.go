@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestValidateRecurrence(t *testing.T) {
 	for _, r := range []Recurrence{RecurOnce, RecurYearly, RecurMonthly, RecurAnniversary, RecurOtonan} {
@@ -92,6 +95,24 @@ func TestValidateOffsetMap(t *testing.T) {
 	}
 	if err := ValidateOffsetMap(OffsetMap{StreamYearly: {61}}); err == nil {
 		t.Error("out of range: want error")
+	}
+}
+
+func TestDefaultRecurrenceOffsets(t *testing.T) {
+	want := OffsetMap{
+		StreamEvent:   {30, 7, 4, 2, 1, 0},
+		StreamYearly:  {30, 7, 4, 2, 1, 0},
+		StreamMonthly: {0},
+		StreamOtonan:  {7, 4, 2, 1, 0},
+	}
+	got := DefaultRecurrenceOffsets()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DefaultRecurrenceOffsets() = %v, want %v", got, want)
+	}
+	// Fresh copy per call: mutating one result must not leak into the next.
+	got[StreamEvent][0] = 99
+	if again := DefaultRecurrenceOffsets(); again[StreamEvent][0] != 30 {
+		t.Fatalf("mutation leaked into the next call: %v", again)
 	}
 }
 

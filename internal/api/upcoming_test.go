@@ -101,6 +101,7 @@ func TestUpcomingHolidayRemindersCustom(t *testing.T) {
 
 	body := `{"timezone":"Asia/Makassar","send_time":"08:00","catch_up_hours":24,` +
 		`"default_offsets":[7,4,2,1,0],` +
+		`"recurrence_offsets":{"event":[30],"yearly":[2],"monthly":[0],"otonan":[5]},` +
 		`"holiday_categories":{"pawukon":true,"saka":true,"national":true},` +
 		`"holiday_offsets":{"national":[3,1]}}`
 	w := httptest.NewRecorder()

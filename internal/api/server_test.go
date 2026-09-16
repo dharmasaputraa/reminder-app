@@ -215,9 +215,13 @@ func TestSettingsValidate(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
-		`{"timezone":"Asia/Makassar","send_time":"07:30","catch_up_hours":12,"default_offsets":[3,1,0],"holiday_categories":{"pawukon":true}}`))
+		`{"timezone":"Asia/Makassar","send_time":"07:30","catch_up_hours":12,"default_offsets":[3,1,0],`+
+			`"recurrence_offsets":{"event":[30],"yearly":[2],"monthly":[0],"otonan":[5]},"holiday_categories":{"pawukon":true}}`))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"catch_up_hours":12`) {
 		t.Errorf("save settings: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"recurrence_offsets"`) {
+		t.Errorf("settings response must carry the snake_case recurrence_offsets key: %s", w.Body.String())
 	}
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
@@ -233,7 +237,8 @@ func TestSettingsMissingCategories(t *testing.T) {
 	// per the brief's semantics: a category that is not sent → false.
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/settings", "admin@x.id",
-		`{"timezone":"Asia/Jakarta","send_time":"08:00","catch_up_hours":24,"default_offsets":[7,4,2,1,0]}`))
+		`{"timezone":"Asia/Jakarta","send_time":"08:00","catch_up_hours":24,"default_offsets":[7,4,2,1,0],`+
+			`"recurrence_offsets":{"event":[30],"yearly":[2],"monthly":[0],"otonan":[5]}}`))
 	if w.Code != 200 {
 		t.Fatalf("put without holiday_categories: %d %s", w.Code, w.Body.String())
 	}
@@ -248,6 +253,85 @@ func TestSettingsMissingCategories(t *testing.T) {
 		} else if v {
 			t.Errorf("category %q must be false (not sent), got %v", cat, v)
 		}
+	}
+}
+
+// Recurrence offsets: the settings layer owns the seeded per-stream sets
+// (event/yearly/monthly/otonan). A save must carry a complete, in-range map —
+// partial maps and unknown streams are rejected — while default_offsets keeps
+// its holiday-fallback role.
+func TestSettingsRecurrenceOffsets(t *testing.T) {
+	srv, st := newTestServer(t, "admin@x.id")
+
+	got := srv.LoadSettings(context.Background())
+	def := got.RecurrenceOffsets
+	if len(def[domain.StreamMonthly]) != 1 || def[domain.StreamMonthly][0] != 0 {
+		t.Fatalf("default monthly offsets: %v", def)
+	}
+	if len(def[domain.StreamEvent]) != 6 || def[domain.StreamEvent][0] != 30 {
+		t.Fatalf("default event offsets: %v", def)
+	}
+	if len(def) != 4 {
+		t.Fatalf("default map must hold exactly the four stream keys: %v", def)
+	}
+	for _, s := range allStreams {
+		if len(def[s]) == 0 {
+			t.Errorf("default map is missing stream %q: %v", s, def)
+		}
+	}
+
+	in := got
+	in.RecurrenceOffsets = domain.OffsetMap{domain.StreamYearly: {2, 0}}
+	if _, err := srv.SaveSettings(context.Background(), in); err == nil {
+		t.Fatal("partial map must be rejected: keys event/monthly/otonan are required")
+	}
+	in.RecurrenceOffsets = domain.OffsetMap{
+		domain.StreamEvent: {30}, domain.StreamYearly: {2, 0},
+		domain.StreamMonthly: {0}, domain.StreamOtonan: {5},
+	}
+	out, err := srv.SaveSettings(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := srv.LoadSettings(context.Background()).RecurrenceOffsets[domain.StreamYearly]; len(o) != 2 || o[0] != 2 {
+		t.Fatalf("stored yearly offsets: %v", o)
+	}
+	if out.DefaultOffsets == nil || len(out.DefaultOffsets) == 0 {
+		t.Fatal("default_offsets still required (holiday fallback)")
+	}
+
+	// Out-of-range offsets and unknown stream keys are rejected too, and a
+	// rejected save must not touch what is stored.
+	for name, m := range map[string]domain.OffsetMap{
+		"unknown stream": {domain.Stream("weekly"): {1}},
+		"out of range": {
+			domain.StreamEvent: {61}, domain.StreamYearly: {2},
+			domain.StreamMonthly: {0}, domain.StreamOtonan: {5},
+		},
+	} {
+		in.RecurrenceOffsets = m
+		if _, err := srv.SaveSettings(context.Background(), in); err == nil {
+			t.Errorf("%s must be rejected", name)
+		}
+	}
+	if o := srv.LoadSettings(context.Background()).RecurrenceOffsets[domain.StreamYearly]; len(o) != 2 || o[0] != 2 {
+		t.Fatalf("a rejected save must not alter the stored map: %v", o)
+	}
+
+	// A settings blob stored before this field existed (no recurrence_offsets
+	// key) keeps the defaults: the merge only overrides on a non-nil map.
+	if err := st.PutSettingJSON(context.Background(), "settings", map[string]any{
+		"timezone": "Asia/Jakarta", "send_time": "08:00", "catch_up_hours": 24,
+		"default_offsets": []int{7, 4, 2, 1, 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	again := srv.LoadSettings(context.Background())
+	if again.Timezone != "Asia/Jakarta" {
+		t.Errorf("stored timezone must still win: %q", again.Timezone)
+	}
+	if len(again.RecurrenceOffsets[domain.StreamEvent]) != 6 {
+		t.Errorf("legacy stored settings must keep the default recurrence offsets: %v", again.RecurrenceOffsets)
 	}
 }
 
@@ -269,10 +353,15 @@ func TestDefaultSettingsDefensiveCopy(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	ds := DefaultSettings()
 	ds.DefaultOffsets[0] = 99
+	ds.RecurrenceOffsets[domain.StreamEvent][0] = 99
 	ls := srv.LoadSettings(context.Background())
 	ls.DefaultOffsets[0] = 99
+	ls.RecurrenceOffsets[domain.StreamEvent][0] = 99
 	if domain.DefaultOffsets[0] != 7 {
 		t.Errorf("domain.DefaultOffsets mutated via api.Settings: %v", domain.DefaultOffsets)
+	}
+	if v := domain.DefaultRecurrenceOffsets()[domain.StreamEvent][0]; v != 30 {
+		t.Errorf("domain.DefaultRecurrenceOffsets mutated via api.Settings: %d", v)
 	}
 }
 

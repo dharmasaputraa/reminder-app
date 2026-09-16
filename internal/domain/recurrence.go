@@ -70,6 +70,17 @@ func StreamsFor(r Recurrence) []Stream {
 	return nil
 }
 
+// DefaultRecurrenceOffsets: the seeded per-stream offset sets. A fresh copy
+// every call — callers may mutate.
+func DefaultRecurrenceOffsets() OffsetMap {
+	return OffsetMap{
+		StreamEvent:   {30, 7, 4, 2, 1, 0},
+		StreamYearly:  {30, 7, 4, 2, 1, 0},
+		StreamMonthly: {0},
+		StreamOtonan:  {7, 4, 2, 1, 0},
+	}
+}
+
 // ValidateOffsetMap: every key must be a known stream, every list must pass
 // ValidateOffsets. nil is valid (pure inherit).
 func ValidateOffsetMap(m OffsetMap) error {

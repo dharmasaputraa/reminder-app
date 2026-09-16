@@ -43,6 +43,9 @@ type Snapshot struct {
 	// Per holiday source (pawukon/saka/national) reminder offsets. Empty/nil
 	// for a category falls back to DefaultOffsets.
 	HolidayOffsets map[string][]int
+	// Per-stream default offset sets (settings.recurrence_offsets). Consumed by
+	// the per-stream resolution in RunOnce.
+	RecurrenceOffsets domain.OffsetMap
 }
 
 type Resolver func(ctx context.Context, ch store.Channel) (notify.Notifier, error)
