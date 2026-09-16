@@ -1,5 +1,7 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { motion } from 'motion/react'
+import { ApiError, api, type Contact } from '../lib/api'
+import { queryClient } from '../lib/query-client'
 import { pageTitle } from '../lib/page-title'
 import { validateContactDetailSearch } from '../lib/contacts-search'
 import { ContactDetailContent } from '@/components/contacts/contact-detail-content'
@@ -18,6 +20,26 @@ export const Route = createFileRoute('/reminder/contacts/$id')({
   beforeLoad: ({ params }) => {
     // /new has its own static route; anything else non-numeric is a bad URL.
     if (!/^\d+$/.test(params.id)) throw redirect({ to: '/reminder/contacts' })
+  },
+  // Warm the ['contact', id] cache the page's components share before
+  // rendering, so a missing contact becomes the router's not-found state
+  // (defaultNotFoundComponent) instead of the page's inline fallback. Same
+  // normalized id as the components (Number → String) so the keys match.
+  loader: async ({ params }) => {
+    const id = String(Number(params.id))
+    try {
+      return await queryClient.ensureQueryData({
+        queryKey: ['contact', id],
+        queryFn: () => api<Contact>(`/contacts/${id}`),
+        // A 404 is an answer, not a transient failure — skip the retries so
+        // the not-found page appears immediately.
+        retry: (failureCount: number, error: unknown) =>
+          !(error instanceof ApiError && error.status === 404) && failureCount < 3,
+      })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) throw notFound()
+      throw e
+    }
   },
   validateSearch: validateContactDetailSearch,
   component: ContactDetailPage,
