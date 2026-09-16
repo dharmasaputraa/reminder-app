@@ -34,6 +34,21 @@ func TestGotifySend(t *testing.T) {
 	}
 }
 
+func TestGotifyNormalizesBaseURL(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"gotify.wiwara.web.id", "https://gotify.wiwara.web.id"},
+		{"gotify.wiwara.web.id/", "https://gotify.wiwara.web.id"},
+		{"http://192.168.1.10", "http://192.168.1.10"},
+		{"https://gotify.example.com", "https://gotify.example.com"},
+	}
+	for _, tc := range cases {
+		g := NewGotify(GotifyConfig{BaseURL: tc.in, Token: "t"})
+		if g.cfg.BaseURL != tc.want {
+			t.Errorf("BaseURL %q: got %q, want %q", tc.in, g.cfg.BaseURL, tc.want)
+		}
+	}
+}
+
 func TestGotifyErrorStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)

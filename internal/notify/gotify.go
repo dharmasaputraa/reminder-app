@@ -27,6 +27,10 @@ func NewGotify(cfg GotifyConfig) *Gotify {
 	if cfg.Priority == 0 {
 		cfg.Priority = 5
 	}
+	if !strings.Contains(cfg.BaseURL, "://") {
+		cfg.BaseURL = "https://" + cfg.BaseURL
+	}
+	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
 	return &Gotify{cfg: cfg, hc: &http.Client{Timeout: 10 * time.Second}}
 }
 
