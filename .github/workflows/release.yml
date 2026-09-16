@@ -70,9 +70,16 @@ jobs:
         if: env.DOKPLOY_URL != '' && env.DOKPLOY_API_KEY != '' && env.DOKPLOY_APPLICATION_ID != ''
         run: |
           echo "Triggering Dokploy redeploy..."
-          curl -sf --retry 3 -X POST "${DOKPLOY_URL%/}/api/application.deploy" \
+          code=$(curl -s -o /tmp/dokploy_resp.txt -w '%{http_code}' --retry 3 \
+            -X POST "${DOKPLOY_URL%/}/api/application.deploy" \
             -H "x-api-key: $DOKPLOY_API_KEY" \
             -H "Content-Type: application/json" \
             -H "accept: application/json" \
-            -d "{\"applicationId\": \"$DOKPLOY_APPLICATION_ID\"}"
+            -d "{\"applicationId\": \"$DOKPLOY_APPLICATION_ID\"}")
+          cat /tmp/dokploy_resp.txt
+          # 3xx = misalnya Cloudflare Access mencegat API call — gagalkan job, jangan diam-diam
+          if [ "$code" != "200" ]; then
+            echo "::error::Dokploy deploy gagal (HTTP $code)"
+            exit 1
+          fi
           echo "Dokploy deploy triggered."
