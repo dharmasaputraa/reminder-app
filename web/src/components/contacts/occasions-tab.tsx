@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { api, type Channel, type Contact, type Occasion } from '@/lib/api'
 import { longDate, shortDate } from '@/lib/dates'
+import { invalidateContactReminders } from '@/lib/prefs'
 import { useUpcomingByOccasion } from '@/components/contacts/contacts-grid'
 import { AddOccasionForm } from '@/components/contacts/add-occasion-form'
 import { OccasionPrefsEditor } from '@/components/contacts/occasion-prefs-editor'
@@ -76,9 +77,7 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
   const delOcc = useMutation({
     mutationFn: (oid: string) => api(`/occasions/${oid}`, { method: 'DELETE' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['contact', contact.id] })
-      qc.invalidateQueries({ queryKey: ['contacts'] })
-      qc.invalidateQueries({ queryKey: ['upcoming'] })
+      invalidateContactReminders(qc, contact.id)
     },
     onError: (e) => toast.error(`Failed to delete occasion: ${String(e)}`),
   })
@@ -132,10 +131,10 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
                     <TypeIcon aria-hidden="true" />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle className="truncate capitalize">
-                      {o.type}
+                    <ItemTitle>
+                      <span className="min-w-0 truncate capitalize">{o.type}</span>
                       {o.label && (
-                        <span className="text-muted-foreground font-normal"> · {o.label}</span>
+                        <span className="min-w-0 truncate text-muted-foreground font-normal"> · {o.label}</span>
                       )}
                     </ItemTitle>
                     <ItemDescription className="truncate">

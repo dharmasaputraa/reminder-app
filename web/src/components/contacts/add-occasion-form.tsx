@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Occasion } from '@/lib/api'
+import { invalidateContactReminders } from '@/lib/prefs'
 import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-selector-popover'
 import type { DateSelectorValue } from '@/components/reui/date-selector'
 import { Button } from '@/components/ui/button'
@@ -105,9 +106,7 @@ export function AddOccasionForm({ contactId }: { contactId: string }) {
       setPawukon('')
       setLabel('')
       setCustomType('')
-      qc.invalidateQueries({ queryKey: ['contact', contactId] })
-      qc.invalidateQueries({ queryKey: ['contacts'] })
-      qc.invalidateQueries({ queryKey: ['upcoming'] })
+      invalidateContactReminders(qc, contactId)
     },
     onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })

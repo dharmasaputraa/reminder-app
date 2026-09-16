@@ -38,7 +38,7 @@ interface ContactSummaryCardProps {
  *  identity block (avatar, name, nickname, notes). Content only — the host
  *  supplies the card chrome so the edit overlay can slide within one
  *  visual card. Shares the ['contact', id] query key with the sections
- *  column (ContactDetailContent); react-query serves both from one fetch. */
+ *  column (ContactDetailPageContent); react-query serves both from one fetch. */
 export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProps) {
   const id = contactId
   const qc = useQueryClient()

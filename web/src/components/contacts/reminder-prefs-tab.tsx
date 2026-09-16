@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Channel, type Contact, type Settings } from '@/lib/api'
-import { defaultSummary, hydratePrefsForm, parseList } from '@/lib/prefs'
+import { defaultSummary, hydratePrefsForm, invalidateContactReminders, parseList } from '@/lib/prefs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -11,6 +11,7 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
+  FieldTitle,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -45,9 +46,7 @@ export function ReminderPrefsTab({
     mutationFn: (body: Record<string, unknown>) =>
       api(`/contacts/${contact.id}/prefs`, { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['contact', contact.id] })
-      qc.invalidateQueries({ queryKey: ['contacts'] })
-      qc.invalidateQueries({ queryKey: ['upcoming'] })
+      invalidateContactReminders(qc, contact.id)
     },
     onError: (e) => toast.error(`Failed to save preferences: ${String(e)}`),
   })
@@ -96,7 +95,7 @@ export function ReminderPrefsTab({
         </Field>
         <Separator />
         <Field>
-          <FieldLabel>Channels</FieldLabel>
+          <FieldTitle>Channels</FieldTitle>
           <div className="flex flex-wrap gap-2">
             {channels.map((ch) => (
               <label key={ch.id} className="flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-sm">

@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query'
 import type { Prefs, Settings } from './api'
 
 // Hydrate the preference form from stored prefs. Without prefs (new contact / prefs:null):
@@ -27,4 +28,14 @@ export function defaultSummary(settings?: Settings): string {
     `Yearly: ${offsetsSummary(settings?.recurrence_offsets?.yearly)} · ` +
     `Monthly: ${offsetsSummary(settings?.recurrence_offsets?.monthly)}`
   )
+}
+
+/** Invalidate everything a contact's reminders touch: the contact itself,
+ *  the grid list, and — prefix match — ['upcoming', 'grid'] (next-reminder
+ *  column) plus the dashboard's ['upcoming', days] / ['upcoming-year', y]
+ *  queries. */
+export function invalidateContactReminders(qc: QueryClient, contactId: string): void {
+  qc.invalidateQueries({ queryKey: ['contact', contactId] })
+  qc.invalidateQueries({ queryKey: ['contacts'] })
+  qc.invalidateQueries({ queryKey: ['upcoming'] })
 }
