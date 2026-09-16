@@ -152,14 +152,36 @@ podman push ghcr.io/dharmasaputraa/reminder-app:0.1.0
 
 **Redeploy versi yang sama**: tombol **Deploy** di panel, atau ulangi workflow Release via *Run workflow* (manual dispatch).
 
-## Backup (disarankan)
+## Backup
 
-Satu-satunya state adalah `SQLite di /data` (`wimember.db`). Konfigurasi Litestream sudah tersedia di `deploy/litestream.yml` — replicate ke S3/R2:
+Satu-satunya state adalah SQLite di `/data` (`wimember.db`). Prinsip: backup harus berada **di luar server** — VPS mati = semua hilang. Tujuan yang praktis: Cloudflare R2 (free 10 GB; db ini hanya beberapa MB).
 
-1. Buat bucket + access key (S3 atau Cloudflare R2; untuk R2 isi `LITESTREAM_ENDPOINT`).
-2. Isi replica URL di `deploy/litestream.yml`, commit.
-3. Jalankan litestream sebagai service terpisah di Dokploy (image `litestream/litestream`), share volume `/data` yang sama, env `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY` / `LITESTREAM_ENDPOINT`.
-4. Restore: `litestream restore -o /data/wimember.db s3://bucket/wimember/wimember.db`.
+> Tips: mount volume `/data` sebagai **host path** (mis. `/opt/wimember/data:/data`), bukan named volume — filenya langsung terlihat di host dan mudah dibackup.
+
+### Opsi A — Cron + rclone (sederhana, rekomendasi awal)
+
+Backup harian dengan `.backup` bawaan sqlite3 — aman dijalankan saat app tetap jalan (WAL-safe):
+
+```bash
+apt install -y sqlite3 rclone          # atau apk add di alpine
+rclone config                          # sekali: buat remote, mis. nama "r2" (endpoint + access key R2)
+mkdir -p /opt/wimember/backups
+crontab -e
+# tambahkan (satu baris; \% di-escape untuk cron):
+30 2 * * * sqlite3 /opt/wimember/data/wimember.db ".backup '/opt/wimember/backups/wimember-$(date +\%F).db'" && find /opt/wimember/backups -name 'wimember-*.db' -mtime +14 -delete && rclone copy /opt/wimember/backups r2:wimember-backup --max-age 48h
+```
+
+**Restore**: Stop app di Dokploy → timpa `/opt/wimember/data/wimember.db` dengan file backup → Start → cek `/healthz`.
+
+### Opsi B — Litestream (continuous, point-in-time recovery)
+
+Replikasi real-time ke S3/R2; config sudah tersedia di repo (`deploy/litestream.yml`):
+
+1. Buat bucket + access key (R2: isi juga `LITESTREAM_ENDPOINT`), sesuaikan replica URL di `deploy/litestream.yml`.
+2. Upload `deploy/litestream.yml` ke host, lalu di Dokploy buat **service kedua**: image `litestream/litestream`, command `replicate -config /etc/litestream.yml`, mount host path yang sama (`/opt/wimember/data:/data`) dan config read-only (`/opt/wimember/litestream.yml:/etc/litestream.yml:ro`), env `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY` / `LITESTREAM_ENDPOINT`.
+3. **Restore**: stop app → `litestream restore -o /data/wimember.db s3://bucket/wimember/wimember.db` → start.
+
+Jalankan Litestream baru setelah db ada isinya (atau lakukan satu backup awal via Opsi A) agar replikasi punya baseline.
 
 ## Troubleshooting
 
