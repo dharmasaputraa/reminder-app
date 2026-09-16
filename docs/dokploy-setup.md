@@ -187,6 +187,7 @@ Jalankan Litestream baru setelah db ada isinya (atau lakukan satu backup awal vi
 
 | Gejala | Sebab umum |
 | --- | --- |
+| Badge **Host Error** di tab Domains (padahal app jalan) | Kosmetik: validasi DNS Dokploy membandingkan IP resolve vs IP server — domain yang di-proxy Cloudflare selalu gagal cek ini. **Abaikan**; jangan ubah record ke DNS-only untuk menghilangkannya (Access butuh proxy, dan IP VPS jadi terbuka) |
 | Deploy gagal pull `manifest unknown` | Tag belum ada di GHCR — build Actions belum selesai / tag salah ketik |
 | Deploy gagal pull `denied` | Package private + credential registry salah / PAT tanpa `read:packages` |
 | API deploy 401/403 | `DOKPLOY_API_KEY` atau `DOKPLOY_APPLICATION_ID` salah |
