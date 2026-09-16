@@ -10,3 +10,6 @@ internal/api/webroot/*
 !internal/api/webroot/.gitkeep
 tmp/
 .worktrees/
+
+# local one-off DB backups
+backups/
