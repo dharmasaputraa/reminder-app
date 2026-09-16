@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"wimember/internal/config"
 	"wimember/internal/domain"
@@ -274,7 +275,7 @@ func TestSettingsRecurrenceOffsets(t *testing.T) {
 	if len(def) != 4 {
 		t.Fatalf("default map must hold exactly the four stream keys: %v", def)
 	}
-	for _, s := range allStreams {
+	for s := range def {
 		if len(def[s]) == 0 {
 			t.Errorf("default map is missing stream %q: %v", s, def)
 		}
@@ -335,17 +336,24 @@ func TestSettingsRecurrenceOffsets(t *testing.T) {
 	}
 }
 
-func TestAddOccasionInvalidType(t *testing.T) {
+// Type validation is strict but is no longer an allowlist: built-ins and custom
+// types are equally valid, the type only has to be non-empty and ≤64 chars.
+func TestAddOccasionTypeValidation(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/"+cid+"/occasions", "admin@x.id",
-		`{"type":"bogus","date":"1990-05-12"}`))
-	if w.Code != 400 {
-		t.Errorf("illegal occasion type must be 400, got %d %s", w.Code, w.Body.String())
+	post := func(body string) int {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/"+cid+"/occasions", "admin@x.id", body))
+		return w.Code
 	}
-	if !strings.Contains(w.Body.String(), "invalid occasion type") {
-		t.Errorf("wrong error message: %s", w.Body.String())
+	if got := post(`{"type":"","date":"1990-05-12"}`); got != 400 {
+		t.Errorf("empty type must be 400, got %d", got)
+	}
+	if got := post(`{"type":"` + strings.Repeat("x", 65) + `","date":"1990-05-12"}`); got != 400 {
+		t.Errorf("type over 64 chars must be 400, got %d", got)
+	}
+	if got := post(`{"type":"bogus","date":"1990-05-12"}`); got != 201 {
+		t.Errorf("custom type must be accepted, got %d", got)
 	}
 }
 
@@ -375,19 +383,18 @@ func TestSchedulerRunWithoutRunner(t *testing.T) {
 	_ = context.Background()
 }
 
-// offsets:[] is a RESET signal to the global default (not "keep the old value"):
-// handleSetPrefs turns the flat list into the per-stream map — [] → an empty map
-// ({}), not null/dropped, so the reset is PERSISTED. Consumers —
-// internal/api/upcoming.go and internal/scheduler/scheduler.go — treat a map
-// without any list as "use the global defaults"; this test locks down both
-// sides of that contract. Task 8 flips the wire shape to the map itself.
+// offsets:{} is a RESET signal to the global default (not "keep the old value"):
+// the per-stream map is persisted verbatim — {} → an empty map, not null/dropped,
+// so the reset is PERSISTED. Consumers — internal/api/upcoming.go and
+// internal/scheduler/scheduler.go — treat a stream without a list as "use the
+// resolved default"; this test locks down both sides of that contract.
 func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
 
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id",
-		`{"offsets":[],"channel_ids":[],"enabled":true}`))
+		`{"offsets":{},"channel_ids":[],"enabled":true}`))
 	if w.Code != 200 {
 		t.Fatalf("put prefs with empty offsets: %d %s", w.Code, w.Body.String())
 	}
@@ -446,16 +453,16 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	}
 }
 
-// The old flat offsets list is stored under every stream while the wire shape
-// is still flat (Task 8 switches it to the per-stream map): a contact override
-// keeps applying to all of its reminders.
-func TestSetPrefsLegacyFlatOffsets(t *testing.T) {
+// The contact-level prefs wire shape is the per-stream map: a map is stored
+// verbatim, an omitted map means {} = inherit-all, while the old flat list and
+// unknown streams / out-of-range offsets are rejected.
+func TestSetPrefsMapShape(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
 	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
 
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id",
-		`{"offsets":[3,1,0],"enabled":true}`))
+		`{"offsets":{"monthly":[2,0]},"enabled":true}`))
 	if w.Code != 200 {
 		t.Fatalf("put prefs: %d %s", w.Code, w.Body.String())
 	}
@@ -465,17 +472,49 @@ func TestSetPrefsLegacyFlatOffsets(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range allStreams {
-		if !reflect.DeepEqual(out.Offsets[s], []int{3, 1, 0}) {
-			t.Errorf("offsets[%s] = %v, want [3 1 0] (flat list applies to every stream)", s, out.Offsets[s])
-		}
+	if !reflect.DeepEqual(out.Offsets[domain.StreamMonthly], []int{2, 0}) {
+		t.Errorf("offsets[monthly] = %v, want [2 0]", out.Offsets[domain.StreamMonthly])
 	}
-	// An invalid offset is still rejected (validation runs on the mapped value).
+	if len(out.Offsets[domain.StreamYearly]) != 0 {
+		t.Errorf("a stream without a list must stay unset (inherit): %v", out.Offsets)
+	}
+
+	// The old flat list is not part of the wire shape anymore.
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id",
-		`{"offsets":[61],"enabled":true}`))
+		`{"offsets":[3,1,0],"enabled":true}`))
 	if w.Code != 400 {
-		t.Errorf("offset 61 must be 400, got %d %s", w.Code, w.Body.String())
+		t.Errorf("flat offsets list must be 400, got %d %s", w.Code, w.Body.String())
+	}
+	// Unknown streams and out-of-range offsets are rejected.
+	for _, body := range []string{
+		`{"offsets":{"weekly":[1]},"enabled":true}`,
+		`{"offsets":{"monthly":[61]},"enabled":true}`,
+	} {
+		w = httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id", body))
+		if w.Code != 400 {
+			t.Errorf("%s must be 400, got %d %s", body, w.Code, w.Body.String())
+		}
+	}
+	// An omitted offsets map is inherit-all ({}), not an error and not "keep"
+	// (a fresh decode: json.Unmarshal merges into an existing map).
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id", `{"enabled":true}`))
+	if w.Code != 200 {
+		t.Fatalf("put prefs without offsets: %d %s", w.Code, w.Body.String())
+	}
+	var after struct {
+		Offsets domain.OffsetMap `json:"offsets"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Offsets) != 0 {
+		t.Errorf("omitted offsets must persist {} (inherit-all), got %v", after.Offsets)
+	}
+	if !strings.Contains(w.Body.String(), `"offsets":{}`) {
+		t.Errorf(`prefs response must contain "offsets":{}: %s`, w.Body.String())
 	}
 }
 
@@ -527,5 +566,302 @@ func TestUpcomingDateRange(t *testing.T) {
 	// from is not a date → 400.
 	if w := get("?from=not-a-date"); w.Code != 400 {
 		t.Errorf("invalid from must be 400, got %d", w.Code)
+	}
+}
+
+// ---- Task 8: occasion recurrence, occasion-prefs endpoints, stream-aware upcoming ----
+
+// postOccasion posts an occasion and decodes the response (empty on error).
+func postOccasion(t *testing.T, srv *Server, email, contactID, body string) (int, store.Occasion) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/"+contactID+"/occasions", email, body))
+	var oc store.Occasion
+	_ = json.Unmarshal(w.Body.Bytes(), &oc)
+	return w.Code, oc
+}
+
+// contactOccasion reads one occasion (with its prefs) back through GET /contacts/{id}.
+func contactOccasion(t *testing.T, srv *Server, email, cid, occID string) store.Occasion {
+	t.Helper()
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/"+cid, email, ""))
+	if w.Code != 200 {
+		t.Fatalf("get contact: %d %s", w.Code, w.Body.String())
+	}
+	var cw store.ContactWithOccasions
+	if err := json.Unmarshal(w.Body.Bytes(), &cw); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range cw.Occasions {
+		if o.ID == occID {
+			return o
+		}
+	}
+	t.Fatalf("occasion %s not on contact %s: %s", occID, cid, w.Body.String())
+	return store.Occasion{}
+}
+
+// Custom types are first-class: any non-empty type ≤64 chars is accepted, the
+// recurrence defaults per type (custom/unknown → yearly) when omitted and an
+// explicit valid recurrence is stored verbatim.
+func TestAddOccasionCustomTypeAndRecurrence(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+
+	code, oc := postOccasion(t, srv, "admin@x.id", cid,
+		`{"type":"wedding","date":"2025-06-16","recurrence":"anniversary","label":"wedding"}`)
+	if code != 201 {
+		t.Fatalf("custom type + recurrence: %d", code)
+	}
+	if oc.Recurrence != domain.RecurAnniversary {
+		t.Errorf("recurrence = %q, want anniversary", oc.Recurrence)
+	}
+	if _, err := uuid.Parse(oc.ID); err != nil {
+		t.Errorf("occasion id is not a uuid: %q", oc.ID)
+	}
+	if oc.Label != "wedding" || oc.Type != "wedding" {
+		t.Errorf("type/label = %q/%q, want wedding/wedding", oc.Type, oc.Label)
+	}
+
+	code, oc = postOccasion(t, srv, "admin@x.id", cid, `{"type":"graduation","date":"2025-06-16"}`)
+	if code != 201 {
+		t.Fatalf("custom type without recurrence: %d", code)
+	}
+	if oc.Recurrence != domain.RecurYearly {
+		t.Errorf("custom type default recurrence = %q, want yearly", oc.Recurrence)
+	}
+
+	// Built-in types keep their own defaults.
+	code, oc = postOccasion(t, srv, "admin@x.id", cid, `{"type":"otonan","date":"2025-06-16"}`)
+	if code != 201 || oc.Recurrence != domain.RecurOtonan {
+		t.Errorf("otonan default recurrence = %q (code %d), want otonan", oc.Recurrence, code)
+	}
+
+	// Unknown recurrence → 400, empty type → 400, over-long type → 400.
+	for _, body := range []string{
+		`{"type":"wedding","date":"2025-06-16","recurrence":"weekly"}`,
+		`{"type":"","date":"2025-06-16"}`,
+		`{"type":"` + strings.Repeat("x", 65) + `","date":"2025-06-16"}`,
+	} {
+		if code, _ := postOccasion(t, srv, "admin@x.id", cid, body); code != 400 {
+			t.Errorf("%s must be 400, got %d", body, code)
+		}
+	}
+}
+
+// The per-occasion prefs endpoints: default payload without a row, round-trip
+// through GET /contacts/{id}, strict offsets validation, DELETE, and 404 for
+// unknown or malformed occasion ids.
+func TestOccasionPrefsEndpoints(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid,
+		`{"type":"anniversary","date":"2025-06-16","recurrence":"anniversary","label":"wedding"}`)
+
+	prefsReq := func(method, id, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, method, "/api/v1/occasions/"+id+"/prefs", "admin@x.id", body))
+		return w
+	}
+
+	// No row yet → the inherit-all default, not a 404.
+	w := prefsReq("GET", occID, "")
+	if w.Code != 200 {
+		t.Fatalf("get prefs without a row: %d %s", w.Code, w.Body.String())
+	}
+	var p store.OccasionPrefs
+	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if !p.Enabled || len(p.Offsets) != 0 || p.ChannelIDs == nil {
+		t.Errorf("default prefs payload = %+v, want enabled/empty offsets/[]", p)
+	}
+
+	// PUT → 200, visible on the contact with the map shape intact.
+	w = prefsReq("PUT", occID, `{"offsets":{"monthly":[1,0]},"channel_ids":[],"enabled":false}`)
+	if w.Code != 200 {
+		t.Fatalf("put prefs: %d %s", w.Code, w.Body.String())
+	}
+	oc := contactOccasion(t, srv, "admin@x.id", cid, occID)
+	if oc.Prefs == nil {
+		t.Fatalf("occasion.prefs missing after PUT")
+	}
+	if oc.Prefs.Enabled {
+		t.Errorf("occasion.prefs.enabled = true, want false")
+	}
+	if !reflect.DeepEqual(oc.Prefs.Offsets[domain.StreamMonthly], []int{1, 0}) {
+		t.Errorf("occasion.prefs.offsets.monthly = %v, want [1 0]", oc.Prefs.Offsets[domain.StreamMonthly])
+	}
+
+	// Out-of-range offset → 400 and the stored row is left untouched.
+	if w := prefsReq("PUT", occID, `{"offsets":{"monthly":[61]}}`); w.Code != 400 {
+		t.Errorf("offset 61 must be 400, got %d %s", w.Code, w.Body.String())
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); !reflect.DeepEqual(oc.Prefs.Offsets[domain.StreamMonthly], []int{1, 0}) {
+		t.Errorf("rejected PUT must not alter the stored prefs: %v", oc.Prefs.Offsets)
+	}
+	// Unknown stream key → 400.
+	if w := prefsReq("PUT", occID, `{"offsets":{"weekly":[1]}}`); w.Code != 400 {
+		t.Errorf("unknown stream must be 400, got %d %s", w.Code, w.Body.String())
+	}
+
+	// DELETE → 200, the occasion is back to inherit (prefs null).
+	if w := prefsReq("DELETE", occID, ""); w.Code != 200 {
+		t.Errorf("delete prefs: %d %s", w.Code, w.Body.String())
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs != nil {
+		t.Errorf("occasion.prefs must be null after DELETE, got %+v", *oc.Prefs)
+	}
+	if w := prefsReq("GET", occID, ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"enabled":true`) {
+		t.Errorf("prefs after DELETE must fall back to the default payload: %d %s", w.Code, w.Body.String())
+	}
+
+	// Unknown and malformed ids are 404 on every verb.
+	unknown := uuid.NewString()
+	for _, tc := range []struct{ method, id, body string }{
+		{"GET", unknown, ""},
+		{"PUT", unknown, `{"offsets":{}}`},
+		{"DELETE", unknown, ""},
+		{"GET", "not-a-uuid", ""},
+		{"PUT", "not-a-uuid", `{"offsets":{}}`},
+		{"DELETE", "not-a-uuid", ""},
+	} {
+		if w := prefsReq(tc.method, tc.id, tc.body); w.Code != 404 {
+			t.Errorf("%s /occasions/%s/prefs = %d, want 404", tc.method, tc.id, w.Code)
+		}
+	}
+}
+
+// Suggestions: the caller's used types plus the built-ins, deduped and stable.
+func TestOccasionTypesSuggestions(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	addOccasion(t, srv, "admin@x.id", cid, `{"type":"wedding","date":"2025-06-16"}`)
+	addOccasion(t, srv, "admin@x.id", cid, `{"type":"birthday","date":"1990-05-12"}`)
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/occasions/types", "admin@x.id", ""))
+	if w.Code != 200 {
+		t.Fatalf("occasion types: %d %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		Types []string `json:"types"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"birthday", "otonan", "anniversary", "wedding"}
+	if !reflect.DeepEqual(got.Types, want) {
+		t.Errorf("types = %v, want %v", got.Types, want)
+	}
+}
+
+// Every occasion endpoint is owner-scoped: another user gets 404 on the
+// occasion's prefs and never sees the owner's custom type in the suggestions.
+func TestOccasionEndpointsOwnerScoped(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "bob@x.id", `{"name":"Bob"}`)
+	occID := addOccasion(t, srv, "bob@x.id", cid, `{"type":"wedding","date":"2025-06-16"}`)
+
+	for _, tc := range []struct{ method, body string }{
+		{"GET", ""},
+		{"PUT", `{"offsets":{"monthly":[0]}}`},
+		{"DELETE", ""},
+	} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, tc.method, "/api/v1/occasions/"+occID+"/prefs", "eve@x.id", tc.body))
+		if w.Code != 404 {
+			t.Errorf("%s another owner's occasion prefs = %d, want 404", tc.method, w.Code)
+		}
+	}
+	// A PUT from another owner must not write anything.
+	if oc := contactOccasion(t, srv, "bob@x.id", cid, occID); oc.Prefs != nil {
+		t.Errorf("another user's PUT leaked into the owner's prefs: %+v", *oc.Prefs)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/occasions/types", "eve@x.id", ""))
+	if w.Code != 200 {
+		t.Fatalf("occasion types: %d %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		Types []string `json:"types"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, t2 := range got.Types {
+		if t2 == "wedding" {
+			t.Errorf("another owner's custom type leaked into the suggestions: %v", got.Types)
+		}
+	}
+}
+
+// Upcoming items carry the occasion's recurrence and the stream-resolved
+// reminders: an anniversary's monthly mark uses the monthly set, its yearly
+// mark the yearly set, and occasion prefs override per stream only.
+func TestUpcomingAnniversaryStreams(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid,
+		`{"type":"anniversary","date":"2025-06-16","recurrence":"anniversary","label":"wedding"}`)
+
+	itemOn := func(items []UpcomingItem, date string) *UpcomingItem {
+		for i := range items {
+			if items[i].Kind == "occasion" && items[i].Date.String() == date {
+				return &items[i]
+			}
+		}
+		return nil
+	}
+
+	// Monthly mark k=6 (2025-12-16): stream monthly → the monthly default [0].
+	m := itemOn(upcomingItems(t, srv, "?from=2025-12-01&to=2025-12-31"), "2025-12-16")
+	if m == nil {
+		t.Fatal("monthly mark missing from /upcoming")
+	}
+	if m.Recurrence != domain.RecurAnniversary {
+		t.Errorf("recurrence = %q, want anniversary", m.Recurrence)
+	}
+	if !reflect.DeepEqual(m.Reminders, []int{0}) {
+		t.Errorf("monthly reminders = %v, want [0]", m.Reminders)
+	}
+	if !m.RemindersDefault {
+		t.Error("monthly stream with no overrides must be reminders_default")
+	}
+	if m.Title != "Anniversary 6 months" {
+		t.Errorf("monthly title = %q, want \"Anniversary 6 months\"", m.Title)
+	}
+
+	// Yearly mark k=12 (2026-06-16): stream yearly → the yearly default set.
+	y := itemOn(upcomingItems(t, srv, "?from=2026-06-01&to=2026-06-30"), "2026-06-16")
+	if y == nil {
+		t.Fatal("yearly mark missing from /upcoming")
+	}
+	if !reflect.DeepEqual(y.Reminders, []int{30, 7, 4, 2, 1, 0}) {
+		t.Errorf("yearly reminders = %v, want [30 7 4 2 1 0]", y.Reminders)
+	}
+	if !y.RemindersDefault {
+		t.Error("yearly stream with no overrides must be reminders_default")
+	}
+	if y.Title != "Anniversary 1 year" {
+		t.Errorf("yearly title = %q, want \"Anniversary 1 year\"", y.Title)
+	}
+
+	// Occasion prefs apply to their stream only: monthly [1,0], yearly stays default.
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/occasions/"+occID+"/prefs", "admin@x.id",
+		`{"offsets":{"monthly":[1,0]},"channel_ids":[],"enabled":true}`))
+	if w.Code != 200 {
+		t.Fatalf("put occasion prefs: %d %s", w.Code, w.Body.String())
+	}
+	m = itemOn(upcomingItems(t, srv, "?from=2025-12-01&to=2025-12-31"), "2025-12-16")
+	if m == nil || !reflect.DeepEqual(m.Reminders, []int{1, 0}) || m.RemindersDefault {
+		t.Errorf("monthly with occasion prefs = %+v, want reminders [1 0] and default=false", m)
+	}
+	y = itemOn(upcomingItems(t, srv, "?from=2026-06-01&to=2026-06-30"), "2026-06-16")
+	if y == nil || !reflect.DeepEqual(y.Reminders, []int{30, 7, 4, 2, 1, 0}) || !y.RemindersDefault {
+		t.Errorf("yearly must keep the default set = %+v", y)
 	}
 }

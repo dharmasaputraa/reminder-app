@@ -79,23 +79,16 @@ func (s *Server) handleUpcomingNotify(c *gin.Context) {
 			respondErr(c, err)
 			return
 		}
-		var occ *store.Occasion
-		for i := range cw.Occasions {
-			if cw.Occasions[i].ID == in.OccasionID {
-				occ = &cw.Occasions[i]
-				break
-			}
+		occ, err := s.st.OccasionByID(ctx, s.scope(c), in.OccasionID)
+		if err != nil {
+			respondErr(c, err)
+			return
 		}
-		if occ == nil {
+		if occ.ContactID != cw.ID {
 			c.JSON(404, gin.H{"error": "occasion not found on this contact"})
 			return
 		}
-		// transitional: pre-recurrence behavior (anniversary = yearly)
-		rec := domain.RecurYearly
-		if occ.Type == domain.Otonan {
-			rec = domain.RecurOtonan
-		}
-		occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rec, from, to)
+		occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, occ.Recurrence, from, to)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return

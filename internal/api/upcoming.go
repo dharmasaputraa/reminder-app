@@ -10,6 +10,7 @@ import (
 
 	"wimember/internal/calendarprov"
 	"wimember/internal/domain"
+	"wimember/internal/store"
 )
 
 type UpcomingItem struct {
@@ -19,13 +20,16 @@ type UpcomingItem struct {
 	ContactID   string      `json:"contact_id,omitempty"`
 	ContactName string      `json:"contact_name,omitempty"`
 	Type        string      `json:"type,omitempty"`
-	Number      int         `json:"number,omitempty"`
-	Title       string      `json:"title"`
-	Pawukon     string      `json:"pawukon,omitempty"`
-	DaysUntil   int         `json:"days_until"`
-	Reminders   []int       `json:"reminders,omitempty"`
-	// RemindersDefault: the offsets above came from the global default_offsets
-	// fallback (no per-contact prefs / per-category override).
+	// Recurrence of the occasion this occurrence belongs to.
+	Recurrence domain.Recurrence `json:"recurrence"`
+	Number     int               `json:"number,omitempty"`
+	Title      string            `json:"title"`
+	Pawukon    string            `json:"pawukon,omitempty"`
+	DaysUntil  int               `json:"days_until"`
+	Reminders  []int             `json:"reminders,omitempty"`
+	// RemindersDefault: the offsets above came from the settings/global
+	// fallback — neither the occasion nor the contact had a list for this
+	// stream.
 	RemindersDefault bool `json:"reminders_default,omitempty"`
 }
 
@@ -85,22 +89,13 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 
 	var items []UpcomingItem
 	for _, cw := range contacts {
-		offsets := settings.DefaultOffsets
-		remindersDefault := true
-		// transitional: a non-empty per-stream prefs list still stands in for
-		// the flat contact-level override (see contactOffsets in handlers.go).
-		if cw.Prefs != nil && cw.Prefs.Enabled {
-			if o, ok := contactOffsets(cw.Prefs.Offsets); ok {
-				offsets, remindersDefault = o, false
-			}
-		}
+		contactMap := contactPrefsOf(cw)
 		for _, occ := range cw.Occasions {
-			// transitional: pre-recurrence behavior (anniversary = yearly)
-			rec := domain.RecurYearly
-			if occ.Type == domain.Otonan {
-				rec = domain.RecurOtonan
-			}
-			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rec, rangeStart, horizon)
+			occMap := occasionPrefsOf(occ)
+			// Same precedence as the scheduler: occasion → contact → settings
+			// recurrence_offsets → domain.DefaultOffsets, per stream.
+			streamOffs := domain.ResolveOccasionStreams(occ.Recurrence, occMap, contactMap, settings.RecurrenceOffsets)
+			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, occ.Recurrence, rangeStart, horizon)
 			if err != nil {
 				continue
 			}
@@ -108,8 +103,11 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 				item := UpcomingItem{
 					Date: o.Date, Kind: "occasion", OccasionID: occ.ID, ContactID: cw.ID,
 					ContactName: cw.Name, Type: string(o.Type), Number: o.Number,
-					Title: o.Label, DaysUntil: o.Date.JDN() - today.JDN(), Reminders: offsets,
-					RemindersDefault: remindersDefault,
+					Recurrence: occ.Recurrence, Title: o.Label,
+					DaysUntil: o.Date.JDN() - today.JDN(), Reminders: streamOffs[o.Stream],
+					// No per-stream list at either prefs layer → the resolution
+					// fell through to settings/DefaultOffsets.
+					RemindersDefault: len(contactMap[o.Stream]) == 0 && len(occMap[o.Stream]) == 0,
 				}
 				if occ.Type == domain.Otonan {
 					item.Pawukon = domain.Pawukon(o.Date).Label()
@@ -148,4 +146,21 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 
 func (s *Server) multiProvider() calendarprov.MultiProvider {
 	return calendarprov.MultiProvider{Providers: s.providers}
+}
+
+// contactPrefsOf / occasionPrefsOf: the per-stream override maps of one prefs
+// layer, nil when the row is absent (pure inherit). Enabled is a delivery kill
+// switch handled by the scheduler; it does not select which offsets apply.
+func contactPrefsOf(cw store.ContactWithOccasions) domain.OffsetMap {
+	if cw.Prefs == nil {
+		return nil
+	}
+	return cw.Prefs.Offsets
+}
+
+func occasionPrefsOf(o store.Occasion) domain.OffsetMap {
+	if o.Prefs == nil {
+		return nil
+	}
+	return o.Prefs.Offsets
 }

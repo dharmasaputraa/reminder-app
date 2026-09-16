@@ -130,9 +130,10 @@ func (s *Server) handleDeleteContact(c *gin.Context) {
 }
 
 type occasionIn struct {
-	Type  string `json:"type"`
-	Date  string `json:"date"` // YYYY-MM-DD
-	Label string `json:"label"`
+	Type       string `json:"type"`
+	Date       string `json:"date"` // YYYY-MM-DD
+	Recurrence string `json:"recurrence"`
+	Label      string `json:"label"`
 }
 
 func (s *Server) handleAddOccasion(c *gin.Context) {
@@ -144,11 +145,22 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// Custom types are first-class: no allowlist, only a length bound.
 	typ := domain.OccurrenceType(in.Type)
-	switch typ {
-	case domain.Birthday, domain.Otonan, domain.Anniversary:
-	default:
-		c.JSON(400, gin.H{"error": "invalid occasion type"})
+	if typ == "" {
+		c.JSON(400, gin.H{"error": "type is required"})
+		return
+	}
+	if len(typ) > 64 {
+		c.JSON(400, gin.H{"error": "type too long (max 64)"})
+		return
+	}
+	rec := domain.Recurrence(in.Recurrence)
+	if rec == "" {
+		rec = domain.DefaultRecurrence(typ)
+	}
+	if err := domain.ValidateRecurrence(rec); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 	if _, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid); err != nil {
@@ -160,9 +172,7 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	// The client cannot pick a recurrence yet (Task 8): store the type's
-	// default so the column is never empty.
-	oc, err := s.st.AddOccasion(c.Request.Context(), cid, typ, domain.DefaultRecurrence(typ), base, in.Label)
+	oc, err := s.st.AddOccasion(c.Request.Context(), cid, typ, rec, base, in.Label)
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -182,40 +192,14 @@ func (s *Server) handleDeleteOccasion(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
+// prefsIn: the per-stream map wire shape. Offsets is a plain map (not a
+// pointer), so the handler always assigns it and an absent key — decoded as
+// nil — is persisted as {}: PUT is a full replace, omit offsets to inherit
+// every stream.
 type prefsIn struct {
-	Offsets    *[]int    `json:"offsets"`
-	ChannelIDs *[]string `json:"channel_ids"`
-	Enabled    *bool     `json:"enabled"`
-}
-
-var allStreams = []domain.Stream{domain.StreamEvent, domain.StreamYearly, domain.StreamMonthly, domain.StreamOtonan}
-
-// legacyOffsetMap: transitional (Task 8 switches the wire shape to the
-// per-stream map) — the flat list the old API sends means "these offsets for
-// every reminder", so it is stored under each stream. An empty list is the
-// reset signal: an empty map, i.e. inherit the settings defaults.
-func legacyOffsetMap(l []int) domain.OffsetMap {
-	m := domain.OffsetMap{}
-	if len(l) == 0 {
-		return m
-	}
-	for _, s := range allStreams {
-		m[s] = append([]int(nil), l...)
-	}
-	return m
-}
-
-// contactOffsets: transitional (per-stream resolution lands in Task 6/8) — the
-// store no longer holds a flat contact-level offsets list, so the first
-// non-empty per-stream list stands in for the old override. The fixed stream
-// order keeps the pick deterministic; ok=false → no contact-level override.
-func contactOffsets(m domain.OffsetMap) ([]int, bool) {
-	for _, s := range allStreams {
-		if len(m[s]) > 0 {
-			return m[s], true
-		}
-	}
-	return nil, false
+	Offsets    domain.OffsetMap `json:"offsets"`
+	ChannelIDs *[]string        `json:"channel_ids"`
+	Enabled    *bool            `json:"enabled"`
 }
 
 func (s *Server) handleSetPrefs(c *gin.Context) {
@@ -227,29 +211,24 @@ func (s *Server) handleSetPrefs(c *gin.Context) {
 	if !ok {
 		return
 	}
-	cw, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid)
-	if err != nil {
+	if _, err := s.st.GetContact(c.Request.Context(), s.scope(c), cid); err != nil {
 		respondErr(c, err)
 		return
 	}
-	p := store.ReminderPrefs{ContactID: cid, Offsets: domain.OffsetMap{},
-		ChannelIDs: []string{}, Enabled: true}
-	if cw.Prefs != nil {
-		p = *cw.Prefs
-		p.ContactID = cid
+	if err := domain.ValidateOffsetMap(in.Offsets); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
 	}
-	if in.Offsets != nil {
-		p.Offsets = legacyOffsetMap(*in.Offsets)
+	p := store.ReminderPrefs{ContactID: cid, Offsets: in.Offsets,
+		ChannelIDs: []string{}, Enabled: true}
+	if p.Offsets == nil {
+		p.Offsets = domain.OffsetMap{}
 	}
 	if in.ChannelIDs != nil {
 		p.ChannelIDs = *in.ChannelIDs
 	}
 	if in.Enabled != nil {
 		p.Enabled = *in.Enabled
-	}
-	if err := domain.ValidateOffsetMap(p.Offsets); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
 	}
 	if err := s.st.SetReminderPrefs(c.Request.Context(), p); err != nil {
 		respondErr(c, err)

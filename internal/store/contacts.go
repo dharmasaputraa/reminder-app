@@ -198,6 +198,33 @@ func (s *Store) DeleteContact(ctx context.Context, ownerID, contactID string) er
 	return nil
 }
 
+// DistinctOccasionTypes: the caller's used types plus the built-ins, sorted
+// (built-ins first, then the owner's own types alphabetically). Owner-scoped;
+// ownerID "" = admin (all contacts).
+func (s *Store) DistinctOccasionTypes(ctx context.Context, ownerID string) ([]string, error) {
+	clause, args := ownerScope(ownerID)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT o.type FROM occasions o
+		 JOIN contacts c ON c.id = o.contact_id WHERE `+clause+` ORDER BY o.type`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{string(domain.Birthday): true, string(domain.Otonan): true, string(domain.Anniversary): true}
+	out := []string{string(domain.Birthday), string(domain.Otonan), string(domain.Anniversary)}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) AddOccasion(ctx context.Context, contactID string, typ domain.OccurrenceType, rec domain.Recurrence, base domain.Date, label string) (Occasion, error) {
 	if err := domain.ValidateRecurrence(rec); err != nil {
 		return Occasion{}, err
