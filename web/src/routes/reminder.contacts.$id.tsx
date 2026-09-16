@@ -4,7 +4,7 @@ import { ApiError, UUID_RE, api, type Contact } from '../lib/api'
 import { queryClient } from '../lib/query-client'
 import { pageTitle } from '../lib/page-title'
 import { validateContactDetailSearch } from '../lib/contacts-search'
-import { ContactDetailContent } from '@/components/contacts/contact-detail-content'
+import { ContactDetailPageContent } from '@/components/contacts/contact-detail-page-content'
 import { ContactEditForm } from '@/components/contacts/contact-edit-form'
 import { ContactSummaryCard } from '@/components/contacts/contact-summary-card'
 import {
@@ -75,7 +75,7 @@ function ContactDetailPage() {
           identity card sticks alongside. Order flips it below the card on
           mobile and back to the left at lg. */}
       <div className="order-2 min-w-0 flex-1 lg:order-1">
-        <ContactDetailContent contactId={id} variant="page" />
+        <ContactDetailPageContent contactId={id} />
       </div>
 
       {/* Sticky identity column: the summary card is the base layer of one

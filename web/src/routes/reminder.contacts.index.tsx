@@ -147,7 +147,7 @@ function Contacts() {
                     onClose={() => nav({ to: '/reminder/contacts', replace: true })}
                   />
                 ) : (
-                  <ContactDetailContent contactId={panelC} variant="docked" />
+                  <ContactDetailContent contactId={panelC} />
                 )}
               </motion.div>
             )}
