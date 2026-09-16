@@ -95,7 +95,12 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 			offsets = cw.Prefs.Offsets
 		}
 		for _, occ := range cw.Occasions {
-			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rangeStart, horizon)
+			// transitional: pre-recurrence behavior (anniversary = yearly)
+			rec := domain.RecurYearly
+			if occ.Type == domain.Otonan {
+				rec = domain.RecurOtonan
+			}
+			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rec, rangeStart, horizon)
 			if err != nil {
 				continue
 			}

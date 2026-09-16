@@ -191,7 +191,12 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 		fromO := today.AddDays(-(oOff + catchUpDays + 2))
 		toO := today.AddDays(oOff + 2)
 		for _, occ := range cw.Occasions {
-			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, fromO, toO)
+			// transitional: pre-recurrence behavior (anniversary = yearly)
+			rec := domain.RecurYearly
+			if occ.Type == domain.Otonan {
+				rec = domain.RecurOtonan
+			}
+			occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rec, fromO, toO)
 			if err != nil {
 				continue
 			}

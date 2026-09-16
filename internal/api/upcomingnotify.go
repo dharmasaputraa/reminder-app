@@ -90,7 +90,12 @@ func (s *Server) handleUpcomingNotify(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "occasion not found on this contact"})
 			return
 		}
-		occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, from, to)
+		// transitional: pre-recurrence behavior (anniversary = yearly)
+		rec := domain.RecurYearly
+		if occ.Type == domain.Otonan {
+			rec = domain.RecurOtonan
+		}
+		occs, err := domain.OccurrencesBetween(occ.BaseDate, occ.Type, rec, from, to)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
