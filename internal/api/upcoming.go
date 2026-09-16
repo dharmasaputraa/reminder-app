@@ -15,8 +15,8 @@ import (
 type UpcomingItem struct {
 	Date        domain.Date `json:"date"`
 	Kind        string      `json:"kind"` // "occasion" | "holiday"
-	OccasionID  int64       `json:"occasion_id,omitempty"`
-	ContactID   int64       `json:"contact_id,omitempty"`
+	OccasionID  string      `json:"occasion_id,omitempty"`
+	ContactID   string      `json:"contact_id,omitempty"`
 	ContactName string      `json:"contact_name,omitempty"`
 	Type        string      `json:"type,omitempty"`
 	Number      int         `json:"number,omitempty"`
@@ -30,7 +30,6 @@ type UpcomingItem struct {
 }
 
 func (s *Server) handleUpcoming(c *gin.Context) {
-	user := mustUser(c)
 	ctx := c.Request.Context()
 	settings := s.LoadSettings(ctx)
 
@@ -77,10 +76,7 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 		horizon = today.AddDays(days)
 	}
 
-	ownerID := user.ID
-	if user.Role == "admin" {
-		ownerID = 0
-	}
+	ownerID := s.scope(c)
 	contacts, err := s.st.ListContacts(ctx, ownerID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to load contacts"})
@@ -90,9 +86,13 @@ func (s *Server) handleUpcoming(c *gin.Context) {
 	var items []UpcomingItem
 	for _, cw := range contacts {
 		offsets := settings.DefaultOffsets
-		remindersDefault := !(cw.Prefs != nil && cw.Prefs.Enabled && len(cw.Prefs.Offsets) > 0)
-		if !remindersDefault {
-			offsets = cw.Prefs.Offsets
+		remindersDefault := true
+		// transitional: a non-empty per-stream prefs list still stands in for
+		// the flat contact-level override (see contactOffsets in handlers.go).
+		if cw.Prefs != nil && cw.Prefs.Enabled {
+			if o, ok := contactOffsets(cw.Prefs.Offsets); ok {
+				offsets, remindersDefault = o, false
+			}
 		}
 		for _, occ := range cw.Occasions {
 			// transitional: pre-recurrence behavior (anniversary = yearly)

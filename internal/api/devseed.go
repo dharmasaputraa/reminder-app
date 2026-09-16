@@ -39,12 +39,12 @@ func SeedDevTelegram(ctx context.Context, st *store.Store, key []byte, cfg confi
 		return false, fmt.Errorf("provision seed user: %w", err)
 	}
 	const name = "Telegram (dev)"
-	all, err := st.ListChannels(ctx, 0)
+	all, err := st.ListChannels(ctx, "")
 	if err != nil {
 		return false, err
 	}
 	var keep *store.Channel
-	var extras []int64
+	var extras []string
 	for i := range all {
 		ch := all[i]
 		if ch.Type != "telegram" || ch.Name != name {
@@ -76,7 +76,7 @@ func SeedDevTelegram(ctx context.Context, st *store.Store, key []byte, cfg confi
 			return false, err
 		}
 		for _, id := range extras {
-			if err := st.DeleteChannel(ctx, 0, id); err != nil {
+			if err := st.DeleteChannel(ctx, "", id); err != nil {
 				return false, err
 			}
 			slog.Info("dev seed: duplicate telegram channel removed", "channel_id", id, "name", name)

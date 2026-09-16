@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"wimember/internal/calendarprov"
 	"wimember/internal/domain"
 	"wimember/internal/notify"
@@ -72,7 +74,7 @@ func seed(t *testing.T, st *store.Store, today domain.Date) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.AddOccasion(ctx, c.ID, domain.Otonan, today.AddDays(-domain.PawukonCycleDays), ""); err != nil {
+	if _, err := st.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, today.AddDays(-domain.PawukonCycleDays), ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc")); err != nil {
@@ -102,7 +104,7 @@ func newHarness(t *testing.T, now time.Time) *harness {
 	n := &stubNotifier{}
 	svc := &Service{St: st, Clock: fc, Providers: []calendarprov.Provider{&stubProvider{}},
 		Resolve:   func(_ context.Context, ch store.Channel) (notify.Notifier, error) { return n, nil },
-		failUntil: map[int64]time.Time{}}
+		failUntil: map[string]time.Time{}}
 	return &harness{st: st, fc: fc, notif: n, svc: svc}
 }
 
@@ -205,7 +207,7 @@ func TestTargetChannelsSystemDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.st.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(2026, 6, 17), ""); err != nil {
+	if _, err := h.st.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(2026, 6, 17), ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,11 +219,11 @@ func TestTargetChannelsSystemDefault(t *testing.T) {
 		}
 		return *got
 	}
-	same := func(got []store.Channel, want ...int64) bool {
+	same := func(got []store.Channel, want ...string) bool {
 		if len(got) != len(want) {
 			return false
 		}
-		set := map[int64]bool{}
+		set := map[string]bool{}
 		for _, ch := range got {
 			set[ch.ID] = true
 		}
@@ -238,21 +240,21 @@ func TestTargetChannelsSystemDefault(t *testing.T) {
 		t.Errorf("no default: got %v", got)
 	}
 	// system default → just that channel
-	if got := h.svc.targetChannels(ctx, cw(t), []int64{chB.ID}); !same(got, chB.ID) {
+	if got := h.svc.targetChannels(ctx, cw(t), []string{chB.ID}); !same(got, chB.ID) {
 		t.Errorf("default [B]: got %v", got)
 	}
 	// default matching nothing enabled → falls back to every enabled channel
-	if got := h.svc.targetChannels(ctx, cw(t), []int64{999}); !same(got, chA.ID, chB.ID) {
+	if got := h.svc.targetChannels(ctx, cw(t), []string{uuid.NewString()}); !same(got, chA.ID, chB.ID) {
 		t.Errorf("unknown default: got %v", got)
 	}
 
 	// the contact's own selection beats the system default
 	if err := h.st.SetReminderPrefs(ctx, store.ReminderPrefs{
-		ContactID: c.ID, ChannelIDs: []int64{chA.ID}, Enabled: true,
+		ContactID: c.ID, ChannelIDs: []string{chA.ID}, Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got := h.svc.targetChannels(ctx, cw(t), []int64{chB.ID}); !same(got, chA.ID) {
+	if got := h.svc.targetChannels(ctx, cw(t), []string{chB.ID}); !same(got, chA.ID) {
 		t.Errorf("explicit selection: got %v", got)
 	}
 }

@@ -3,9 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"wimember/internal/domain"
 	"wimember/internal/secret"
@@ -30,11 +30,13 @@ func respondErr(c *gin.Context, err error) {
 	}
 }
 
-func pathID(c *gin.Context) (int64, bool) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id < 1 {
-		c.JSON(400, gin.H{"error": "invalid id"})
-		return 0, false
+// pathID: ids are UUIDs; a malformed one can never exist, so it is a 404
+// (not a 400) — the route's resource simply is not there.
+func pathID(c *gin.Context) (string, bool) {
+	id := c.Param("id")
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return "", false
 	}
 	return id, true
 }
@@ -50,10 +52,12 @@ type contactIn struct {
 	Notes    string `json:"notes"`
 }
 
-func (s *Server) scope(c *gin.Context) int64 {
+// scope: the owner filter for store calls — the caller's own id, or "" for
+// admins (the store treats "" as "no owner filter").
+func (s *Server) scope(c *gin.Context) string {
 	u := mustUser(c)
 	if u.Role == "admin" {
-		return 0
+		return ""
 	}
 	return u.ID
 }
@@ -140,7 +144,8 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 	if !ok {
 		return
 	}
-	switch domain.OccurrenceType(in.Type) {
+	typ := domain.OccurrenceType(in.Type)
+	switch typ {
 	case domain.Birthday, domain.Otonan, domain.Anniversary:
 	default:
 		c.JSON(400, gin.H{"error": "invalid occasion type"})
@@ -155,7 +160,9 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	oc, err := s.st.AddOccasion(c.Request.Context(), cid, domain.OccurrenceType(in.Type), base, in.Label)
+	// The client cannot pick a recurrence yet (Task 8): store the type's
+	// default so the column is never empty.
+	oc, err := s.st.AddOccasion(c.Request.Context(), cid, typ, domain.DefaultRecurrence(typ), base, in.Label)
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -176,9 +183,39 @@ func (s *Server) handleDeleteOccasion(c *gin.Context) {
 }
 
 type prefsIn struct {
-	Offsets    *[]int   `json:"offsets"`
-	ChannelIDs *[]int64 `json:"channel_ids"`
-	Enabled    *bool    `json:"enabled"`
+	Offsets    *[]int    `json:"offsets"`
+	ChannelIDs *[]string `json:"channel_ids"`
+	Enabled    *bool     `json:"enabled"`
+}
+
+var allStreams = []domain.Stream{domain.StreamEvent, domain.StreamYearly, domain.StreamMonthly, domain.StreamOtonan}
+
+// legacyOffsetMap: transitional (Task 8 switches the wire shape to the
+// per-stream map) — the flat list the old API sends means "these offsets for
+// every reminder", so it is stored under each stream. An empty list is the
+// reset signal: an empty map, i.e. inherit the settings defaults.
+func legacyOffsetMap(l []int) domain.OffsetMap {
+	m := domain.OffsetMap{}
+	if len(l) == 0 {
+		return m
+	}
+	for _, s := range allStreams {
+		m[s] = append([]int(nil), l...)
+	}
+	return m
+}
+
+// contactOffsets: transitional (per-stream resolution lands in Task 6/8) — the
+// store no longer holds a flat contact-level offsets list, so the first
+// non-empty per-stream list stands in for the old override. The fixed stream
+// order keeps the pick deterministic; ok=false → no contact-level override.
+func contactOffsets(m domain.OffsetMap) ([]int, bool) {
+	for _, s := range allStreams {
+		if len(m[s]) > 0 {
+			return m[s], true
+		}
+	}
+	return nil, false
 }
 
 func (s *Server) handleSetPrefs(c *gin.Context) {
@@ -195,14 +232,14 @@ func (s *Server) handleSetPrefs(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
-	p := store.ReminderPrefs{ContactID: cid, Offsets: s.LoadSettings(c.Request.Context()).DefaultOffsets,
-		ChannelIDs: []int64{}, Enabled: true}
+	p := store.ReminderPrefs{ContactID: cid, Offsets: domain.OffsetMap{},
+		ChannelIDs: []string{}, Enabled: true}
 	if cw.Prefs != nil {
 		p = *cw.Prefs
 		p.ContactID = cid
 	}
 	if in.Offsets != nil {
-		p.Offsets = *in.Offsets
+		p.Offsets = legacyOffsetMap(*in.Offsets)
 	}
 	if in.ChannelIDs != nil {
 		p.ChannelIDs = *in.ChannelIDs
@@ -210,7 +247,7 @@ func (s *Server) handleSetPrefs(c *gin.Context) {
 	if in.Enabled != nil {
 		p.Enabled = *in.Enabled
 	}
-	if err := domain.ValidateOffsets(p.Offsets); err != nil {
+	if err := domain.ValidateOffsetMap(p.Offsets); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}

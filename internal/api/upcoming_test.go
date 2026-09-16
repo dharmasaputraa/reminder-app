@@ -125,20 +125,11 @@ func TestUpcomingHolidayRemindersCustom(t *testing.T) {
 // offsets → those offsets with reminders_default=false.
 func TestUpcomingOccasionRemindersFlag(t *testing.T) {
 	srv, st := newUpcomingTestServer(t, nil)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id",
-		`{"name":"Made","nickname":"De"}`))
-	if w.Code != 201 {
-		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
-	}
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made","nickname":"De"}`)
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
-	if w.Code != 201 {
-		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
-	}
+	addOccasion(t, srv, "admin@x.id", cid, string(ocBody))
 
 	occ := func(items []UpcomingItem) *UpcomingItem {
 		for i := range items {
@@ -159,8 +150,10 @@ func TestUpcomingOccasionRemindersFlag(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	// The otonan occurrence's stream is otonan, so the contact-level override
+	// lives under that key (Task 8 resolves the item's stream the same way).
 	if err := st.SetReminderPrefs(ctx, store.ReminderPrefs{
-		ContactID: 1, Enabled: true, Offsets: []int{2, 0},
+		ContactID: cid, Enabled: true, Offsets: domain.OffsetMap{domain.StreamOtonan: {2, 0}},
 	}); err != nil {
 		t.Fatal(err)
 	}

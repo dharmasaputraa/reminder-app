@@ -36,6 +36,64 @@ func newTestServer(t *testing.T, admin string) (*Server, *store.Store) {
 
 func ginSet(t *testing.T) { gin.SetMode(gin.TestMode) } // via import gin
 
+// createContact posts a contact and returns its id. Ids are opaque UUID
+// strings now, so tests read the id back from the response instead of
+// assuming "1".
+func createContact(t *testing.T, srv *Server, email, body string) string {
+	t.Helper()
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", email, body))
+	if w.Code != 201 {
+		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
+	}
+	var c store.Contact
+	if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.ID == "" {
+		t.Fatalf("created contact has no id: %s", w.Body.String())
+	}
+	return c.ID
+}
+
+// addOccasion posts an occasion on a contact and returns its id.
+func addOccasion(t *testing.T, srv *Server, email, contactID, body string) string {
+	t.Helper()
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/"+contactID+"/occasions", email, body))
+	if w.Code != 201 {
+		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
+	}
+	var oc store.Occasion
+	if err := json.Unmarshal(w.Body.Bytes(), &oc); err != nil {
+		t.Fatal(err)
+	}
+	if oc.ID == "" {
+		t.Fatalf("created occasion has no id: %s", w.Body.String())
+	}
+	return oc.ID
+}
+
+// createChannel posts a channel and returns its id.
+func createChannel(t *testing.T, srv *Server, email, body string) string {
+	t.Helper()
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/channels", email, body))
+	if w.Code != 201 {
+		t.Fatalf("create channel: %d %s", w.Code, w.Body.String())
+	}
+	var ch struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &ch); err != nil {
+		t.Fatal(err)
+	}
+	if ch.ID == "" {
+		t.Fatalf("created channel has no id: %s", w.Body.String())
+	}
+	return ch.ID
+}
+
 func devReq(t *testing.T, method, target, email, body string) *http.Request {
 	t.Helper()
 	var rd io.Reader
@@ -52,12 +110,7 @@ func devReq(t *testing.T, method, target, email, body string) *http.Request {
 
 func TestContactFlow(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id",
-		`{"name":"Made","nickname":"De","notes":"cousin"}`))
-	if w.Code != 201 {
-		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
-	}
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made","nickname":"De","notes":"cousin"}`)
 
 	// Otonan base = today − 210 → the 1st occurrence falls EXACTLY today; deterministic
 	// for the 30-day window (random dates often fall outside the window → flaky).
@@ -67,13 +120,9 @@ func TestContactFlow(t *testing.T) {
 	today := domain.DateFromTime(time.Now().In(loc))
 	base := today.AddDays(-domain.PawukonCycleDays)
 	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": base.String()})
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
-	if w.Code != 201 {
-		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
-	}
+	addOccasion(t, srv, "admin@x.id", cid, string(ocBody))
 
-	w = httptest.NewRecorder()
+	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/upcoming?days=30", "admin@x.id", ""))
 	if w.Code != 200 {
 		t.Fatalf("upcoming: %d %s", w.Code, w.Body.String())
@@ -97,15 +146,14 @@ func TestContactJSONSnakeCase(t *testing.T) {
 			t.Errorf("create contact response does not contain %s: %s", want, created)
 		}
 	}
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
-		`{"type":"otonan","date":"1990-05-12"}`))
-	if w.Code != 201 {
-		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
+	var ct store.Contact
+	if err := json.Unmarshal(w.Body.Bytes(), &ct); err != nil {
+		t.Fatal(err)
 	}
+	addOccasion(t, srv, "admin@x.id", ct.ID, `{"type":"otonan","date":"1990-05-12"}`)
 
 	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/1", "admin@x.id", ""))
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/"+ct.ID, "admin@x.id", ""))
 	if w.Code != 200 {
 		t.Fatalf("get contact: %d %s", w.Code, w.Body.String())
 	}
@@ -205,13 +253,9 @@ func TestSettingsMissingCategories(t *testing.T) {
 
 func TestAddOccasionInvalidType(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
-	if w.Code != 201 {
-		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
-	}
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
+	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/"+cid+"/occasions", "admin@x.id",
 		`{"type":"bogus","date":"1990-05-12"}`))
 	if w.Code != 400 {
 		t.Errorf("illegal occasion type must be 400, got %d %s", w.Code, w.Body.String())
@@ -243,27 +287,24 @@ func TestSchedulerRunWithoutRunner(t *testing.T) {
 }
 
 // offsets:[] is a RESET signal to the global default (not "keep the old value"):
-// handleSetPrefs replaces p.Offsets with an empty slice and ValidateOffsets([]) passes,
-// so [] must be PERSISTED (not null/dropped). Consumers — internal/api/upcoming.go and
-// internal/scheduler/scheduler.go — treat len(Offsets)==0 as
-// "use DefaultOffsets"; this test locks down both sides of that contract.
+// handleSetPrefs turns the flat list into the per-stream map — [] → an empty map
+// ({}), not null/dropped, so the reset is PERSISTED. Consumers —
+// internal/api/upcoming.go and internal/scheduler/scheduler.go — treat a map
+// without any list as "use the global defaults"; this test locks down both
+// sides of that contract. Task 8 flips the wire shape to the map itself.
 func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
-	if w.Code != 201 {
-		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
-	}
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
 
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/1/prefs", "admin@x.id",
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id",
 		`{"offsets":[],"channel_ids":[],"enabled":true}`))
 	if w.Code != 200 {
 		t.Fatalf("put prefs with empty offsets: %d %s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/1", "admin@x.id", ""))
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/"+cid, "admin@x.id", ""))
 	if w.Code != 200 {
 		t.Fatalf("get contact: %d %s", w.Code, w.Body.String())
 	}
@@ -281,8 +322,8 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	if len(got.Prefs.Offsets) != 0 {
 		t.Errorf("offsets must be empty (reset to default), got %v", got.Prefs.Offsets)
 	}
-	if !strings.Contains(body, `"offsets":[]`) {
-		t.Errorf(`prefs must contain "offsets":[] (not null/missing): %s`, body)
+	if !strings.Contains(body, `"offsets":{}`) {
+		t.Errorf(`prefs must contain "offsets":{} (not null/missing): %s`, body)
 	}
 
 	// Consumer side: an otonan occurrence exactly today (base = today − 210) must
@@ -290,11 +331,7 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	today := domain.DateFromTime(time.Now().In(loc))
 	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id", string(ocBody)))
-	if w.Code != 201 {
-		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
-	}
+	addOccasion(t, srv, "admin@x.id", cid, string(ocBody))
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/upcoming?days=30", "admin@x.id", ""))
 	if w.Code != 200 {
@@ -308,7 +345,7 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	}
 	found := false
 	for _, it := range up.Items {
-		if it.Kind == "occasion" && it.ContactID == 1 {
+		if it.Kind == "occasion" && it.ContactID == cid {
 			found = true
 			if !reflect.DeepEqual(it.Reminders, domain.DefaultOffsets) {
 				t.Errorf("reminders must be the global default %v, got %v", domain.DefaultOffsets, it.Reminders)
@@ -320,19 +357,43 @@ func TestPrefsOffsetsResetToDefault(t *testing.T) {
 	}
 }
 
+// The old flat offsets list is stored under every stream while the wire shape
+// is still flat (Task 8 switches it to the per-stream map): a contact override
+// keeps applying to all of its reminders.
+func TestSetPrefsLegacyFlatOffsets(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id",
+		`{"offsets":[3,1,0],"enabled":true}`))
+	if w.Code != 200 {
+		t.Fatalf("put prefs: %d %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Offsets domain.OffsetMap `json:"offsets"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range allStreams {
+		if !reflect.DeepEqual(out.Offsets[s], []int{3, 1, 0}) {
+			t.Errorf("offsets[%s] = %v, want [3 1 0] (flat list applies to every stream)", s, out.Offsets[s])
+		}
+	}
+	// An invalid offset is still rejected (validation runs on the mapped value).
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/contacts/"+cid+"/prefs", "admin@x.id",
+		`{"offsets":[61],"enabled":true}`))
+	if w.Code != 400 {
+		t.Errorf("offset 61 must be 400, got %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestUpcomingDateRange(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts", "admin@x.id", `{"name":"Made"}`))
-	if w.Code != 201 {
-		t.Fatalf("create contact: %d %s", w.Code, w.Body.String())
-	}
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, devReq(t, "POST", "/api/v1/contacts/1/occasions", "admin@x.id",
-		`{"type":"birthday","date":"2003-06-03"}`))
-	if w.Code != 201 {
-		t.Fatalf("add occasion: %d %s", w.Code, w.Body.String())
-	}
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	addOccasion(t, srv, "admin@x.id", cid, `{"type":"birthday","date":"2003-06-03"}`)
 
 	get := func(query string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()

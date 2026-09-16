@@ -16,7 +16,7 @@ type Settings struct {
 	DefaultOffsets []int  `json:"default_offsets"`
 	// Channels used by contacts without their own selection. Empty/nil →
 	// every enabled channel (the pre-default behavior).
-	DefaultChannelIDs []int64          `json:"default_channel_ids"`
+	DefaultChannelIDs []string         `json:"default_channel_ids"`
 	HolidayCategories map[string]bool  `json:"holiday_categories"`
 	HolidayOffsets    map[string][]int `json:"holiday_offsets"`
 }
@@ -57,7 +57,7 @@ func (s *Server) LoadSettings(ctx context.Context) Settings {
 		out.DefaultOffsets = append([]int(nil), stored.DefaultOffsets...)
 	}
 	if stored.DefaultChannelIDs != nil {
-		out.DefaultChannelIDs = append([]int64(nil), stored.DefaultChannelIDs...)
+		out.DefaultChannelIDs = append([]string(nil), stored.DefaultChannelIDs...)
 	}
 	if stored.HolidayCategories != nil {
 		out.HolidayCategories = stored.HolidayCategories

@@ -38,7 +38,7 @@ type Snapshot struct {
 	DefaultOffsets []int
 	// Channels used by contacts without their own selection. Empty/nil →
 	// every enabled channel (the pre-default behavior).
-	DefaultChannelIDs []int64
+	DefaultChannelIDs []string
 	HolidayCategories map[string]bool
 	// Per holiday source (pawukon/saka/national) reminder offsets. Empty/nil
 	// for a category falls back to DefaultOffsets.
@@ -63,7 +63,7 @@ type Service struct {
 	Resolve   Resolver
 
 	mu        sync.Mutex
-	failUntil map[int64]time.Time
+	failUntil map[string]time.Time
 }
 
 func HolidayKey(category string, h domain.Holiday) string {
@@ -88,9 +88,22 @@ func maxOffset(offsets []int) int {
 	return m
 }
 
+// contactOffsets: transitional (per-stream resolution lands in Task 6) — the
+// store no longer holds a flat contact-level offsets list, so the first
+// non-empty per-stream list stands in for the old override. The fixed stream
+// order keeps the pick deterministic; ok=false → no contact-level override.
+func contactOffsets(m domain.OffsetMap) ([]int, bool) {
+	for _, s := range []domain.Stream{domain.StreamEvent, domain.StreamYearly, domain.StreamMonthly, domain.StreamOtonan} {
+		if len(m[s]) > 0 {
+			return m[s], true
+		}
+	}
+	return nil, false
+}
+
 // targetChannels lists the destination channels for one contact: the contact's
 // own selection, else the system default channels, else every enabled channel.
-func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions, defaultIDs []int64) []store.Channel {
+func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasions, defaultIDs []string) []store.Channel {
 	all, err := s.St.ListChannels(ctx, cw.OwnerID)
 	if err != nil {
 		return nil
@@ -101,8 +114,8 @@ func (s *Service) targetChannels(ctx context.Context, cw store.ContactWithOccasi
 			enabled = append(enabled, ch)
 		}
 	}
-	filter := func(ids []int64) []store.Channel {
-		want := map[int64]bool{}
+	filter := func(ids []string) []store.Channel {
+		want := map[string]bool{}
 		for _, id := range ids {
 			want[id] = true
 		}
@@ -133,7 +146,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	// the package (main.go), which cannot fill the unexported failUntil field —
 	// without this, the first failed send = nil-map panic inside the mutex → scan dies.
 	if s.failUntil == nil {
-		s.failUntil = make(map[int64]time.Time)
+		s.failUntil = make(map[string]time.Time)
 	}
 	var res Result
 
@@ -174,7 +187,7 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 	horizon := today.AddDays(holidayMaxOff + 2)
 
 	// ---- occasions ----
-	contacts, err := s.St.ListContacts(ctx, 0) // admin scope: all contacts
+	contacts, err := s.St.ListContacts(ctx, "") // admin scope: all contacts
 	if err != nil {
 		return res, err
 	}
@@ -183,8 +196,13 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 			continue
 		}
 		offsets := snap.DefaultOffsets
-		if cw.Prefs != nil && len(cw.Prefs.Offsets) > 0 {
-			offsets = cw.Prefs.Offsets
+		// transitional: the contact-level flat offsets list is gone from the
+		// store, so the first non-empty per-stream list stands in for it until
+		// per-stream resolution lands (Task 6).
+		if cw.Prefs != nil {
+			if o, ok := contactOffsets(cw.Prefs.Offsets); ok {
+				offsets = o
+			}
 		}
 		channels := s.targetChannels(ctx, cw, snap.DefaultChannelIDs)
 		oOff := maxOffset(offsets)
