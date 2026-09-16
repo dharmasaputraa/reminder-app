@@ -249,6 +249,63 @@ func TestOccasionPrefsRoundTrip(t *testing.T) {
 	}
 }
 
+// fill() must load occasion prefs even when the contact has no contact-level
+// reminder_prefs row: the ErrNoRows case is a plain skip, not an early return.
+func TestOccasionPrefsWithoutContactPrefs(t *testing.T) {
+	ctx := context.Background()
+	st, _ := OpenInMemory()
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	u, err := st.GetOrCreateUser(ctx, "noprefs@x.id", "A", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := st.CreateContact(ctx, u.ID, "Ani", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, err := st.AddOccasion(ctx, ct.ID, "anniversary", domain.RecurAnniversary, domain.NewDate(2025, 6, 16), "wedding")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Deliberately no SetReminderPrefs: c.Prefs stays nil for this contact.
+	if err := st.SetOccasionPrefs(ctx, OccasionPrefs{OccasionID: oc.ID,
+		Offsets: domain.OffsetMap{domain.StreamMonthly: {1, 0}}, ChannelIDs: []string{}, Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.GetContact(ctx, u.ID, ct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Prefs != nil {
+		t.Fatalf("contact prefs must stay nil: %+v", got.Prefs)
+	}
+	if len(got.Occasions) != 1 || got.Occasions[0].Prefs == nil {
+		t.Fatalf("occasion prefs must load without contact prefs: %+v", got.Occasions)
+	}
+	if got.Occasions[0].Prefs.Enabled || len(got.Occasions[0].Prefs.Offsets[domain.StreamMonthly]) != 2 {
+		t.Fatalf("occasion prefs round-trip: %+v", got.Occasions[0].Prefs)
+	}
+
+	// The list path goes through the same fill().
+	ls, err := st.ListContacts(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *ContactWithOccasions
+	for i := range ls {
+		if ls[i].ID == ct.ID {
+			found = &ls[i]
+		}
+	}
+	if found == nil || found.Prefs != nil || len(found.Occasions) != 1 || found.Occasions[0].Prefs == nil {
+		t.Fatalf("list fill mismatch: %+v", ls)
+	}
+}
+
 // OccasionByID is owner-scoped: another owner gets ErrNotFound, admin "" sees it.
 func TestOccasionByIDOwnerScope(t *testing.T) {
 	ctx := context.Background()

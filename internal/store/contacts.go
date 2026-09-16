@@ -143,20 +143,22 @@ func (s *Store) fill(ctx context.Context, c *ContactWithOccasions) error {
 	err = s.db.QueryRowContext(ctx,
 		`SELECT offsets, channel_ids, enabled FROM reminder_prefs WHERE contact_id = ?`, c.ID).
 		Scan(&offsets, &channelIDs, &enabled)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// no contact-level prefs: a plain skip — per-occasion overrides are
+		// still loaded below
+	case err != nil:
 		return err
+	default:
+		p := &ReminderPrefs{ContactID: c.ID, Enabled: enabled == 1, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}}
+		if err := json.Unmarshal([]byte(offsets), &p.Offsets); err != nil {
+			return err
+		}
+		if err := json.Unmarshal([]byte(channelIDs), &p.ChannelIDs); err != nil {
+			return err
+		}
+		c.Prefs = p
 	}
-	p := &ReminderPrefs{ContactID: c.ID, Enabled: enabled == 1, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}}
-	if err := json.Unmarshal([]byte(offsets), &p.Offsets); err != nil {
-		return err
-	}
-	if err := json.Unmarshal([]byte(channelIDs), &p.ChannelIDs); err != nil {
-		return err
-	}
-	c.Prefs = p
 
 	for i := range c.Occasions {
 		op, err := s.getOccasionPrefsRow(ctx, c.Occasions[i].ID)
