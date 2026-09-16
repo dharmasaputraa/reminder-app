@@ -127,6 +127,27 @@ git tag v0.1.0 && git push origin v0.1.0
 
 **Rilis versi baru**: `git tag v1.2.4 && git push origin v1.2.4` — selesai.
 
+### Build image di lokal (opsional)
+
+Jalur utama build adalah GitHub Actions — server **tidak pernah build** (hanya pull).
+Untuk eksperimen/hotfix cepat, image bisa dibangun di mesin lokal (Podman, tanpa Docker):
+
+```bash
+make test                                        # build lokal tidak lewat gerbang CI — test manual dulu
+podman build --platform linux/amd64 \
+  -t ghcr.io/dharmasaputraa/reminder-app:0.1.0 . # sesuaikan arch server (uname -m)
+podman run --rm -d --name smoke -p 8081:8080 \
+  -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c \
+  ghcr.io/dharmasaputraa/reminder-app:0.1.0
+curl -s localhost:8081/healthz && podman rm -f smoke   # smoke test (README §Container verification)
+echo "<TOKEN>" | podman login ghcr.io -u dharmasaputraa --password-stdin
+podman push ghcr.io/dharmasaputraa/reminder-app:0.1.0
+```
+
+- PAT untuk push harus **`write:packages`** (read-only tidak cukup).
+- Setelah push: ganti tag di Dokploy → Deploy, atau trigger `POST /api/application.deploy` seperti CI.
+- Catatan: build lokal melewati test CI dan cross-arch di Mac jalan via emulasi (lebih lambat) — pakai hanya untuk hotfix; rilis resmi tetap lewat `git tag`.
+
 **Rollback**: tab **General** di aplikasi Dokploy → ganti tag image ke versi lama (mis. `ghcr.io/dharmasaputraa/reminder-app:1.2.2`) → **Deploy**. Semua versi tersimpan di GHCR.
 
 **Redeploy versi yang sama**: tombol **Deploy** di panel, atau ulangi workflow Release via *Run workflow* (manual dispatch).
