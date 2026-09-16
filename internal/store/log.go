@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"wimember/internal/domain"
 )
 
@@ -48,8 +50,9 @@ func (s *Store) RecordNotification(ctx context.Context, e NotificationEntry) (bo
 		return false, fmt.Errorf("notification entry must have OccasionID or HolidayKey")
 	}
 	r, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO notification_log
-		(occasion_id, holiday_key, occurrence_date, offset_days, channel_id, status, error)
-		VALUES (?,?,?,?,?,?,?)`,
+		(id, occasion_id, holiday_key, occurrence_date, offset_days, channel_id, status, error)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		uuid.Must(uuid.NewV7()).String(),
 		e.OccasionID, e.HolidayKey, e.OccurrenceDate.String(), e.OffsetDays, e.ChannelID, e.Status, e.Error)
 	if err != nil {
 		return false, err
