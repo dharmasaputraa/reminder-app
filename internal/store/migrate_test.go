@@ -7,55 +7,23 @@ import (
 	"wimember/internal/domain"
 )
 
-// Regression: the occasion type "otongan" was renamed to "otonan" by editing
-// 001_init.sql in place, but Migrate() never re-applies an already-run version.
-// Databases created before the rename keep the old CHECK and reject the new
-// spelling, which surfaced as a 500 on POST /contacts/:id/occasions.
-func TestMigrate002RenamesOtonganType(t *testing.T) {
+// Regression: the occasion type vocabulary must not break on schema edits.
+// 001_init.sql once carried a CHECK on the fixed type list, and "otongan" was
+// renamed to "otonan" in place (later papered over by 002_rename_otongan_type).
+// The rewritten 001 folds that in — the rename is irrelevant on a fresh
+// database (rollout is a fresh start, no data migration) — and drops the type
+// CHECK entirely: built-in and custom types are free strings now. What stays is
+// the recurrence CHECK. This pins the fresh-database contract: 'otonan' and
+// custom types insert fine, a bogus recurrence is rejected by the store and,
+// as a backstop, by the DB CHECK.
+func TestMigrateFreshSchemaOccasionVocabulary(t *testing.T) {
 	s, err := OpenInMemory()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 	ctx := context.Background()
-
-	// Simulate a database created before the rename: version 1 with the old
-	// CHECK allowing only "otongan".
-	old := `
-	CREATE TABLE schema_migrations (
-		version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')));
-	CREATE TABLE users (
-	  id INTEGER PRIMARY KEY AUTOINCREMENT,
-	  email TEXT NOT NULL UNIQUE,
-	  name TEXT NOT NULL DEFAULT '',
-	  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin','member')),
-	  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
-	CREATE TABLE contacts (
-	  id INTEGER PRIMARY KEY AUTOINCREMENT,
-	  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-	  name TEXT NOT NULL,
-	  nickname TEXT NOT NULL DEFAULT '',
-	  notes TEXT NOT NULL DEFAULT '',
-	  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
-	CREATE TABLE occasions (
-	  id INTEGER PRIMARY KEY AUTOINCREMENT,
-	  contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-	  type TEXT NOT NULL CHECK (type IN ('birthday','otongan','anniversary')),
-	  base_date TEXT NOT NULL,
-	  label TEXT NOT NULL DEFAULT ''
-	);
-	CREATE INDEX idx_occasions_contact ON occasions(contact_id);
-	CREATE TABLE reminder_prefs (
-	  contact_id INTEGER PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
-	  offsets TEXT NOT NULL,
-	  channel_ids TEXT NOT NULL,
-	  enabled INTEGER NOT NULL DEFAULT 1
-	);
-	INSERT INTO schema_migrations(version) VALUES (1);
-	`
-	if _, err := s.db.Exec(old); err != nil {
+	if err := s.Migrate(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,36 +32,38 @@ func TestMigrate002RenamesOtonganType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A row stored under the old spelling must survive the migration.
-	if _, err := s.db.Exec(
-		`INSERT INTO occasions (contact_id, type, base_date) VALUES (?, 'otongan', '1990-05-12')`, c.ID); err != nil {
-		t.Fatal(err)
+	// The renamed spelling inserts with its recurrence.
+	if _, err := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), ""); err != nil {
+		t.Fatalf("AddOccasion(%q): %v", domain.Otonan, err)
 	}
-
-	if err := s.Migrate(); err != nil {
-		t.Fatal(err)
+	// Custom type: no CHECK on occasions.type anymore.
+	if _, err := s.AddOccasion(ctx, c.ID, "wedding", domain.RecurAnniversary, domain.NewDate(2025, 6, 16), ""); err != nil {
+		t.Fatalf("custom type: %v", err)
 	}
-
-	// New inserts use the new spelling; the old CHECK rejected this.
-	if _, err := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(2001, 2, 3), ""); err != nil {
-		t.Fatalf("AddOccasion with renamed type: %v", err)
+	// Unknown recurrence: rejected before the INSERT.
+	if _, err := s.AddOccasion(ctx, c.ID, "birthday", "weekly", domain.NewDate(2000, 1, 1), ""); err == nil {
+		t.Error("unknown recurrence must be rejected by the store")
+	}
+	// The DB CHECK is the backstop for rows written around the store.
+	if _, err := s.db.Exec(`INSERT INTO occasions (id, contact_id, type, recurrence, base_date)
+		VALUES ('00000000-0000-7000-8000-000000000000', ?, 'birthday', 'weekly', '2000-01-01')`, c.ID); err == nil {
+		t.Error("unknown recurrence must be rejected by the CHECK")
 	}
 
 	got, err := s.GetContact(ctx, u.ID, c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var oldSpelled, converted int
-	for _, oc := range got.Occasions {
-		switch oc.Type {
-		case "otongan":
-			oldSpelled++
-		case domain.Otonan:
-			converted++
-		}
+	if len(got.Occasions) != 2 {
+		t.Fatalf("occasions = %d, want 2", len(got.Occasions))
 	}
-	if oldSpelled != 0 || converted != 2 {
-		t.Errorf("existing row must be converted to %q, got %d old-spelled and %d %q",
-			domain.Otonan, oldSpelled, converted, domain.Otonan)
+	want := map[domain.OccurrenceType]domain.Recurrence{
+		domain.Otonan: domain.RecurOtonan,
+		"wedding":     domain.RecurAnniversary,
+	}
+	for _, oc := range got.Occasions {
+		if want[oc.Type] != oc.Recurrence {
+			t.Errorf("%s: recurrence = %q, want %q", oc.Type, oc.Recurrence, want[oc.Type])
+		}
 	}
 }

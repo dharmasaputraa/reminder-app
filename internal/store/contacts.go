@@ -7,30 +7,41 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"wimember/internal/domain"
 )
 
 type Contact struct {
-	ID       int64  `json:"id"`
-	OwnerID  int64  `json:"owner_id"`
+	ID       string `json:"id"`
+	OwnerID  string `json:"owner_id"`
 	Name     string `json:"name"`
 	Nickname string `json:"nickname"`
 	Notes    string `json:"notes"`
 }
 
 type Occasion struct {
-	ID        int64                 `json:"id"`
-	ContactID int64                 `json:"contact_id"`
-	Type      domain.OccurrenceType `json:"type"`
-	BaseDate  domain.Date           `json:"base_date"`
-	Label     string                `json:"label"`
+	ID         string                `json:"id"`
+	ContactID  string                `json:"contact_id"`
+	Type       domain.OccurrenceType `json:"type"`
+	Recurrence domain.Recurrence     `json:"recurrence"`
+	BaseDate   domain.Date           `json:"base_date"`
+	Label      string                `json:"label"`
+	Prefs      *OccasionPrefs        `json:"prefs,omitempty"`
 }
 
 type ReminderPrefs struct {
-	ContactID  int64   `json:"contact_id"`
-	Offsets    []int   `json:"offsets"`
-	ChannelIDs []int64 `json:"channel_ids"`
-	Enabled    bool    `json:"enabled"`
+	ContactID  string           `json:"contact_id"`
+	Offsets    domain.OffsetMap `json:"offsets"`
+	ChannelIDs []string         `json:"channel_ids"`
+	Enabled    bool             `json:"enabled"`
+}
+
+type OccasionPrefs struct {
+	OccasionID string           `json:"occasion_id"`
+	Offsets    domain.OffsetMap `json:"offsets"`
+	ChannelIDs []string         `json:"channel_ids"`
+	Enabled    bool             `json:"enabled"`
 }
 
 type ContactWithOccasions struct {
@@ -39,27 +50,29 @@ type ContactWithOccasions struct {
 	Prefs     *ReminderPrefs `json:"prefs"`
 }
 
-func (s *Store) CreateContact(ctx context.Context, ownerID int64, name, nickname, notes string) (Contact, error) {
-	r, err := s.db.ExecContext(ctx,
-		`INSERT INTO contacts (owner_id, name, nickname, notes) VALUES (?,?,?,?)`,
-		ownerID, name, nickname, notes)
+func (s *Store) CreateContact(ctx context.Context, ownerID string, name, nickname, notes string) (Contact, error) {
+	id := uuid.Must(uuid.NewV7()).String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO contacts (id, owner_id, name, nickname, notes) VALUES (?,?,?,?,?)`,
+		id, ownerID, name, nickname, notes)
 	if err != nil {
 		return Contact{}, err
 	}
-	id, _ := r.LastInsertId()
 	return Contact{ID: id, OwnerID: ownerID, Name: name, Nickname: nickname, Notes: notes}, nil
 }
 
-func ownerFilter(ownerID int64) string {
-	if ownerID == 0 {
-		return "1=1" // admin
+// ownerScope returns (clause, args): ownerID "" = admin (no filter).
+func ownerScope(ownerID string) (string, []any) {
+	if ownerID == "" {
+		return "1=1", nil
 	}
-	return fmt.Sprintf("owner_id = %d", ownerID)
+	return "owner_id = ?", []any{ownerID}
 }
 
-func (s *Store) ListContacts(ctx context.Context, ownerID int64) ([]ContactWithOccasions, error) {
-	q := fmt.Sprintf(`SELECT id, owner_id, name, nickname, notes FROM contacts WHERE %s ORDER BY name`, ownerFilter(ownerID))
-	rows, err := s.db.QueryContext(ctx, q)
+func (s *Store) ListContacts(ctx context.Context, ownerID string) ([]ContactWithOccasions, error) {
+	clause, args := ownerScope(ownerID)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, owner_id, name, nickname, notes FROM contacts WHERE `+clause+` ORDER BY name`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +96,13 @@ func (s *Store) ListContacts(ctx context.Context, ownerID int64) ([]ContactWithO
 	return out, nil
 }
 
-func (s *Store) GetContact(ctx context.Context, ownerID, contactID int64) (*ContactWithOccasions, error) {
-	q := fmt.Sprintf(`SELECT id, owner_id, name, nickname, notes FROM contacts WHERE id = ? AND %s`, ownerFilter(ownerID))
+func (s *Store) GetContact(ctx context.Context, ownerID, contactID string) (*ContactWithOccasions, error) {
+	clause, args := ownerScope(ownerID)
+	all := append([]any{contactID}, args...)
 	c := &ContactWithOccasions{}
-	err := s.db.QueryRowContext(ctx, q, contactID).Scan(&c.ID, &c.OwnerID, &c.Name, &c.Nickname, &c.Notes)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, owner_id, name, nickname, notes FROM contacts WHERE id = ? AND `+clause, all...).
+		Scan(&c.ID, &c.OwnerID, &c.Name, &c.Nickname, &c.Notes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -101,17 +117,16 @@ func (s *Store) GetContact(ctx context.Context, ownerID, contactID int64) (*Cont
 
 func (s *Store) fill(ctx context.Context, c *ContactWithOccasions) error {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, contact_id, type, base_date, label FROM occasions WHERE contact_id = ? ORDER BY base_date`, c.ID)
+		`SELECT id, contact_id, type, recurrence, base_date, label FROM occasions WHERE contact_id = ? ORDER BY base_date`, c.ID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-	// SPA contract: occasions is always an array (not null) even when empty.
-	c.Occasions = []Occasion{}
+	c.Occasions = []Occasion{} // SPA contract: always an array, never null
 	for rows.Next() {
 		var o Occasion
 		var base string
-		if err := rows.Scan(&o.ID, &o.ContactID, &o.Type, &base, &o.Label); err != nil {
+		if err := rows.Scan(&o.ID, &o.ContactID, &o.Type, &o.Recurrence, &base, &o.Label); err != nil {
 			return err
 		}
 		if o.BaseDate, err = domain.ParseDate(base); err != nil {
@@ -134,7 +149,7 @@ func (s *Store) fill(ctx context.Context, c *ContactWithOccasions) error {
 	if err != nil {
 		return err
 	}
-	p := &ReminderPrefs{ContactID: c.ID, Enabled: enabled == 1}
+	p := &ReminderPrefs{ContactID: c.ID, Enabled: enabled == 1, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}}
 	if err := json.Unmarshal([]byte(offsets), &p.Offsets); err != nil {
 		return err
 	}
@@ -142,13 +157,22 @@ func (s *Store) fill(ctx context.Context, c *ContactWithOccasions) error {
 		return err
 	}
 	c.Prefs = p
+
+	for i := range c.Occasions {
+		op, err := s.getOccasionPrefsRow(ctx, c.Occasions[i].ID)
+		if err != nil {
+			return err
+		}
+		c.Occasions[i].Prefs = op
+	}
 	return nil
 }
 
-func (s *Store) UpdateContact(ctx context.Context, ownerID, contactID int64, name, nickname, notes string) error {
+func (s *Store) UpdateContact(ctx context.Context, ownerID, contactID string, name, nickname, notes string) error {
+	clause, args := ownerScope(ownerID)
+	all := append([]any{name, nickname, notes, contactID}, args...)
 	r, err := s.db.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE contacts SET name=?, nickname=?, notes=? WHERE id = ? AND %s`, ownerFilter(ownerID)),
-		name, nickname, notes, contactID)
+		`UPDATE contacts SET name=?, nickname=?, notes=? WHERE id = ? AND `+clause, all...)
 	if err != nil {
 		return err
 	}
@@ -158,9 +182,11 @@ func (s *Store) UpdateContact(ctx context.Context, ownerID, contactID int64, nam
 	return nil
 }
 
-func (s *Store) DeleteContact(ctx context.Context, ownerID, contactID int64) error {
+func (s *Store) DeleteContact(ctx context.Context, ownerID, contactID string) error {
+	clause, args := ownerScope(ownerID)
+	all := append([]any{contactID}, args...)
 	r, err := s.db.ExecContext(ctx,
-		fmt.Sprintf(`DELETE FROM contacts WHERE id = ? AND %s`, ownerFilter(ownerID)), contactID)
+		`DELETE FROM contacts WHERE id = ? AND `+clause, all...)
 	if err != nil {
 		return err
 	}
@@ -170,25 +196,33 @@ func (s *Store) DeleteContact(ctx context.Context, ownerID, contactID int64) err
 	return nil
 }
 
-func (s *Store) AddOccasion(ctx context.Context, contactID int64, typ domain.OccurrenceType, base domain.Date, label string) (Occasion, error) {
-	if typ != domain.Birthday && typ != domain.Otonan && typ != domain.Anniversary {
-		return Occasion{}, fmt.Errorf("unknown occasion type: %q", typ)
+func (s *Store) AddOccasion(ctx context.Context, contactID string, typ domain.OccurrenceType, rec domain.Recurrence, base domain.Date, label string) (Occasion, error) {
+	if err := domain.ValidateRecurrence(rec); err != nil {
+		return Occasion{}, err
 	}
-	r, err := s.db.ExecContext(ctx,
-		`INSERT INTO occasions (contact_id, type, base_date, label) VALUES (?,?,?,?)`,
-		contactID, typ, base.String(), label)
+	if typ == "" {
+		return Occasion{}, fmt.Errorf("occasion type is required")
+	}
+	if len(typ) > 64 {
+		return Occasion{}, fmt.Errorf("occasion type too long (max 64)")
+	}
+	id := uuid.Must(uuid.NewV7()).String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO occasions (id, contact_id, type, recurrence, base_date, label) VALUES (?,?,?,?,?,?)`,
+		id, contactID, typ, rec, base.String(), label)
 	if err != nil {
 		return Occasion{}, err
 	}
-	id, _ := r.LastInsertId()
-	return Occasion{ID: id, ContactID: contactID, Type: typ, BaseDate: base, Label: label}, nil
+	return Occasion{ID: id, ContactID: contactID, Type: typ, Recurrence: rec, BaseDate: base, Label: label}, nil
 }
 
-// DeleteOccasion is owner-scoped — ownerID 0 = admin (all contacts).
-func (s *Store) DeleteOccasion(ctx context.Context, ownerID, id int64) error {
+// DeleteOccasion is owner-scoped — ownerID "" = admin (all contacts).
+func (s *Store) DeleteOccasion(ctx context.Context, ownerID, id string) error {
+	clause, args := ownerScope(ownerID)
+	all := append([]any{id}, args...)
 	r, err := s.db.ExecContext(ctx,
-		fmt.Sprintf(`DELETE FROM occasions WHERE id = ? AND contact_id IN
-			(SELECT id FROM contacts WHERE %s)`, ownerFilter(ownerID)), id)
+		`DELETE FROM occasions WHERE id = ? AND contact_id IN
+			(SELECT id FROM contacts WHERE `+clause+`)`, all...)
 	if err != nil {
 		return err
 	}
@@ -211,6 +245,75 @@ func (s *Store) SetReminderPrefs(ctx context.Context, p ReminderPrefs) error {
 		VALUES (?,?,?,?) ON CONFLICT(contact_id) DO UPDATE SET offsets=excluded.offsets,
 		channel_ids=excluded.channel_ids, enabled=excluded.enabled`,
 		p.ContactID, string(off), string(ch), boolInt(p.Enabled))
+	return err
+}
+
+// OccasionByID: owner-scoped single occasion ("" ownerID = admin).
+func (s *Store) OccasionByID(ctx context.Context, ownerID, occasionID string) (*Occasion, error) {
+	clause, args := ownerScope(ownerID)
+	all := append([]any{occasionID}, args...)
+	var o Occasion
+	var base string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT o.id, o.contact_id, o.type, o.recurrence, o.base_date, o.label
+		 FROM occasions o JOIN contacts c ON c.id = o.contact_id
+		 WHERE o.id = ? AND `+clause, all...).
+		Scan(&o.ID, &o.ContactID, &o.Type, &o.Recurrence, &base, &o.Label)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if o.BaseDate, err = domain.ParseDate(base); err != nil {
+		return nil, err
+	}
+	if o.Prefs, err = s.getOccasionPrefsRow(ctx, o.ID); err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (s *Store) getOccasionPrefsRow(ctx context.Context, occasionID string) (*OccasionPrefs, error) {
+	var offsets, channelIDs string
+	var enabled int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT offsets, channel_ids, enabled FROM occasion_prefs WHERE occasion_id = ?`, occasionID).
+		Scan(&offsets, &channelIDs, &enabled)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil // inherit — not an error
+	}
+	if err != nil {
+		return nil, err
+	}
+	p := &OccasionPrefs{OccasionID: occasionID, Enabled: enabled == 1, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}}
+	if err := json.Unmarshal([]byte(offsets), &p.Offsets); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(channelIDs), &p.ChannelIDs); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *Store) SetOccasionPrefs(ctx context.Context, p OccasionPrefs) error {
+	off, err := json.Marshal(p.Offsets)
+	if err != nil {
+		return err
+	}
+	ch, err := json.Marshal(p.ChannelIDs)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO occasion_prefs (occasion_id, offsets, channel_ids, enabled)
+		VALUES (?,?,?,?) ON CONFLICT(occasion_id) DO UPDATE SET offsets=excluded.offsets,
+		channel_ids=excluded.channel_ids, enabled=excluded.enabled`,
+		p.OccasionID, string(off), string(ch), boolInt(p.Enabled))
+	return err
+}
+
+func (s *Store) DeleteOccasionPrefs(ctx context.Context, occasionID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM occasion_prefs WHERE occasion_id = ?`, occasionID)
 	return err
 }
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"wimember/internal/domain"
 )
 
@@ -69,13 +71,14 @@ func seedContact(t *testing.T, s *Store) (User, ContactWithOccasions) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(1990, 5, 12), ""); err != nil {
+	if _, err := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AddOccasion(ctx, c.ID, domain.Birthday, domain.NewDate(1990, 5, 20), ""); err != nil {
+	if _, err := s.AddOccasion(ctx, c.ID, domain.Birthday, domain.RecurYearly, domain.NewDate(1990, 5, 20), ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetReminderPrefs(ctx, ReminderPrefs{ContactID: c.ID, Offsets: []int{1, 0}, ChannelIDs: []int64{}, Enabled: true}); err != nil {
+	if err := s.SetReminderPrefs(ctx, ReminderPrefs{ContactID: c.ID,
+		Offsets: domain.OffsetMap{domain.StreamEvent: {1, 0}}, ChannelIDs: []string{}, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	cw, err := s.GetContact(ctx, u.ID, c.ID)
@@ -92,7 +95,15 @@ func TestContactCRUD(t *testing.T) {
 	if len(cw.Occasions) != 2 {
 		t.Fatalf("occasions = %d", len(cw.Occasions))
 	}
-	if cw.Prefs == nil || len(cw.Prefs.Offsets) != 2 {
+	if _, err := uuid.Parse(cw.ID); err != nil {
+		t.Errorf("contact id not a uuid: %v", cw.ID)
+	}
+	for _, oc := range cw.Occasions {
+		if _, err := uuid.Parse(oc.ID); err != nil {
+			t.Errorf("occasion id not a uuid: %v", oc.ID)
+		}
+	}
+	if cw.Prefs == nil || len(cw.Prefs.Offsets[domain.StreamEvent]) != 2 {
 		t.Fatalf("wrong prefs: %+v", cw.Prefs)
 	}
 	if cw.Nickname != "Made" {
@@ -112,8 +123,8 @@ func TestContactCRUD(t *testing.T) {
 	if _, err := s.GetContact(context.Background(), v.ID, cw.ID); err == nil {
 		t.Error("accessing another user's contact must error")
 	}
-	// admin (ownerID 0) can
-	if _, err := s.GetContact(context.Background(), 0, cw.ID); err != nil {
+	// admin (ownerID "") can
+	if _, err := s.GetContact(context.Background(), "", cw.ID); err != nil {
 		t.Errorf("admin must be able to access: %v", err)
 	}
 
@@ -126,7 +137,7 @@ func TestContactCRUD(t *testing.T) {
 	}
 }
 
-func TestAddOccasionValidatesType(t *testing.T) {
+func TestAddOccasionValidatesTypeAndRecurrence(t *testing.T) {
 	s, _ := OpenInMemory()
 	defer s.Close()
 	// Note: the brief does not call Migrate(); the Task 2 store needs an explicit migration.
@@ -135,8 +146,21 @@ func TestAddOccasionValidatesType(t *testing.T) {
 	}
 	u, _ := s.GetOrCreateUser(context.Background(), "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(context.Background(), u.ID, "X", "", "")
-	if _, err := s.AddOccasion(context.Background(), c.ID, "bogus", domain.NewDate(2000, 1, 1), ""); err == nil {
-		t.Error("illegal type must be rejected")
+	// Custom types are allowed now (the fixed-type check lives in the API
+	// layer); the store rejects an empty type, an over-long type and an
+	// unknown recurrence.
+	if _, err := s.AddOccasion(context.Background(), c.ID, "", domain.RecurYearly, domain.NewDate(2000, 1, 1), ""); err == nil {
+		t.Error("empty type must be rejected")
+	}
+	tooLong := domain.OccurrenceType(strings.Repeat("x", 65))
+	if _, err := s.AddOccasion(context.Background(), c.ID, tooLong, domain.RecurYearly, domain.NewDate(2000, 1, 1), ""); err == nil {
+		t.Error("over-long type must be rejected")
+	}
+	if _, err := s.AddOccasion(context.Background(), c.ID, "wedding", "weekly", domain.NewDate(2000, 1, 1), ""); err == nil {
+		t.Error("illegal recurrence must be rejected")
+	}
+	if _, err := s.AddOccasion(context.Background(), c.ID, "wedding", domain.RecurAnniversary, domain.NewDate(2000, 1, 1), ""); err != nil {
+		t.Errorf("custom type with a valid recurrence must be accepted: %v", err)
 	}
 }
 
@@ -151,11 +175,11 @@ func TestDeleteOccasionOwnerScope(t *testing.T) {
 	b, _ := s.GetOrCreateUser(ctx, "b@x.id", "B", nil)
 	ca, _ := s.CreateContact(ctx, a.ID, "Contact A", "", "")
 	cb, _ := s.CreateContact(ctx, b.ID, "Contact B", "", "")
-	oa, err := s.AddOccasion(ctx, ca.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	oa, err := s.AddOccasion(ctx, ca.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ob, err := s.AddOccasion(ctx, cb.ID, domain.Otonan, domain.NewDate(1991, 6, 13), "")
+	ob, err := s.AddOccasion(ctx, cb.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1991, 6, 13), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,8 +202,79 @@ func TestDeleteOccasionOwnerScope(t *testing.T) {
 		t.Errorf("deleting an already deleted occasion must be ErrNotFound, got %v", err)
 	}
 
-	// admin (ownerID 0) can delete anyone's occasion
-	if err := s.DeleteOccasion(ctx, 0, oa.ID); err != nil {
+	// admin (ownerID "") can delete anyone's occasion
+	if err := s.DeleteOccasion(ctx, "", oa.ID); err != nil {
 		t.Errorf("admin deleting occasion failed: %v", err)
+	}
+}
+
+func TestOccasionPrefsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	st, _ := OpenInMemory()
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	u, err := st.GetOrCreateUser(ctx, "a@b.c", "A", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := st.CreateContact(ctx, u.ID, "Ani", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, err := st.AddOccasion(ctx, ct.ID, "anniversary", domain.RecurAnniversary, domain.NewDate(2025, 6, 16), "wedding")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := uuid.Parse(oc.ID); err != nil {
+		t.Fatalf("occasion id not a uuid: %v", oc.ID)
+	}
+	if err := st.SetOccasionPrefs(ctx, OccasionPrefs{OccasionID: oc.ID,
+		Offsets: domain.OffsetMap{domain.StreamMonthly: {1, 0}}, ChannelIDs: []string{}, Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.OccasionByID(ctx, u.ID, oc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Prefs == nil || got.Prefs.Enabled || len(got.Prefs.Offsets[domain.StreamMonthly]) != 2 {
+		t.Fatalf("prefs round-trip: %+v", got.Prefs)
+	}
+	if err := st.DeleteOccasionPrefs(ctx, oc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.OccasionByID(ctx, u.ID, oc.ID); got.Prefs != nil {
+		t.Fatalf("delete override: %+v", got.Prefs)
+	}
+}
+
+// OccasionByID is owner-scoped: another owner gets ErrNotFound, admin "" sees it.
+func TestOccasionByIDOwnerScope(t *testing.T) {
+	ctx := context.Background()
+	st, _ := OpenInMemory()
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.GetOrCreateUser(ctx, "a@x.id", "A", nil)
+	b, _ := st.GetOrCreateUser(ctx, "b@x.id", "B", nil)
+	ca, _ := st.CreateContact(ctx, a.ID, "Contact A", "", "")
+	oc, err := st.AddOccasion(ctx, ca.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.OccasionByID(ctx, b.ID, oc.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("other owner must get ErrNotFound, got %v", err)
+	}
+	got, err := st.OccasionByID(ctx, "", oc.ID)
+	if err != nil {
+		t.Fatalf("admin lookup failed: %v", err)
+	}
+	if got.Recurrence != domain.RecurOtonan || got.Type != domain.Otonan {
+		t.Errorf("round-trip mismatch: %+v", got)
+	}
+	if _, err := st.OccasionByID(ctx, a.ID, "not-a-uuid"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id must be ErrNotFound, got %v", err)
 	}
 }

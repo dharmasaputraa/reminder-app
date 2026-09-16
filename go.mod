@@ -6,6 +6,7 @@ require (
 	github.com/MicahParks/keyfunc/v3 v3.8.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.24.1
 	modernc.org/sqlite v1.58.0
 )
@@ -37,7 +38,6 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gohugoio/hashstructure v0.6.0 // indirect
 	github.com/gohugoio/hugo v0.164.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect

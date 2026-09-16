@@ -3,10 +3,12 @@ package store
 import (
 	"context"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type User struct {
-	ID    int64  `json:"id"`
+	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
 	Role  string `json:"role"`
@@ -20,8 +22,8 @@ func (s *Store) GetOrCreateUser(ctx context.Context, email, name string, adminEm
 		role = "admin"
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (email, name, role) VALUES (?,?,?) ON CONFLICT(email) DO NOTHING`,
-		email, name, role); err != nil {
+		`INSERT INTO users (id, email, name, role) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING`,
+		uuid.Must(uuid.NewV7()).String(), email, name, role); err != nil {
 		return User{}, err
 	}
 	var u User
@@ -32,7 +34,7 @@ func (s *Store) GetOrCreateUser(ctx context.Context, email, name string, adminEm
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, email, name, role FROM users ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, email, name, role FROM users ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}

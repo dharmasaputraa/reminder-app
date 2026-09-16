@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestChannelOwnerScope(t *testing.T) {
@@ -21,6 +23,9 @@ func TestChannelOwnerScope(t *testing.T) {
 	chB, err := s.CreateChannel(ctx, b.ID, "gotify", "channel-B", []byte(`{"x":1}`))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := uuid.Parse(chB.ID); err != nil {
+		t.Fatalf("channel id not a uuid: %v", chB.ID)
 	}
 
 	// owner A cannot toggle/delete B's channel (IDOR)
@@ -43,19 +48,19 @@ func TestChannelOwnerScope(t *testing.T) {
 		t.Errorf("enabled=false not stored: %+v", ch)
 	}
 
-	// admin (ownerID 0) can toggle + delete anyone's channel,
-	// consistent with the 0=admin convention in GetChannel/ListChannels
-	if err := s.SetChannelEnabled(ctx, 0, chB.ID, true); err != nil {
+	// admin (ownerID "") can toggle + delete anyone's channel,
+	// consistent with the ""=admin convention in GetChannel/ListChannels
+	if err := s.SetChannelEnabled(ctx, "", chB.ID, true); err != nil {
 		t.Errorf("admin must be able to toggle channel, got %v", err)
 	}
-	ch, err = s.GetChannel(ctx, 0, chB.ID)
+	ch, err = s.GetChannel(ctx, "", chB.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ch.Enabled {
 		t.Errorf("admin toggle: enabled=true not stored: %+v", ch)
 	}
-	if err := s.DeleteChannel(ctx, 0, chB.ID); err != nil {
+	if err := s.DeleteChannel(ctx, "", chB.ID); err != nil {
 		t.Errorf("admin must be able to delete channel, got %v", err)
 	}
 

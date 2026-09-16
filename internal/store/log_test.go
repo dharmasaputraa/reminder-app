@@ -17,7 +17,7 @@ func TestRecordNotificationDedupe(t *testing.T) {
 	ctx := context.Background()
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(ctx, u.ID, "Made", "", "")
-	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), "")
 	ch, _ := s.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc"))
 	occID := oc.ID
 	e := NotificationEntry{OccasionID: &occID, OccurrenceDate: domain.NewDate(2026, 6, 17),
@@ -45,7 +45,7 @@ func TestHasNotification(t *testing.T) {
 	ctx := context.Background()
 	u, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi", nil)
 	c, _ := s.CreateContact(ctx, u.ID, "Made", "", "")
-	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.NewDate(1990, 5, 12), "")
+	oc, _ := s.AddOccasion(ctx, c.ID, domain.Otonan, domain.RecurOtonan, domain.NewDate(1990, 5, 12), "")
 	ch, _ := s.CreateChannel(ctx, u.ID, "gotify", "home", []byte("enc"))
 	occID := oc.ID
 	e := NotificationEntry{OccasionID: &occID, OccurrenceDate: domain.NewDate(2026, 6, 17),
@@ -70,8 +70,12 @@ func TestHasNotification(t *testing.T) {
 	}
 
 	// different channel → not a duplicate
+	ch2, err := s.CreateChannel(ctx, u.ID, "gotify", "other", []byte("enc2"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	e2 := e
-	e2.ChannelID = ch.ID + 999
+	e2.ChannelID = ch2.ID
 	if got, err := s.HasNotification(ctx, e2); err != nil || got {
 		t.Errorf("other channel must be false: got=%v err=%v", got, err)
 	}

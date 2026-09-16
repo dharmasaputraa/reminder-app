@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestGetOrCreateUser(t *testing.T) {
@@ -23,7 +25,10 @@ func TestGetOrCreateUser(t *testing.T) {
 	}
 	u2, _ := s.GetOrCreateUser(ctx, "budi@x.id", "Budi Other", admins) // same email → no dup
 	if u2.ID != u1.ID {
-		t.Errorf("duplicate user: %d vs %d", u1.ID, u2.ID)
+		t.Errorf("duplicate user: %q vs %q", u1.ID, u2.ID)
+	}
+	if _, err := uuid.Parse(u1.ID); err != nil {
+		t.Errorf("user id not a uuid: %v", u1.ID)
 	}
 	u3, _ := s.GetOrCreateUser(ctx, "citra@x.id", "Citra", admins)
 	if u3.Role != "member" {
