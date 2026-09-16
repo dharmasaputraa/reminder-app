@@ -123,20 +123,20 @@ Behavior identical to today; layout rebuilt on the existing Field primitives:
 
 ## 5. Component installs
 
-Only three primitives are missing; tabs/switch/field already exist in this
-project as the same reui/base-nova versions, so installing their `c-*` demos
-would only add churn:
+The reui registry serves the `c-*` demos for free but license-gates the
+underlying primitives, and tabs/switch/field already exist in this project as
+the same base-nova versions. The three missing primitives are therefore written
+by hand in the project idiom, keeping the exported names the design assumes:
 
-```
-pnpm dlx shadcn@latest add @reui/c-accordion-6 @reui/c-item-6 @reui/c-empty-20
-```
+- `ui/accordion.tsx` — wrapper over `@base-ui/react/accordion` (Root, Item,
+  Header, Trigger with rotating chevron, Panel with `keepMounted` default so
+  collapsed editors keep their uncontrolled inputs).
+- `ui/item.tsx` — adapted from upstream shadcn `item` (MIT), `asChild` dropped
+  (this codebase merges elements via Base UI `render` props).
+- `ui/empty.tsx` — adapted from upstream shadcn `empty` (MIT).
 
-This brings `ui/accordion.tsx`, `ui/item.tsx`, `ui/empty.tsx` and the
-`@reui/badge` dependency item-6 needs. The CLI also drops the demo files
-(`c-accordion-6.tsx`, …) which reference a demo-only
-`@/app/(create)/components/icon-placeholder` that does not exist here — delete
-them, keep the primitives, and revert any changes the CLI makes to existing
-`ui/` files.
+`reui/badge` is not needed — the project's `ui/badge.tsx` already covers the
+variants used.
 
 ## 6. Loading / errors
 
