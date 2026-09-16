@@ -84,14 +84,13 @@ export function EventDetailFacts({ item }: { item: UpcomingItem }) {
       {item.type && (
         <DetailRow label="Type">
           {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
-          {item.number ? ` #${item.number}` : ''}
         </DetailRow>
       )}
       {item.contact_id && (
         <DetailRow label="Contact">
           <Link
             to="/reminder/contacts/$id"
-            params={{ id: String(item.contact_id) }}
+            params={{ id: item.contact_id }}
             className="text-indigo-600 hover:underline"
           >
             {item.contact_name ?? 'Open contact'}
@@ -137,9 +136,9 @@ export function ReminderTrigger({
 }: {
   kind: UpcomingItem['kind']
   /** Required when kind is 'occasion'. */
-  occasionId?: number
+  occasionId?: string
   /** Required when kind is 'occasion'. */
-  contactId?: number
+  contactId?: string
   date: string
   /** Holiday sends match on the title; occasions carry it for completeness. */
   title: string
@@ -152,7 +151,7 @@ export function ReminderTrigger({
     queryFn: () => api<{ channels: Channel[] }>('/channels'),
   })
   const send = useMutation({
-    mutationFn: (channelIds: number[]) =>
+    mutationFn: (channelIds: string[]) =>
       api<{ sent: number; failed: number }>('/upcoming/notify', {
         method: 'POST',
         body: JSON.stringify({

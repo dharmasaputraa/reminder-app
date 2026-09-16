@@ -1,4 +1,4 @@
-import type { UpcomingItem } from './api'
+import { UUID_SRC, type UpcomingItem } from './api'
 
 /** URL search contract for /reminder/ — see
  *  docs/superpowers/specs/2026-09-14-reminder-url-sync-design.md. */
@@ -11,7 +11,11 @@ export interface ReminderSearch {
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
-const EVENT_RE = /^(occasion-\d+|holiday)-\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
+const DATE_SRC = '\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])'
+/** Occasion ids are UUIDs now; the trailing date names the occurrence. */
+const EVENT_RE = new RegExp(`^(occasion-${UUID_SRC}|holiday)-${DATE_SRC}$`, 'i')
+const OCCASION_EVENT_RE = new RegExp(`^occasion-(${UUID_SRC})-(\\d{4}-\\d{2}-\\d{2})$`, 'i')
+const HOLIDAY_EVENT_RE = /^holiday-(\d{4}-\d{2}-\d{2})$/
 
 /** Route `validateSearch`: invalid params are overwritten with undefined.
  *  NOTE: this router version merges the validator's return over the raw
@@ -51,14 +55,14 @@ export function findReminderItem(
   items: UpcomingItem[],
   eventId: string
 ): UpcomingItem | undefined {
-  const occasion = eventId.match(/^occasion-(\d+)-(\d{4}-\d{2}-\d{2})$/)
+  const occasion = eventId.match(OCCASION_EVENT_RE)
   if (occasion) {
-    const id = Number(occasion[1])
+    const id = occasion[1]
     return items.find(
       (it) => it.kind === 'occasion' && it.occasion_id === id && it.date === occasion[2]
     )
   }
-  const holiday = eventId.match(/^holiday-(\d{4}-\d{2}-\d{2})$/)
+  const holiday = eventId.match(HOLIDAY_EVENT_RE)
   return holiday
     ? items.find((it) => it.kind === 'holiday' && it.date === holiday[1])
     : undefined

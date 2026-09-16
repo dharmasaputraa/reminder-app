@@ -1,6 +1,6 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { motion } from 'motion/react'
-import { ApiError, api, type Contact } from '../lib/api'
+import { ApiError, UUID_RE, api, type Contact } from '../lib/api'
 import { queryClient } from '../lib/query-client'
 import { pageTitle } from '../lib/page-title'
 import { validateContactDetailSearch } from '../lib/contacts-search'
@@ -18,15 +18,14 @@ import { useIsLg } from '@/hooks/use-lg'
 
 export const Route = createFileRoute('/reminder/contacts/$id')({
   beforeLoad: ({ params }) => {
-    // /new has its own static route; anything else non-numeric is a bad URL.
-    if (!/^\d+$/.test(params.id)) throw redirect({ to: '/reminder/contacts' })
+    // /new has its own static route; anything that is not a UUID is a bad URL.
+    if (!UUID_RE.test(params.id)) throw redirect({ to: '/reminder/contacts' })
   },
   // Warm the ['contact', id] cache the page's components share before
   // rendering, so a missing contact becomes the router's not-found state
-  // (defaultNotFoundComponent) instead of the page's inline fallback. Same
-  // normalized id as the components (Number → String) so the keys match.
+  // (defaultNotFoundComponent) instead of the page's inline fallback.
   loader: async ({ params }) => {
-    const id = String(Number(params.id))
+    const id = params.id
     try {
       return await queryClient.ensureQueryData({
         queryKey: ['contact', id],
@@ -76,7 +75,7 @@ function ContactDetailPage() {
           identity card sticks alongside. Order flips it below the card on
           mobile and back to the left at lg. */}
       <div className="order-2 min-w-0 flex-1 lg:order-1">
-        <ContactDetailContent contactId={Number(id)} variant="page" />
+        <ContactDetailContent contactId={id} variant="page" />
       </div>
 
       {/* Sticky identity column: the summary card is the base layer of one
@@ -91,7 +90,7 @@ function ContactDetailPage() {
       <div className="order-1 shrink-0 lg:order-2 lg:sticky lg:top-0 lg:w-[300px] xl:w-[340px]">
         <div className="relative overflow-hidden rounded-xl border bg-card lg:min-h-[361px]">
           <div inert={editOpen}>
-            <ContactSummaryCard contactId={Number(id)} onEdit={openEdit} />
+            <ContactSummaryCard contactId={id} onEdit={openEdit} />
           </div>
           {isLg && (
             <motion.div
@@ -103,7 +102,7 @@ function ContactDetailPage() {
               className="absolute inset-0 z-20 flex flex-col bg-card"
             >
               <ContactEditForm
-                contactId={Number(id)}
+                contactId={id}
                 variant="panel"
                 onClose={closeEdit}
                 onSaved={closeEdit}
@@ -125,7 +124,7 @@ function ContactDetailPage() {
                   Name, nickname, and notes — saved in place.
                 </DialogDescription>
               </DialogHeader>
-              <ContactEditForm contactId={Number(id)} variant="dialog" onSaved={closeEdit} />
+              <ContactEditForm contactId={id} variant="dialog" onSaved={closeEdit} />
             </DialogContent>
           )}
         </Dialog>

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { ChevronRightIcon, Maximize2Icon, Trash2Icon, XIcon } from 'lucide-react'
 import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
 import { initials } from '@/lib/initials'
-import { hydratePrefsForm } from '@/lib/prefs'
+import { hydratePrefsForm, parseList } from '@/lib/prefs'
 import { useUpcomingByOccasion } from '@/components/contacts/contacts-grid'
 import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-selector-popover'
 import type { DateSelectorValue } from '@/components/reui/date-selector'
@@ -58,7 +58,7 @@ function shortDate(iso: string): string {
 }
 
 interface ContactDetailContentProps {
-  contactId: number
+  contactId: string
   /** docked = read-only right section of /reminder/contacts;
    *  page = the editable sections column of /reminder/contacts/$id —
    *  occasions/preferences are edited in place; identity + actions live
@@ -67,7 +67,7 @@ interface ContactDetailContentProps {
 }
 
 export function ContactDetailContent({ contactId, variant }: ContactDetailContentProps) {
-  const id = String(contactId)
+  const id = contactId
   const qc = useQueryClient()
   const nav = useNavigate()
 
@@ -86,13 +86,15 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
   const [date, setDate] = useState('')
   const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
   const [pawukon, setPawukon] = useState('')
-  const [offsets, setOffsets] = useState('')
+  const [yearly, setYearly] = useState('')
+  const [monthly, setMonthly] = useState('')
   const [enabled, setEnabled] = useState(true)
 
   useEffect(() => {
     if (!contact.data) return
     const form = hydratePrefsForm(contact.data.prefs)
-    setOffsets(form.offsets)
+    setYearly(form.yearly)
+    setMonthly(form.monthly)
     setEnabled(form.enabled)
   }, [contact.data])
 
@@ -116,7 +118,7 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
     onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })
   const delOcc = useMutation({
-    mutationFn: (oid: number) => api(`/occasions/${oid}`, { method: 'DELETE' }),
+    mutationFn: (oid: string) => api(`/occasions/${oid}`, { method: 'DELETE' }),
     onSuccess: invalidate,
     onError: (e) => toast.error(`Failed to delete occasion: ${String(e)}`),
   })
@@ -218,22 +220,30 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
         )}
       </DetailRow>
       <DetailRow label="Offsets">
-        {c.prefs?.offsets?.length ? (
-          <span className="flex flex-wrap justify-end gap-1">
-            {[...c.prefs.offsets].sort((a, b) => b - a).map((n, i) => (
-              <Badge key={`${n}-${i}`} variant="secondary">D-{n}</Badge>
-            ))}
-          </span>
-        ) : (
-          <>
-            Default
-            {settings.data && (
-              <span className="text-muted-foreground font-normal">
-                {' '}({settings.data.default_offsets.map((n) => `D-${n}`).join(', ')})
-              </span>
-            )}
-          </>
-        )}
+        {(() => {
+          // Offsets are a per-stream map now; this read-only row shows the
+          // union of every stream's list (the per-stream editor is Task 10).
+          const offs = [...new Set(Object.values(c.prefs?.offsets ?? {}).flat())].sort((a, b) => b - a)
+          if (offs.length === 0) {
+            return (
+              <>
+                Default
+                {settings.data && (
+                  <span className="text-muted-foreground font-normal">
+                    {' '}({settings.data.default_offsets.map((n) => `D-${n}`).join(', ')})
+                  </span>
+                )}
+              </>
+            )
+          }
+          return (
+            <span className="flex flex-wrap justify-end gap-1">
+              {offs.map((n) => (
+                <Badge key={n} variant="secondary">D-{n}</Badge>
+              ))}
+            </span>
+          )
+        })()}
       </DetailRow>
       <DetailRow label="Channels">
         {(() => {
@@ -492,19 +502,33 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
           <p className="text-muted-foreground text-sm">
             Global default: {(settings.data?.default_offsets ?? []).map((n) => `D-${n}`).join(', ')} · send time {settings.data?.send_time}
           </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="pref-offsets">Custom offsets</Label>
-            <Input
-              id="pref-offsets"
-              value={offsets}
-              onChange={(e) => setOffsets(e.target.value)}
-              placeholder="e.g. 7, 4, 2, 1, 0"
-              className="w-full sm:max-w-xs"
-            />
-            <p className="text-muted-foreground text-xs">
-              Days before the occasion. Empty uses the global default.
-            </p>
+          {/* Offsets are per recurrence stream now (map wire shape); the
+              minimal contact form edits the yearly + monthly lists. */}
+          <div className="grid gap-3 sm:grid-cols-2 sm:max-w-md">
+            <div className="space-y-1.5">
+              <Label htmlFor="pref-yearly-offsets">Yearly offsets</Label>
+              <Input
+                id="pref-yearly-offsets"
+                value={yearly}
+                onChange={(e) => setYearly(e.target.value)}
+                placeholder="e.g. 30, 7, 0"
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pref-monthly-offsets">Monthly offsets</Label>
+              <Input
+                id="pref-monthly-offsets"
+                value={monthly}
+                onChange={(e) => setMonthly(e.target.value)}
+                placeholder="e.g. 1, 0"
+                className="w-full"
+              />
+            </div>
           </div>
+          <p className="text-muted-foreground text-xs">
+            Days before the occasion. Empty uses the global default for that stream.
+          </p>
           <label className="flex items-center gap-2 text-sm font-medium">
             <Switch checked={enabled} onCheckedChange={(v) => setEnabled(v === true)} />
             Active
@@ -534,7 +558,7 @@ export function ContactDetailContent({ contactId, variant }: ContactDetailConten
           <div className="flex justify-end">
             <Button
               onClick={() => savePrefs.mutate({
-                offsets: offsets.trim() ? offsets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)) : [],
+                offsets: { yearly: parseList(yearly), monthly: parseList(monthly) },
                 enabled,
               })}
             >

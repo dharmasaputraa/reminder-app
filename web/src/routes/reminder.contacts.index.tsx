@@ -38,13 +38,13 @@ function Contacts() {
   const contacts = useQuery({ queryKey: ['contacts'], queryFn: () => api<{ contacts: Contact[] }>('/contacts') })
   const next = useNextReminderMap()
 
-  const selectedId = typeof c === 'number' ? c : undefined
+  const selectedId = c === 'new' ? undefined : c
 
   /** Spec history contract: docked selection REPLACES (browsing rows leaves
    *  one history entry); below lg a row is ordinary navigation to the page. */
-  const select = (id: number) => {
+  const select = (id: string) => {
     if (!isLg) {
-      nav({ to: '/reminder/contacts/$id', params: { id: String(id) } })
+      nav({ to: '/reminder/contacts/$id', params: { id } })
       return
     }
     nav({ search: (prev: ContactsSearch) => ({ ...prev, c: id }), replace: true })
@@ -78,7 +78,7 @@ function Contacts() {
   // The aside stays mounted so the close tween runs on a fully-rendered panel;
   // keep the last opened value rendered while `?c` is gone, so the collapsing
   // panel doesn't blank out mid-animation.
-  const [lastC, setLastC] = useState<number | 'new' | null>(null)
+  const [lastC, setLastC] = useState<string | 'new' | null>(null)
   if (c !== undefined && c !== lastC) setLastC(c)
   const panelC = c ?? lastC
 

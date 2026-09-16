@@ -27,7 +27,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface ContactSummaryCardProps {
-  contactId: number
+  contactId: string
   /** Renders the Edit action; the host opens the edit overlay (lg) or the
    *  edit dialog (below lg) — identity-only editing. */
   onEdit?: () => void
@@ -40,7 +40,7 @@ interface ContactSummaryCardProps {
  *  visual card. Shares the ['contact', id] query key with the sections
  *  column (ContactDetailContent); react-query serves both from one fetch. */
 export function ContactSummaryCard({ contactId, onEdit }: ContactSummaryCardProps) {
-  const id = String(contactId)
+  const id = contactId
   const qc = useQueryClient()
   const nav = useNavigate()
 
