@@ -818,6 +818,44 @@ func TestOccasionPrefsEndpoints(t *testing.T) {
 	}
 }
 
+// Path ids are canonicalized before they reach the store: SQLite compares ids
+// with the BINARY collation, so an uppercase (pasted) UUID must resolve to the
+// same row as the stored lowercase form instead of 404ing — on contacts and on
+// the per-occasion endpoints alike.
+func TestPathIDUppercaseResolves(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid,
+		`{"type":"birthday","date":"1990-05-12","recurrence":"yearly"}`)
+
+	// GET contact with the id uppercased → the same contact.
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "GET", "/api/v1/contacts/"+strings.ToUpper(cid), "admin@x.id", ""))
+	if w.Code != 200 {
+		t.Fatalf("GET contact with uppercase id: %d %s", w.Code, w.Body.String())
+	}
+	var c store.Contact
+	if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.ID != cid {
+		t.Errorf("contact id = %q, want %q", c.ID, cid)
+	}
+
+	// A write through the uppercased occasion id lands on the stored row
+	// (read back through the canonical id).
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/occasions/"+strings.ToUpper(occID)+"/prefs", "admin@x.id",
+		`{"offsets":{"yearly":[1,0]}}`))
+	if w.Code != 200 {
+		t.Fatalf("PUT occasion prefs with uppercase id: %d %s", w.Code, w.Body.String())
+	}
+	oc := contactOccasion(t, srv, "admin@x.id", cid, occID)
+	if oc.Prefs == nil || !reflect.DeepEqual(oc.Prefs.Offsets[domain.StreamYearly], []int{1, 0}) {
+		t.Errorf("uppercase-id PUT did not reach the stored occasion: %+v", oc.Prefs)
+	}
+}
+
 // Suggestions: the caller's used types plus the built-ins, deduped and stable.
 func TestOccasionTypesSuggestions(t *testing.T) {
 	srv, _ := newTestServer(t, "admin@x.id")

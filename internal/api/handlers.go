@@ -31,14 +31,17 @@ func respondErr(c *gin.Context, err error) {
 }
 
 // pathID: ids are UUIDs; a malformed one can never exist, so it is a 404
-// (not a 400) — the route's resource simply is not there.
+// (not a 400) — the route's resource simply is not there. Parsing also
+// canonicalizes the id (lowercase, hyphenated): SQLite compares ids with the
+// BINARY collation, so a pasted uppercase UUID must resolve to the same row as
+// the stored lowercase form instead of 404ing.
 func pathID(c *gin.Context) (string, bool) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
+	u, err := uuid.Parse(c.Param("id"))
+	if err != nil {
 		c.JSON(404, gin.H{"error": "not found"})
 		return "", false
 	}
-	return id, true
+	return u.String(), true
 }
 
 func (s *Server) handleMe(c *gin.Context) {

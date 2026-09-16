@@ -34,7 +34,7 @@ const KATEGORI = [
 /** Per-stream fallback offsets. Every stream needs a non-empty list — the
  *  backend rejects an empty one (it would make the fallback meaningless). */
 const RECURRENCE_STREAMS = [
-  { key: 'event', label: 'Event (one-time)', placeholder: '30,7,4,2,1,0' },
+  { key: 'event', label: 'Event (base date)', placeholder: '30,7,4,2,1,0' },
   { key: 'yearly', label: 'Yearly marks', placeholder: '30,7,4,2,1,0' },
   { key: 'monthly', label: 'Monthly marks', placeholder: '0' },
   { key: 'otonan', label: 'Otonan marks', placeholder: '7,4,2,1,0' },
