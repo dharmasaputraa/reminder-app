@@ -42,6 +42,8 @@ Profiles can be combined, e.g. `docker compose --profile cloudflared --profile g
 
 **Cloudflared on the host (common setup):** the app publishes port `APP_PORT` (default `8080`) to the host — point your cloudflared tunnel at `http://localhost:8080` (adjust `APP_PORT` in `.env` if the port is taken). Authentication still comes from **Cloudflare Access** on the Cloudflare side (team domain + email policy), not from the container.
 
+> **v0.x breaking change:** IDs are now UUIDv7 and occasions gained recurrence — delete your old `data/wimember.db` (schema is incompatible); take a backup first if needed.
+
 ### Environment
 
 | Variable | Required | Default | Description |
