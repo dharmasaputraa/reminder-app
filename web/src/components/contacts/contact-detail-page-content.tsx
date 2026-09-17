@@ -55,9 +55,9 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   return (
     <Card>
       <Tabs defaultValue="occasions">
-        {/* Same title-bar anatomy as the edit panel's header: h-11 bar, the
-            segmented tabs vertically centered, hairline below. */}
-        <div className="flex h-11 shrink-0 items-center border-b px-3">
+        {/* Same title-bar anatomy as the agenda panel's header: h-11 bar,
+            px-4, content vertically centered, hairline below. */}
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
           <TabsList>
             <TabsTrigger value="occasions">
               <CalendarDaysIcon data-icon="inline-start" aria-hidden="true" />
