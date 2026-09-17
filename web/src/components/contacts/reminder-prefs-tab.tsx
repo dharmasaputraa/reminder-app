@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { api, type Channel, type Contact, type Settings } from '@/lib/api'
 import { defaultSummary, hydratePrefsForm, invalidateContactReminders, parseList } from '@/lib/prefs'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Field,
@@ -52,10 +53,15 @@ export function ReminderPrefsTab({
   })
 
   return (
-    <div className="space-y-4">
-      <p className="text-muted-foreground text-sm">
-        Global defaults — {defaultSummary(settings)} · send time {settings?.send_time}
-      </p>
+    // The tab's own card: titled header, form body below.
+    <Card className="gap-0 py-0">
+      <div className="flex h-11 shrink-0 items-center border-b px-4">
+        <CardTitle className="text-sm font-semibold">Reminder Preferences</CardTitle>
+      </div>
+      <CardContent className="space-y-4 p-4">
+        <p className="text-muted-foreground text-sm">
+          Global defaults — {defaultSummary(settings)} · send time {settings?.send_time}
+        </p>
       <FieldGroup>
         <div className="grid gap-3 sm:grid-cols-2 sm:max-w-md">
           <Field>
@@ -131,6 +137,7 @@ export function ReminderPrefsTab({
           Save preferences
         </Button>
       </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -25,14 +25,21 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
 
   if (contact.isLoading) {
     return (
-      <div className="rounded-xl border bg-card">
-        <div className="flex h-11 items-center border-b px-4">
-          <Skeleton className="h-8 w-64" />
+      <div className="space-y-4">
+        <div className="rounded-xl bg-card ring-1 ring-foreground/10">
+          <div className="flex h-11 items-center px-3">
+            <Skeleton className="h-8 w-64" />
+          </div>
         </div>
-        <div className="space-y-2.5 px-4 py-4">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-4 w-3/4" />
+        <div className="rounded-xl bg-card ring-1 ring-foreground/10">
+          <div className="flex h-11 items-center border-b px-4">
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <div className="space-y-2.5 p-4">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
         </div>
       </div>
     )
@@ -53,12 +60,11 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   const channelList = channels.data?.channels ?? []
 
   return (
-    // Same card structure as the edit contact card: the h-11 title bar sits
-    // FLUSH at the top of the card — the Card's built-in padding/gap are
-    // removed so the hairline spans edge to edge.
-    <Card className="gap-0 py-0">
-      <Tabs defaultValue="occasions" className="flex flex-col">
-        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
+    // The tabs live on their own card; each tab renders its own titled card
+    // below (Occasions / Reminder Preferences).
+    <Tabs defaultValue="occasions" className="flex flex-col gap-4">
+      <Card className="gap-0 py-0">
+        <div className="flex h-11 items-center px-3">
           <TabsList>
             <TabsTrigger value="occasions">
               <CalendarDaysIcon data-icon="inline-start" aria-hidden="true" />
@@ -70,13 +76,13 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
             </TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="occasions" keepMounted className="p-4">
-          <OccasionsTab contact={c} channels={channelList} />
-        </TabsContent>
-        <TabsContent value="prefs" keepMounted className="p-4">
-          <ReminderPrefsTab contact={c} channels={channelList} settings={settings.data} />
-        </TabsContent>
-      </Tabs>
-    </Card>
+      </Card>
+      <TabsContent value="occasions" keepMounted>
+        <OccasionsTab contact={c} channels={channelList} />
+      </TabsContent>
+      <TabsContent value="prefs" keepMounted>
+        <ReminderPrefsTab contact={c} channels={channelList} settings={settings.data} />
+      </TabsContent>
+    </Tabs>
   )
 }

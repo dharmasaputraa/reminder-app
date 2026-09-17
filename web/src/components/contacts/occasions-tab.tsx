@@ -38,6 +38,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -103,41 +104,38 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
     </Dialog>
   )
 
-  if (contact.occasions.length === 0) {
-    return (
-      <>
-        <Empty className="py-10">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <CalendarDaysIcon aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyTitle>No occasions yet</EmptyTitle>
-            <EmptyDescription>
-              Add a birthday, anniversary, or any recurring date to start getting reminders.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <PlusIcon data-icon="inline-start" aria-hidden="true" />
-              Add occasion
-            </Button>
-          </EmptyContent>
-        </Empty>
-        {addDialog}
-      </>
-    )
-  }
-
   return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
+    // The tab's own card: titled header with the Add action (justify-between),
+    // list body below.
+    <Card className="gap-0 py-0">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
+        <CardTitle className="text-sm font-semibold">Occasions</CardTitle>
         <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
           <PlusIcon data-icon="inline-start" aria-hidden="true" />
-          Add occasion
+          Add
         </Button>
       </div>
-
-      <Accordion className="space-y-2">
+      <CardContent className="p-4">
+        {contact.occasions.length === 0 ? (
+          <Empty className="py-10">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CalendarDaysIcon aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>No occasions yet</EmptyTitle>
+              <EmptyDescription>
+                Add a birthday, anniversary, or any recurring date to start getting reminders.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                Add occasion
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <Accordion className="space-y-2">
         {contact.occasions.map((o) => {
           const up = upcomingByOccasion.get(o.id)
           const TypeIcon = TYPE_ICONS[o.type] ?? CalendarDaysIcon
@@ -237,7 +235,9 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
           )
         })}
       </Accordion>
+      )}
       {addDialog}
-    </div>
+      </CardContent>
+    </Card>
   )
 }
