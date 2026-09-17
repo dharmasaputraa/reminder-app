@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Occasion } from '@/lib/api'
@@ -50,36 +50,43 @@ const RECURRENCE_ITEMS: { value: Occasion['recurrence']; label: string }[] = [
   { value: 'otonan', label: 'Otonan (every 210 days)' },
 ]
 
-/** The add-an-occasion form, rendered inside OccasionsTab's dialog. Same
- *  fields and behavior as the original bottom-of-card section; on success it
- *  toasts, resets the entry fields (so several can be entered in a row), and
- *  calls onSaved — the host closes the dialog. */
-export function AddOccasionForm({
+/** Add-or-edit occasion form, rendered inside OccasionsTab's dialogs. With
+ *  `occasion` it edits: fields initialize from the row and a save PATCHes it;
+ *  without, it adds via POST and resets so several can be entered in a row.
+ *  Both call onSaved after success — the host closes the dialog. */
+export function OccasionForm({
   contactId,
+  occasion,
   onSaved,
 }: {
   contactId: string
-  /** Called after a successful add — the host closes the dialog. */
+  /** Present → edit this occasion instead of adding a new one. */
+  occasion?: Occasion
+  /** Called after a successful save — the host closes the dialog. */
   onSaved?: () => void
 }) {
+  const editing = occasion !== undefined
   const qc = useQueryClient()
-  const [type, setType] = useState('otonan') // built-in value or 'custom'
-  const [customType, setCustomType] = useState('') // free text when type === 'custom'
-  const [recurrence, setRecurrence] = useState<Occasion['recurrence']>('yearly')
-  const [label, setLabel] = useState('')
-  const [date, setDate] = useState('')
-  const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(undefined)
+  const [type, setType] = useState(() => {
+    if (!occasion) return 'otonan' // built-in value or 'custom'
+    return TYPE_ITEMS.some((i) => i.value === occasion.type) ? occasion.type : 'custom'
+  })
+  const [customType, setCustomType] = useState(
+    () => occasion?.type ?? '', // free text when type === 'custom'
+  )
+  const [recurrence, setRecurrence] = useState<Occasion['recurrence']>(
+    () => occasion?.recurrence ?? 'yearly',
+  )
+  const [label, setLabel] = useState(() => occasion?.label ?? '')
+  const [date, setDate] = useState(() => occasion?.base_date ?? '')
+  const [dateSel, setDateSel] = useState<DateSelectorValue | undefined>(() =>
+    // Edit mode: seed the picker so it shows the loaded date, not the placeholder.
+    occasion ? { period: 'day', operator: 'is', startDate: parseISO(occasion.base_date) } : undefined,
+  )
   const [pawukon, setPawukon] = useState('')
 
   const custom = type === 'custom'
   const effectiveType = custom ? customType.trim() : type
-
-  // Built-in types imply their recurrence (birthday → yearly, otonan →
-  // otonan, anniversary → anniversary); "Custom…" leaves the current pick.
-  useEffect(() => {
-    const auto = TYPE_RECURRENCE[type]
-    if (auto) setRecurrence(auto)
-  }, [type])
 
   // Custom-type suggestions: the caller's own previously used types (the
   // built-ins already have select options), fetched only while custom.
@@ -110,45 +117,70 @@ export function AddOccasionForm({
     }
   }, [date, recurrence])
 
-  const addOcc = useMutation({
+  const saveOcc = useMutation({
     mutationFn: () =>
-      api(`/contacts/${contactId}/occasions`, {
-        method: 'POST',
-        body: JSON.stringify({ type: effectiveType, recurrence, date, label: label.trim() }),
-      }),
+      editing
+        ? api(`/occasions/${occasion.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ type: effectiveType, recurrence, date, label: label.trim() }),
+          })
+        : api(`/contacts/${contactId}/occasions`, {
+            method: 'POST',
+            body: JSON.stringify({ type: effectiveType, recurrence, date, label: label.trim() }),
+          }),
     onSuccess: () => {
-      setDate('')
-      setDateSel(undefined)
-      setPawukon('')
-      setLabel('')
-      setCustomType('')
+      if (!editing) {
+        setDate('')
+        setDateSel(undefined)
+        setPawukon('')
+        setLabel('')
+        setCustomType('')
+      }
       invalidateContactReminders(qc, contactId)
-      toast.success('Occasion added')
+      toast.success(editing ? 'Occasion updated' : 'Occasion added')
       onSaved?.()
     },
-    onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
+    onError: (e) => toast.error(`Failed to ${editing ? 'update' : 'add'} occasion: ${String(e)}`),
   })
 
   // Dialog body + footer action — the DialogFooter primitive gives the same
   // full-bleed muted band as the other dialogs (event detail, day events).
+  // Wrapped in a form so Enter in the text inputs submits; the select and
+  // date triggers keep Enter for opening their own popups (focus sits on
+  // their buttons, which never triggers implicit submission).
   return (
-    <>
-      <div className="text-sm">
-        <FieldGroup className="gap-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!date || !effectiveType || saveOcc.isPending) return
+        saveOcc.mutate()
+      }}
+    >
+      {/* pb-5: extra air between the last field and the footer band. */}
+      <div className="pb-5 text-sm">
+        <FieldGroup className="gap-3">
           <Field>
-            <FieldLabel htmlFor="occ-add-type">Type</FieldLabel>
+            <FieldLabel htmlFor="occ-type">Type</FieldLabel>
               <Select
                 items={TYPE_ITEMS}
                 value={type}
                 onValueChange={(v) => {
-                  if (!v) return
-                  // "Custom…" falls back to yearly while the recurrence is
-                  // still the previous type's default — a manual pick is kept.
-                  if (v === 'custom' && recurrence === TYPE_RECURRENCE[type]) setRecurrence('yearly')
+                  if (!v || v === type) return
+                  // Built-in types imply their recurrence (birthday → yearly,
+                  // otonan → otonan, anniversary → anniversary) — only on a
+                  // user pick, never on mount, so an edit form's loaded
+                  // recurrence (e.g. a birthday set to monthly) survives.
+                  // "Custom…" keeps the current pick unless it is still the
+                  // previous type's default, which falls back to yearly.
+                  if (v === 'custom') {
+                    if (recurrence === TYPE_RECURRENCE[type]) setRecurrence('yearly')
+                  } else {
+                    setRecurrence(TYPE_RECURRENCE[v])
+                  }
                   setType(v)
                 }}
               >
-                <SelectTrigger id="occ-add-type" className="w-full">
+                <SelectTrigger id="occ-type" className="w-full">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false}>
@@ -163,7 +195,7 @@ export function AddOccasionForm({
               </Select>
             </Field>
             <Field>
-              <FieldLabel htmlFor="occ-add-recurrence">Recurrence</FieldLabel>
+              <FieldLabel htmlFor="occ-recurrence">Recurrence</FieldLabel>
               <Select
                 items={RECURRENCE_ITEMS}
                 value={recurrence}
@@ -172,7 +204,7 @@ export function AddOccasionForm({
                   setRecurrence(v)
                 }}
               >
-                <SelectTrigger id="occ-add-recurrence" className="w-full">
+                <SelectTrigger id="occ-recurrence" className="w-full">
                   <SelectValue placeholder="Recurrence" />
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false}>
@@ -189,9 +221,9 @@ export function AddOccasionForm({
             </Field>
           {custom && (
             <Field>
-              <FieldLabel htmlFor="occ-add-custom">Custom type</FieldLabel>
+              <FieldLabel htmlFor="occ-custom">Custom type</FieldLabel>
               <Input
-                id="occ-add-custom"
+                id="occ-custom"
                 value={customType}
                 onChange={(e) => setCustomType(e.target.value)}
                 placeholder="e.g. graduation"
@@ -217,6 +249,7 @@ export function AddOccasionForm({
                   const d = dateSelectorValueToDate(v)
                   setDate(d ? format(d, 'yyyy-MM-dd') : '')
                 }}
+                autoApply
                 placeholder="Pick a date"
                 minYear={1800}
                 maxYear={new Date().getFullYear() + 10}
@@ -229,9 +262,9 @@ export function AddOccasionForm({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="occ-add-label">Label</FieldLabel>
+              <FieldLabel htmlFor="occ-label">Label</FieldLabel>
               <Input
-                id="occ-add-label"
+                id="occ-label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="Optional, e.g. Wedding"
@@ -244,10 +277,10 @@ export function AddOccasionForm({
         </FieldGroup>
       </div>
       <DialogFooter>
-        <Button disabled={!date || !effectiveType || addOcc.isPending} onClick={() => addOcc.mutate()}>
-          Add occasion
+        <Button type="submit" disabled={!date || !effectiveType || saveOcc.isPending}>
+          {editing ? 'Save changes' : 'Add occasion'}
         </Button>
       </DialogFooter>
-    </>
+    </form>
   )
 }

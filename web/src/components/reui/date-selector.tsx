@@ -249,6 +249,13 @@ interface UseDateSelectorOptions {
   /** After picking a month, jump straight to the Day tab (pick-a-date flows).
    *  Without it the month pick only re-anchors the day calendar. */
   monthCascadesToDay?: boolean
+  /** Fires once per completed user pick — a day/period/year click that
+   *  finishes a selection, a fully-typed value, or an explicit clear (X).
+   *  Unlike `onChange` it never fires for mount noise or internal state
+   *  cycles, so commit-on-pick popovers can rely on it. Picks that act as
+   *  drill-down navigation (month → day cascade, year → month cascade, the
+   *  first endpoint of a range) don't fire it. */
+  onPick?: (value: DateSelectorValue | undefined) => void
 }
 
 export function useDateSelector({
@@ -264,6 +271,7 @@ export function useDateSelector({
   maxYear,
   periodTypes,
   monthCascadesToDay = false,
+  onPick,
 }: UseDateSelectorOptions) {
   const currentYear = baseYear ?? new Date().getFullYear()
 
@@ -364,28 +372,41 @@ export function useDateSelector({
 
   const handleDayClick = useCallback(
     (day: Date) => {
+      const operator = presetMode ?? filterType
       if (filterType === "between" && allowRange) {
         if (!selectedDate || (selectedDate && selectedEndDate)) {
           setSelectedDate(day)
           setSelectedEndDate(undefined)
+        } else if (isBefore(day, selectedDate)) {
+          setSelectedEndDate(selectedDate)
+          setSelectedDate(day)
+          onPick?.({
+            period: periodType,
+            operator,
+            startDate: day,
+            endDate: selectedDate,
+          })
         } else {
-          if (isBefore(day, selectedDate)) {
-            setSelectedEndDate(selectedDate)
-            setSelectedDate(day)
-          } else {
-            setSelectedEndDate(day)
-          }
+          setSelectedEndDate(day)
+          onPick?.({
+            period: periodType,
+            operator,
+            startDate: selectedDate,
+            endDate: day,
+          })
         }
       } else {
         setSelectedDate(day)
         setSelectedEndDate(undefined)
+        onPick?.({ period: periodType, operator, startDate: day })
       }
     },
-    [filterType, allowRange, selectedDate, selectedEndDate]
+    [filterType, allowRange, selectedDate, selectedEndDate, onPick, periodType, presetMode]
   )
 
   const handlePeriodSelect = useCallback(
     (year: number, value: number) => {
+      const operator = presetMode ?? filterType
       if (filterType === "between" && allowRange) {
         if (!rangeStart || (rangeStart && rangeEnd)) {
           setRangeStart({ year, value })
@@ -397,12 +418,24 @@ export function useDateSelector({
         } else {
           const startKey = rangeStart.year * 100 + rangeStart.value
           const endKey = year * 100 + value
+          const start = endKey < startKey ? { year, value } : rangeStart
+          const end = endKey < startKey ? rangeStart : { year, value }
           if (endKey < startKey) {
             setRangeEnd(rangeStart)
             setRangeStart({ year, value })
           } else {
             setRangeEnd({ year, value })
           }
+          onPick?.({
+            period: periodType,
+            operator,
+            year: start.year,
+            month: periodType === "month" ? start.value : undefined,
+            quarter: periodType === "quarter" ? start.value : undefined,
+            halfYear: periodType === "half-year" ? start.value : undefined,
+            rangeStart: start,
+            rangeEnd: end,
+          })
         }
       } else {
         setSelectedYear(year)
@@ -410,50 +443,74 @@ export function useDateSelector({
           setSelectedMonth(value)
           // Re-anchor the day picker on the chosen month, so a Month pick
           // doubles as navigation for picking an exact day. When opted in,
-          // also cascade straight to the Day tab.
+          // also cascade straight to the Day tab — that makes the month click
+          // pure navigation, so only a non-cascading pick commits.
           setCalendarMonth(new Date(year, value, 1))
           if (
             monthCascadesToDay &&
             (!periodTypes || periodTypes.includes("day"))
           ) {
             setPeriodType("day")
+          } else {
+            onPick?.({ period: periodType, operator, year, month: value })
           }
         }
-        if (periodType === "quarter") setSelectedQuarter(value)
-        if (periodType === "half-year") setSelectedHalfYear(value)
+        if (periodType === "quarter") {
+          setSelectedQuarter(value)
+          onPick?.({ period: periodType, operator, year, quarter: value })
+        }
+        if (periodType === "half-year") {
+          setSelectedHalfYear(value)
+          onPick?.({ period: periodType, operator, year, halfYear: value })
+        }
         setRangeStart(undefined)
         setRangeEnd(undefined)
       }
     },
-    [filterType, allowRange, rangeStart, rangeEnd, periodType, periodTypes, monthCascadesToDay]
+    [filterType, allowRange, rangeStart, rangeEnd, periodType, periodTypes, monthCascadesToDay, onPick, presetMode]
   )
 
   const handleYearSelect = useCallback(
     (year: number) => {
+      const operator = presetMode ?? filterType
+      // A year click drills into the month grid when months are offered —
+      // navigation, not a completed pick. With no month tab the year is the
+      // leaf, so the click commits.
+      const drillsToMonth = !periodTypes || periodTypes.includes("month")
       if (filterType === "between" && allowRange) {
         if (!rangeStart || (rangeStart && rangeEnd)) {
           setRangeStart({ year, value: 0 })
           setRangeEnd(undefined)
           setSelectedYear(year)
         } else {
+          const start = year < rangeStart.year ? { year, value: 0 } : rangeStart
+          const end = year < rangeStart.year ? rangeStart : { year, value: 0 }
           if (year < rangeStart.year) {
             setRangeEnd(rangeStart)
             setRangeStart({ year, value: 0 })
           } else {
             setRangeEnd({ year, value: 0 })
           }
+          onPick?.({
+            period: "year",
+            operator,
+            year: start.year,
+            rangeStart: start,
+            rangeEnd: end,
+          })
         }
       } else {
         setSelectedYear(year)
         // Cascade down: a Year pick lands on that year's month grid (and
         // month keeps cascading to day), so the tabs drill down instead of
         // dead-ending.
-        if (!periodTypes || periodTypes.includes("month")) setPeriodType("month")
+        if (drillsToMonth) setPeriodType("month")
+        else onPick?.({ period: "year", operator, year })
         setRangeStart(undefined)
         setRangeEnd(undefined)
       }
     },
-    [filterType, allowRange, rangeStart, rangeEnd, periodTypes]
+    [filterType, allowRange, rangeStart, periodTypes, onPick, presetMode]
   )
 
   const handlePeriodTypeChange = useCallback(
@@ -1025,6 +1082,8 @@ export interface DateSelectorProps {
   showFilterTypes?: boolean
   /** After picking a month, jump straight to the Day tab (pick-a-date flows). */
   monthCascadesToDay?: boolean
+  /** Completed-pick callback — see UseDateSelectorOptions.onPick. */
+  onPick?: (value: DateSelectorValue | undefined) => void
   showInput?: boolean
   showTwoMonths?: boolean
   label?: string
@@ -1050,6 +1109,7 @@ export function DateSelector({
   presetMode,
   showFilterTypes = true,
   monthCascadesToDay = false,
+  onPick,
   showInput = true,
   showTwoMonths = true,
   label,
@@ -1082,6 +1142,7 @@ export function DateSelector({
     maxYear,
     periodTypes,
     monthCascadesToDay,
+    onPick,
   })
 
   const {
@@ -1224,6 +1285,13 @@ export function DateSelector({
           try {
             const parsed = parse(trimmed, dateFormat, new Date())
             if (!isNaN(parsed.getTime())) {
+              // date-fns parses partial years ("25/12/1" → year 1), so a
+              // half-typed date resolves "successfully" mid-keystroke and
+              // churns the selection while the user is still typing. Reject
+              // anything outside the year bounds — the same bounds as the
+              // year list — so only a fully-typed, plausible date parses.
+              const parsedYear = parsed.getFullYear()
+              if (parsedYear < minYear || parsedYear > maxYear) continue
               return {
                 period: "day",
                 operator: presetMode ?? filterType,
@@ -1250,9 +1318,19 @@ export function DateSelector({
       const parsed = parseInputValue(newValue)
       if (parsed) {
         onChange?.(parsed)
+        // A complete date is terminal — no longer input can extend it — so it
+        // can commit immediately. A typed year might still grow into an ISO
+        // date ("1990" → "1990-05-10"), so it only updates the draft and
+        // commits when the picker closes.
+        if (parsed.period === "day") {
+          onPick?.(parsed)
+          // Bring the day grid to the typed date so the replacement is
+          // visible, not just stored.
+          if (parsed.startDate) setCalendarMonth(parsed.startDate)
+        }
       }
     },
-    [onChange, parseInputValue]
+    [onChange, onPick, parseInputValue, setCalendarMonth]
   )
 
   const handleInputBlur = useCallback(() => {
@@ -1299,7 +1377,10 @@ export function DateSelector({
             {(inputHint ? inputValue : displayValue) && (
               <button
                 type="button"
-                onClick={clearSelection}
+                onClick={() => {
+                  clearSelection()
+                  onPick?.(undefined)
+                }}
                 className={cn(
                   // Base Styles
                   "rounded-xs absolute end-2.5 top-1/2 size-4 -translate-y-1/2 cursor-pointer",

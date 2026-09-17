@@ -245,6 +245,33 @@ func (s *Store) AddOccasion(ctx context.Context, contactID string, typ domain.Oc
 	return Occasion{ID: id, ContactID: contactID, Type: typ, Recurrence: rec, BaseDate: base, Label: label}, nil
 }
 
+// UpdateOccasion is owner-scoped — ownerID "" = admin (all contacts). Full
+// replace of the editable fields (type, recurrence, base date, label); the
+// row's prefs are untouched.
+func (s *Store) UpdateOccasion(ctx context.Context, ownerID, id string, typ domain.OccurrenceType, rec domain.Recurrence, base domain.Date, label string) error {
+	if err := domain.ValidateRecurrence(rec); err != nil {
+		return err
+	}
+	if typ == "" {
+		return fmt.Errorf("occasion type is required")
+	}
+	if len(typ) > 64 {
+		return fmt.Errorf("occasion type too long (max 64)")
+	}
+	clause, args := ownerScope(ownerID)
+	all := append([]any{typ, rec, base.String(), label, id}, args...)
+	r, err := s.db.ExecContext(ctx,
+		`UPDATE occasions SET type = ?, recurrence = ?, base_date = ?, label = ? WHERE id = ? AND contact_id IN
+			(SELECT id FROM contacts WHERE `+clause+`)`, all...)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteOccasion is owner-scoped — ownerID "" = admin (all contacts).
 func (s *Store) DeleteOccasion(ctx context.Context, ownerID, id string) error {
 	clause, args := ownerScope(ownerID)

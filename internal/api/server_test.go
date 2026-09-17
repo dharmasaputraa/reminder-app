@@ -921,6 +921,86 @@ func TestOccasionEndpointsOwnerScoped(t *testing.T) {
 	}
 }
 
+// PATCH /occasions/{id} replaces the editable fields, keeps prefs, falls back
+// to the type's default recurrence when the body omits one, rejects bad
+// input with 400, and is owner-scoped like every other occasion endpoint.
+func TestUpdateOccasion(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid, `{"type":"birthday","date":"2000-02-29"}`)
+
+	patch := func(email, body string) int {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "PATCH", "/api/v1/occasions/"+occID, email, body))
+		return w.Code
+	}
+
+	// Full edit: type, date, recurrence and label all change.
+	if code := patch("admin@x.id", `{"type":"anniversary","date":"1999-06-16","recurrence":"anniversary","label":"Wedding"}`); code != 200 {
+		t.Fatalf("patch: %d", code)
+	}
+	oc := contactOccasion(t, srv, "admin@x.id", cid, occID)
+	if oc.Type != "anniversary" || oc.Label != "Wedding" {
+		t.Errorf("patched occasion = %q/%q, want anniversary/Wedding", oc.Type, oc.Label)
+	}
+	if oc.BaseDate.String() != "1999-06-16" {
+		t.Errorf("patched base_date = %s, want 1999-06-16", oc.BaseDate)
+	}
+	if oc.Recurrence != domain.RecurAnniversary {
+		t.Errorf("patched recurrence = %q, want anniversary", oc.Recurrence)
+	}
+
+	// Omitted recurrence → the new type's default (birthday → yearly).
+	if code := patch("admin@x.id", `{"type":"birthday","date":"2000-02-29"}`); code != 200 {
+		t.Fatalf("patch without recurrence: %d", code)
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Recurrence != domain.RecurYearly {
+		t.Errorf("recurrence = %q, want default yearly", oc.Recurrence)
+	}
+
+	// Bad input → 400, stored row unchanged.
+	for _, tc := range []struct{ name, body string }{
+		{"missing type", `{"date":"2000-01-01"}`},
+		{"type too long", `{"type":"` + strings.Repeat("x", 65) + `","date":"2000-01-01"}`},
+		{"bad recurrence", `{"type":"birthday","date":"2000-01-01","recurrence":"weekly"}`},
+		{"bad date", `{"type":"birthday","date":"not-a-date"}`},
+	} {
+		if code := patch("admin@x.id", tc.body); code != 400 {
+			t.Errorf("%s: code = %d, want 400", tc.name, code)
+		}
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Recurrence != domain.RecurYearly {
+		t.Errorf("failed patches changed the stored row: recurrence = %q", oc.Recurrence)
+	}
+
+	// Prefs set before a patch survive it.
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/occasions/"+occID+"/prefs", "admin@x.id", `{"offsets":{"yearly":[0]}}`))
+	if w.Code != 200 {
+		t.Fatalf("set prefs: %d %s", w.Code, w.Body.String())
+	}
+	if code := patch("admin@x.id", `{"type":"otonan","date":"2000-01-01","recurrence":"otonan"}`); code != 200 {
+		t.Fatalf("patch with prefs: %d", code)
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs == nil || !reflect.DeepEqual(oc.Prefs.Offsets, domain.OffsetMap{"yearly": {0}}) {
+		t.Errorf("patch clobbered prefs: %+v", oc.Prefs)
+	}
+
+	// Another owner gets 404 and writes nothing; unknown id → 404.
+	if code := patch("eve@x.id", `{"type":"birthday","date":"2000-01-01"}`); code != 404 {
+		t.Errorf("another owner's patch = %d, want 404", code)
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Type != "otonan" {
+		t.Errorf("another owner's patch leaked: type = %q", oc.Type)
+	}
+	w2 := httptest.NewRecorder()
+	srv.ServeHTTP(w2, devReq(t, "PATCH", "/api/v1/occasions/"+uuid.NewString(), "admin@x.id", `{"type":"birthday","date":"2000-01-01"}`))
+	if w2.Code != 404 {
+		t.Errorf("patch unknown occasion = %d, want 404", w2.Code)
+	}
+}
+
 // Upcoming items carry the occasion's recurrence and the stream-resolved
 // reminders: an anniversary's monthly mark uses the monthly set, its yearly
 // mark the yearly set, and occasion prefs override per stream only.

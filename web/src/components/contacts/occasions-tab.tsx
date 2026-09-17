@@ -1,20 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { cn } from 'cn'
 import {
   CalendarDaysIcon,
   CakeIcon,
+  ChevronDownIcon,
   HeartIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   SparklesIcon,
-  Trash2Icon,
   type LucideIcon,
 } from 'lucide-react'
 import { api, type Channel, type Contact, type Occasion } from '@/lib/api'
 import { longDate, shortDate } from '@/lib/dates'
 import { invalidateContactReminders } from '@/lib/prefs'
 import { useUpcomingByOccasion } from '@/components/contacts/contacts-grid'
-import { AddOccasionForm } from '@/components/contacts/add-occasion-form'
+import { OccasionForm } from '@/components/contacts/occasion-form'
 import { OccasionPrefsEditor } from '@/components/contacts/occasion-prefs-editor'
 import { ReminderTrigger } from '@/components/event-detail'
 import {
@@ -33,7 +35,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +47,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 
@@ -67,18 +75,25 @@ const RECURRENCE_COPY: Record<Occasion['recurrence'], string> = {
 }
 
 /** The occasions list: date-ordered accordion items (collapsed by default),
- *  each wrapped in its own bordered card. Remind-now stays on the collapsed
- *  row, OUTSIDE the accordion trigger so buttons are never nested; the
- *  editor + the delete action live in the expanded content. Adding happens
- *  in a dialog. */
+ *  each wrapped in its own bordered card. The whole header is one toggle: the
+ *  AccordionTrigger stretches under the entire row (c-frame-5 shape) and the
+ *  row content floats above it as a pointer-events-none overlay, so every
+ *  pixel toggles while Remind + an ⋮ menu (edit / delete, mirroring the
+ *  summary card's menu) stay real buttons that never nest inside the trigger.
+ *  Adding and editing happen in dialogs. */
 export function OccasionsTab({ contact, channels }: { contact: Contact; channels: Channel[] }) {
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [editOcc, setEditOcc] = useState<Occasion | null>(null)
+  const [delOcc, setDelOcc] = useState<Occasion | null>(null)
+  // Controlled open rows: the chevron reads from it and it keeps the
+  // full-header trigger honest.
+  const [openItems, setOpenItems] = useState<string[]>([])
   // Countdown per occasion — shares the grid's ['upcoming','grid'] query, no
   // extra fetch.
   const { map: upcomingByOccasion } = useUpcomingByOccasion()
 
-  const delOcc = useMutation({
+  const deleteOcc = useMutation({
     mutationFn: (oid: string) => api(`/occasions/${oid}`, { method: 'DELETE' }),
     onSuccess: () => {
       invalidateContactReminders(qc, contact.id)
@@ -98,10 +113,47 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
               contact defaults.
             </DialogDescription>
           </DialogHeader>
-          <AddOccasionForm contactId={contact.id} onSaved={() => setAddOpen(false)} />
+          <OccasionForm contactId={contact.id} onSaved={() => setAddOpen(false)} />
         </DialogContent>
       )}
     </Dialog>
+  )
+
+  const editDialog = (
+    <Dialog open={editOcc !== null} onOpenChange={(open) => { if (!open) setEditOcc(null) }}>
+      {editOcc && (
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-left capitalize">Edit {editOcc.type}</DialogTitle>
+            <DialogDescription className="text-left">
+              Type, recurrence, date, and label — saved in place. Reminder settings stay in the
+              occasion's detail below its card.
+            </DialogDescription>
+          </DialogHeader>
+          <OccasionForm contactId={contact.id} occasion={editOcc} onSaved={() => setEditOcc(null)} />
+        </DialogContent>
+      )}
+    </Dialog>
+  )
+
+  const deleteDialog = (
+    <AlertDialog open={delOcc !== null} onOpenChange={(open) => { if (!open) setDelOcc(null) }}>
+      {delOcc && (
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {delOcc.type} on {longDate(delOcc.base_date)} will be permanently deleted, together
+              with its reminders and reminder settings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteOcc.mutate(delOcc.id)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      )}
+    </AlertDialog>
   )
 
   return (
@@ -135,109 +187,206 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
             </EmptyContent>
           </Empty>
         ) : (
-          <Accordion className="space-y-2">
-        {contact.occasions.map((o) => {
-          const up = upcomingByOccasion.get(o.id)
-          const TypeIcon = TYPE_ICONS[o.type] ?? CalendarDaysIcon
-          return (
-            // One bordered card per occasion: header row + editor share the
-            // same container. (border + last:border-b beat the primitive's
-            // border-b/last:border-b-0 divider styling.)
-            <AccordionItem key={o.id} value={o.id} className="rounded-lg border bg-card last:border-b">
-              <AccordionHeader className="w-full items-center gap-2 py-2.5 pl-3 pr-2">
-                <AccordionTrigger className="min-w-0 flex-1 gap-3 py-0">
-                  {/* Circular chip, same avatar idiom as the agenda rows. */}
-                  <Avatar size="lg" className="shrink-0">
-                    <AvatarFallback>
-                      <TypeIcon aria-hidden="true" className="size-5" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <ItemContent>
-                    <ItemTitle>
-                      <span className="min-w-0 truncate capitalize">{o.type}</span>
-                      {o.label && (
-                        <span className="min-w-0 truncate text-muted-foreground font-normal">
-                          {' '}
-                          · {o.label}
-                        </span>
-                      )}
-                    </ItemTitle>
-                    <ItemDescription className="truncate">
-                      {shortDate(o.base_date)} · {RECURRENCE_COPY[o.recurrence]}
-                    </ItemDescription>
-                  </ItemContent>
-                  <span className="flex shrink-0 items-center gap-1">
-                    {o.prefs && <Badge variant="outline">Custom</Badge>}
-                    {o.prefs?.enabled === false && <Badge variant="warning-outline">Paused</Badge>}
-                    {up && (
-                      <Badge variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'} className="shrink-0">
-                        {up.days_until <= 0 ? 'today' : `in ${up.days_until}d`}
-                      </Badge>
-                    )}
-                  </span>
-                </AccordionTrigger>
-                <ItemActions>
-                  {/* Remind needs an actual occurrence date: the backend
-                      matches `date` exactly, and a base date is not an
-                      occurrence for otonan (base+210n). */}
-                  {up && (
-                    <ReminderTrigger
-                      kind="occasion"
-                      occasionId={o.id}
-                      contactId={contact.id}
-                      date={up.date}
-                      title={`${contact.name}'s ${o.type}`}
-                      variant="ghost"
-                      compact
-                      className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
-                    />
-                  )}
-                </ItemActions>
-              </AccordionHeader>
-              <AccordionContent>
-                <div className="border-t px-3 pb-3 pt-3">
-                  <OccasionPrefsEditor contactId={contact.id} occasion={o} channels={channels} />
-                  {/* Destructive actions live in the detail, not on the row. */}
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <p className="text-muted-foreground text-xs">
-                      Deleting also removes this occasion's reminders.
-                    </p>
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <Trash2Icon data-icon="inline-start" aria-hidden="true" />
-                            Delete occasion
-                          </Button>
-                        }
-                      />
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {o.type} on {longDate(o.base_date)} will be permanently deleted.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          )
-        })}
-      </Accordion>
-      )}
-      {addDialog}
+          <Accordion
+            className="space-y-2"
+            value={openItems}
+            onValueChange={(v) => setOpenItems(v as string[])}
+          >
+            {contact.occasions.map((o) => (
+              <OccasionCard
+                key={o.id}
+                contact={contact}
+                occasion={o}
+                up={upcomingByOccasion.get(o.id)}
+                channels={channels}
+                open={openItems.includes(o.id)}
+                onEdit={() => setEditOcc(o)}
+                onDelete={() => setDelOcc(o)}
+              />
+            ))}
+          </Accordion>
+        )}
+        {addDialog}
+        {editDialog}
+        {deleteDialog}
       </CardContent>
     </Card>
+  )
+}
+
+/** One occasion card: header row + collapsible reminder detail.
+ *
+ *  Below sm the card relayouts for narrow screens: the date wraps instead of
+ *  truncating (it is the important info), all badges (countdown, Custom,
+ *  Paused) stack under the date, and a corner strip above the row carries the
+ *  type avatar on the left with Remind + the ⋮ menu on the right — the same
+ *  treatment as the contact card's mobile header. */
+function OccasionCard({
+  contact,
+  occasion: o,
+  up,
+  channels,
+  open,
+  onEdit,
+  onDelete,
+}: {
+  contact: Contact
+  occasion: Occasion
+  /** Next occurrence of this occasion — undefined when none is upcoming. */
+  up?: { date: string; days_until: number }
+  channels: Channel[]
+  open: boolean
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const TypeIcon = TYPE_ICONS[o.type] ?? CalendarDaysIcon
+  const countdown = up ? (up.days_until <= 0 ? 'today' : `in ${up.days_until}d`) : null
+
+  /** Edit / Delete menu — rendered inline in the row (desktop) and as the
+   *  card's top-right corner action (mobile). */
+  const actionsMenu = (triggerClass: string) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label={`More actions for ${o.type}`}
+            className={triggerClass}
+          >
+            <MoreHorizontalIcon aria-hidden="true" />
+          </Button>
+        }
+      />
+      {/* min-w-40 + plain labels mirror the summary card's actions menu. */}
+      <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
+  return (
+    // One bordered card per occasion: header row + editor share the same
+    // container. (border + last:border-b beat the primitive's
+    // border-b/last:border-b-0 divider styling.)
+    <AccordionItem value={o.id} className="rounded-lg border bg-card last:border-b">
+      {/* Mobile: type avatar on the left, Remind + ⋮ menu on the right —
+          the corner action strip mirrors the contact card's mobile header. */}
+      <div className="flex items-center justify-between gap-2 px-3 pt-3 sm:hidden">
+        <Avatar size="default" className="shrink-0">
+          <AvatarFallback>
+            <TypeIcon aria-hidden="true" className="size-4" />
+          </AvatarFallback>
+        </Avatar>
+        <span className="flex items-center gap-1">
+          {up && (
+            <ReminderTrigger
+              kind="occasion"
+              occasionId={o.id}
+              contactId={contact.id}
+              date={up.date}
+              title={`${contact.name}'s ${o.type}`}
+              variant="ghost"
+              compact
+              className="sm:hidden size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
+            />
+          )}
+          {actionsMenu('sm:hidden')}
+        </span>
+      </div>
+      <AccordionHeader className="relative w-full rounded-lg">
+        {/* Full-coverage toggle: an invisible button stretched across the
+            whole header — every pixel of the card top toggles. The primitive's
+            own chevron is replaced by the overlay's, so nothing paints under
+            the actions. While open the highlight loses its bottom rounding so
+            it meets the detail's divider flush. */}
+        <AccordionTrigger
+          className={cn('absolute inset-0 cursor-pointer [&>svg]:hidden', open && 'rounded-b-none')}
+          aria-label={`Toggle ${o.type} details`}
+        />
+        <div className="pointer-events-none relative z-10 flex w-full items-center gap-3 py-3 px-3">
+          {/* Circular chip, same avatar idiom as the agenda rows — hidden on
+              mobile, the row needs the width for the date. */}
+          <Avatar size="lg" className="max-sm:hidden shrink-0">
+            <AvatarFallback>
+              <TypeIcon aria-hidden="true" className="size-5" />
+            </AvatarFallback>
+          </Avatar>
+          <ItemContent>
+            <ItemTitle>
+              <span className="min-w-0 truncate capitalize">{o.type}</span>
+              {o.label && (
+                <span className="min-w-0 truncate text-muted-foreground font-normal">
+                  {' '}
+                  · {o.label}
+                </span>
+              )}
+            </ItemTitle>
+            {/* Mobile lets the date wrap — it is the info that must survive
+                narrow screens, truncation hides it. */}
+            <ItemDescription className="truncate max-sm:whitespace-normal">
+              {shortDate(o.base_date)} · {RECURRENCE_COPY[o.recurrence]}
+            </ItemDescription>
+            {/* Mobile-only: all badges stack under the date, out of the
+                cramped right edge. mt-2 separates them from the date line. */}
+            <span className="mt-2 flex items-center gap-1 sm:hidden">
+              {o.prefs && <Badge variant="outline">Custom</Badge>}
+              {o.prefs?.enabled === false && <Badge variant="warning-outline">Paused</Badge>}
+              {countdown && up && (
+                <Badge variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}>
+                  {countdown}
+                </Badge>
+              )}
+            </span>
+          </ItemContent>
+          <span className="flex shrink-0 items-center gap-1 max-sm:hidden">
+            {o.prefs && <Badge variant="outline">Custom</Badge>}
+            {o.prefs?.enabled === false && <Badge variant="warning-outline">Paused</Badge>}
+            {countdown && up && (
+              <Badge variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}>
+                {countdown}
+              </Badge>
+            )}
+          </span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            className={cn(
+              'ml-auto size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+              open && 'rotate-180',
+            )}
+          />
+          <ItemActions className="pointer-events-auto">
+            {/* Remind needs an actual occurrence date: the backend matches
+                `date` exactly, and a base date is not an occurrence for otonan
+                (base+210n). Below sm it sits in the card's corner strip
+                instead, next to the ⋮ menu. */}
+            {up && (
+              <ReminderTrigger
+                kind="occasion"
+                occasionId={o.id}
+                contactId={contact.id}
+                date={up.date}
+                title={`${contact.name}'s ${o.type}`}
+                variant="ghost"
+                compact
+                className="max-sm:hidden size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
+              />
+            )}
+            {/* Desktop inline menu — on mobile the menu lives in the card's
+                top-right corner row instead. */}
+            {actionsMenu('max-sm:hidden')}
+          </ItemActions>
+        </div>
+      </AccordionHeader>
+      <AccordionContent>
+        <div className="border-t px-4 pb-4 pt-3">
+          <OccasionPrefsEditor contactId={contact.id} occasion={o} channels={channels} />
+        </div>
+      </AccordionContent>
+    </AccordionItem>
   )
 }

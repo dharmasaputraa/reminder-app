@@ -30,6 +30,9 @@ export function CalendarDateSelectorButton({
         const target = dateSelectorValueToDate(value)
         if (target) goTo(target)
       }}
+      // Auto-apply: a picked (or fully-typed) date jumps the calendar right
+      // away, no Apply click needed.
+      autoApply
       placeholder="Go to date"
       label="Go to date"
       // Year list reaches back to 1800 (same bound as the contact occasion

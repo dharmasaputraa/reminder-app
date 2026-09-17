@@ -1,28 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronDownIcon } from 'lucide-react'
-import { cn } from 'cn'
+import { ChevronRightIcon } from 'lucide-react'
 import { api, type Channel, type Contact, type Occasion, type OccasionPrefs, type OffsetMap } from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { Frame, FrameHeader, FramePanel, FrameTitle } from '@/components/reui/frame'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
-/** One label + explainer per recurrence stream, in the order the editor
- *  renders them. "Base date" is the occasion's exact date; the other streams
- *  repeat on their own cycle, and each stream takes its own offset set. */
-const STREAMS: Record<string, { label: string; hint: string }> = {
-  event: { label: 'Base date', hint: 'Reminders counting down to the date itself' },
-  yearly: { label: 'Yearly', hint: 'Reminders before each yearly anniversary of the date' },
-  monthly: { label: 'Monthly', hint: 'Reminders before each monthly mark of the date' },
-  otonan: { label: 'Otonan', hint: 'Reminders before each 210-day Pawukon cycle of the date' },
-}
-
-/** The streams a recurrence emits — only these get an offsets input:
- *  once→event; yearly→event+yearly; monthly→event+monthly;
- *  anniversary→event+yearly+monthly; otonan→otonan. */
+/** The streams a recurrence emits. The editor exposes ONE offsets value; a
+ *  save writes it to every stream (once→event; yearly→event+yearly;
+ *  monthly→event+monthly; anniversary→event+yearly+monthly; otonan→otonan)
+ *  so users never face per-stream inputs. */
 const STREAMS_FOR: Record<Occasion['recurrence'], string[]> = {
   once: ['event'],
   yearly: ['event', 'yearly'],
@@ -58,13 +49,13 @@ function sameRow(a: Row, b: Row): boolean {
 
 /**
  * Per-occasion reminder overrides. The API is a full-replace PUT to
- * /occasions/{id}/prefs; "Reset to inherit" DELETEs the override row so the
- * occasion falls back to the contact → settings chain. Only the streams the
- * occasion's recurrence emits are editable, and an empty list means inherit.
+ * /occasions/{id}/prefs; the Custom reminders toggle OFF DELETEs the row so
+ * the occasion falls back to the contact → settings chain. One offsets input
+ * drives every stream the recurrence emits, and an empty list means inherit.
  *
  * Every handler composes its PUT from ONE authoritative local row (never from
  * the props, whose in-flight refetches lag behind the last edit), so
- * back-to-back actions — blur an offsets input then flip Active, reset then
+ * back-to-back actions — blur an offsets input then flip Active, toggle then
  * check a channel — cannot send a stale full-replace body that silently
  * reverts the previous action.
  */
@@ -135,6 +126,37 @@ export function OccasionPrefsEditor({
     },
   })
 
+  const streams = STREAMS_FOR[occasion.recurrence]
+  /** The single displayed offsets list: the first stream that carries one. */
+  const savedOffsets = (): number[] => {
+    for (const s of streams) {
+      const list = row.offsets[s] ?? []
+      if (list.length > 0) return list
+    }
+    return []
+  }
+
+  // Custom = the occasion carries its own override row (vs pure inherit).
+  const [custom, setCustom] = useState(() => p != null)
+  // The panel starts open only when the occasion already carries actual
+  // overrides; a pinned-but-empty or inherit row stays collapsed.
+  const [customOpen, setCustomOpen] = useState(
+    () => streams.some((s) => (row.offsets[s] ?? []).length > 0) || row.channel_ids.length > 0,
+  )
+  /** Inherit ↔ custom. OFF deletes the override row entirely (the old
+   *  "Reset to inherit"); ON pins a row so edits have something to land in. */
+  const toggleCustom = (on: boolean) => {
+    setCustom(on)
+    if (on) {
+      setCustomOpen(true)
+      if (p == null) saveRow(rowRef.current)
+    } else {
+      setCustomOpen(false)
+      commit(rowFrom(null))
+      reset.mutate()
+    }
+  }
+
   // A resync from props must never run while one of our writes is in flight:
   // the refetch a previous PUT triggered can carry the pre-newer-edit row.
   const pendingRef = useRef(false)
@@ -142,10 +164,11 @@ export function OccasionPrefsEditor({
     pendingRef.current = save.isPending || reset.isPending
   }, [save.isPending, reset.isPending])
   // Server state changed under us (our refetch after a write settles, another
-  // editor, another tab) → adopt it.
+  // editor, another tab) → adopt it, including the custom/inherit split.
   useEffect(() => {
     if (pendingRef.current) return
     syncFromServer(rowFrom(occasion.prefs))
+    setCustom(occasion.prefs != null)
   }, [occasion.id, occasion.prefs, syncFromServer])
 
   /** Apply a local edit, then PUT the complete row from the updated state. */
@@ -154,127 +177,113 @@ export function OccasionPrefsEditor({
     save.mutate(next)
   }
 
-  // The offsets inputs stay uncontrolled: typing must survive the refetch that
+  // The offsets input stays uncontrolled: typing must survive the refetch that
   // follows a save (a remount on every saved-value change would wipe a
   // half-typed edit). Keep the DOM in step with the row imperatively instead;
   // a focused input is left alone and reconciles itself on blur.
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const streams = STREAMS_FOR[occasion.recurrence]
-  // The custom offsets/channels section starts open only when the occasion
-  // already carries an override; plain inherit occasions stay collapsed.
-  const [customOpen, setCustomOpen] = useState(
-    () =>
-      streams.some((s) => (row.offsets[s] ?? []).length > 0) || row.channel_ids.length > 0,
-  )
+  const inputRef = useRef<HTMLInputElement | null>(null)
   useEffect(() => {
-    for (const s of streams) {
-      const el = inputRefs.current[s]
-      const saved = (row.offsets[s] ?? []).join(', ')
-      if (el && document.activeElement !== el && el.value !== saved) el.value = saved
-    }
+    const el = inputRef.current
+    if (!el) return
+    const text = savedOffsets().join(', ')
+    if (document.activeElement !== el && el.value !== text) el.value = text
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- savedOffsets reads row.offsets
   }, [row.offsets, streams])
 
   return (
-    <div className="bg-muted/40 mt-2 space-y-3 rounded-lg p-3 text-sm">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">Reminders for this occasion</span>
-        {p && (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={reset.isPending}
-            onClick={() => {
-              // Back to inherit — and a later edit in the refetch window must
-              // compose from the inherit row, not from the deleted one.
-              commit(rowFrom(null))
-              reset.mutate()
-            }}
-          >
-            Reset to inherit
-          </Button>
-        )}
-      </div>
-      <label className="flex items-center gap-2 text-sm font-medium">
-        <Switch
-          checked={row.enabled}
-          onCheckedChange={(v) => saveRow({ ...rowRef.current, enabled: v === true })}
-        />
-        Active
-      </label>
-      {/* Disclosure: the per-stream offsets + channels only appear on demand,
-          so a plain inherit occasion reads as one quiet row. Inputs remount
-          with their saved values (the sync effect re-applies row state). */}
-      <button
-        type="button"
-        aria-expanded={customOpen}
-        onClick={() => setCustomOpen((v) => !v)}
-        className="flex w-full items-center justify-between rounded-lg px-1 py-0.5 text-left text-sm font-medium hover:bg-muted/60"
-      >
-        Custom reminders
-        <ChevronDownIcon
-          aria-hidden="true"
-          className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', customOpen && 'rotate-180')}
-        />
-      </button>
-      {customOpen && (
-        <>
-          {streams.map((s) => {
-            const stream = STREAMS[s]
-            return (
-              <div key={s} className="space-y-1">
-                <Label htmlFor={`occ-${occasion.id}-${s}`}>{stream.label}</Label>
-                <p className="text-muted-foreground text-xs">{stream.hint}</p>
-                <Input
-                  id={`occ-${occasion.id}-${s}`}
-                  ref={(el) => {
-                    inputRefs.current[s] = el
-                  }}
-                  // Uncontrolled: mount-time value only, the effect above syncs it.
-                  defaultValue={(row.offsets[s] ?? []).join(', ')}
-                  placeholder="inherit"
-                  onBlur={(e) => {
-                    const el = e.target
-                    const saved = rowRef.current.offsets[s] ?? []
-                    const list = el.value
-                      .split(',')
-                      .map((x) => parseInt(x.trim(), 10))
-                      .filter((n) => !Number.isNaN(n))
-                    // Blur without an edit must not create an override row; just
-                    // re-canonicalize the text ("5,3" → "5, 3").
-                    if (list.join(',') === saved.join(',')) {
-                      el.value = saved.join(', ')
-                      return
-                    }
-                    saveRow({ ...rowRef.current, offsets: { ...rowRef.current.offsets, [s]: list } })
-                  }}
-                  className="max-w-xs"
-                />
-              </div>
-            )
-          })}
-          {channels.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-sm font-medium">Channels</div>
-              <div className="flex flex-wrap gap-2">
-                {channels.map((ch) => (
-                  <label key={ch.id} className="bg-muted flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm">
-                    <Checkbox
-                      checked={row.channel_ids.includes(ch.id)}
-                      onCheckedChange={(v) => {
-                        const cur = rowRef.current.channel_ids
-                        const next = v === true ? [...cur, ch.id] : cur.filter((id) => id !== ch.id)
-                        saveRow({ ...rowRef.current, channel_ids: next })
-                      }}
-                    />
-                    {ch.name}
-                  </label>
-                ))}
-              </div>
+    // c-frame-5: a frame with a collapsible panel — the header row toggles
+    // the panel, the Switch beside it flips inherit ↔ custom.
+    <Frame spacing="sm" stacked className="mt-2 [--frame-radius:var(--radius-lg)]">
+      <FramePanel fit className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">Reminders for this occasion</span>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <Switch
+            checked={row.enabled}
+            onCheckedChange={(v) => saveRow({ ...rowRef.current, enabled: v === true })}
+          />
+          Active
+        </label>
+      </FramePanel>
+      <Collapsible open={customOpen} onOpenChange={setCustomOpen} className="group/collapsible">
+        <FrameHeader className="flex flex-row items-center justify-between gap-2">
+          <CollapsibleTrigger className="flex flex-1 cursor-pointer items-center justify-between gap-2 rounded-lg py-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            <FrameTitle className="text-sm font-medium">Custom reminders</FrameTitle>
+            <ChevronRightIcon
+              aria-hidden="true"
+              className="text-muted-foreground size-4 shrink-0 transition-transform duration-200 group-data-open/collapsible:rotate-90"
+            />
+          </CollapsibleTrigger>
+          <Switch
+            checked={custom}
+            disabled={reset.isPending || save.isPending}
+            onCheckedChange={(v) => toggleCustom(v === true)}
+            aria-label="Use custom reminders"
+          />
+        </FrameHeader>
+        <CollapsibleContent>
+          <FramePanel fit className="space-y-3">
+            {/* One input for every stream the recurrence emits — the saved
+                list is written to all of them on blur. */}
+            <div className="space-y-1">
+              <Label htmlFor={`occ-${occasion.id}-offsets`}>Days before</Label>
+              <p className="text-muted-foreground text-xs">
+                Comma-separated days before each reminder, e.g. 7, 3, 0. Empty = inherit from
+                contact defaults.
+              </p>
+              <Input
+                id={`occ-${occasion.id}-offsets`}
+                ref={(el) => {
+                  inputRef.current = el
+                }}
+                // Uncontrolled: mount-time value only, the effect above syncs it.
+                defaultValue={savedOffsets().join(', ')}
+                placeholder="inherit"
+                onBlur={(e) => {
+                  const el = e.target
+                  const list = el.value
+                    .split(',')
+                    .map((x) => parseInt(x.trim(), 10))
+                    .filter((n) => !Number.isNaN(n))
+                  const shown = savedOffsets()
+                  // Blur without an edit must not create an override row or
+                  // flatten differing per-stream values; just re-canonicalize.
+                  if (list.join(',') === shown.join(',')) {
+                    el.value = shown.join(', ')
+                    return
+                  }
+                  const offsets: OffsetMap = list.length
+                    ? Object.fromEntries(streams.map((s) => [s, list]))
+                    : {}
+                  saveRow({ ...rowRef.current, offsets })
+                }}
+              />
             </div>
-          )}
-          <p className="text-muted-foreground text-xs">Empty = inherit from contact defaults.</p>
-        </>
-      )}
-    </div>
+            {channels.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-sm font-medium">Channels</div>
+                <div className="flex flex-wrap gap-2">
+                  {channels.map((ch) => (
+                    <label key={ch.id} className="bg-muted flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm">
+                      <Checkbox
+                        checked={row.channel_ids.includes(ch.id)}
+                        onCheckedChange={(v) => {
+                          const cur = rowRef.current.channel_ids
+                          const next = v === true ? [...cur, ch.id] : cur.filter((id) => id !== ch.id)
+                          saveRow({ ...rowRef.current, channel_ids: next })
+                        }}
+                      />
+                      {ch.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-muted-foreground text-xs">
+              Turn Custom reminders off to inherit everything from the contact.
+            </p>
+          </FramePanel>
+        </CollapsibleContent>
+      </Collapsible>
+    </Frame>
   )
 }

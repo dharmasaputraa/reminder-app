@@ -183,6 +183,48 @@ func (s *Server) handleAddOccasion(c *gin.Context) {
 	c.JSON(201, oc)
 }
 
+// handleUpdateOccasion: full replace of the editable fields (the edit dialog
+// always sends all of them), scoped and validated like the add route. An
+// empty recurrence falls back to the type's default.
+func (s *Server) handleUpdateOccasion(c *gin.Context) {
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	in, ok := bind[occasionIn](c)
+	if !ok {
+		return
+	}
+	// Custom types are first-class: no allowlist, only a length bound.
+	typ := domain.OccurrenceType(in.Type)
+	if typ == "" {
+		c.JSON(400, gin.H{"error": "type is required"})
+		return
+	}
+	if len(typ) > 64 {
+		c.JSON(400, gin.H{"error": "type too long (max 64)"})
+		return
+	}
+	rec := domain.Recurrence(in.Recurrence)
+	if rec == "" {
+		rec = domain.DefaultRecurrence(typ)
+	}
+	if err := domain.ValidateRecurrence(rec); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	base, err := domain.ParseDate(in.Date)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.st.UpdateOccasion(c.Request.Context(), s.scope(c), id, typ, rec, base, in.Label); err != nil {
+		respondErr(c, err)
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
 func (s *Server) handleDeleteOccasion(c *gin.Context) {
 	id, ok := pathID(c)
 	if !ok {
