@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ChevronRightIcon, Maximize2Icon, XIcon } from 'lucide-react'
 import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
+import { ChannelIcon } from '@/lib/channel-icons'
 import { defaultSummary } from '@/lib/prefs'
 import { shortDate } from '@/lib/dates'
 import { initials } from '@/lib/initials'
@@ -138,7 +139,10 @@ export function ContactDetailContent({ contactId }: { contactId: string }) {
           return (
             <span className="flex flex-wrap justify-end gap-1">
               {chosen.map((ch) => (
-                <Badge key={ch.id} variant="secondary">{ch.name} ({ch.type})</Badge>
+                <Badge key={ch.id} variant="secondary">
+                  <ChannelIcon type={ch.type} className="size-3" />
+                  {ch.name} ({ch.type})
+                </Badge>
               ))}
             </span>
           )

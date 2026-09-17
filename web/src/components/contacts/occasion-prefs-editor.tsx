@@ -358,7 +358,7 @@ export function OccasionPrefsEditor({
                             : 'text-muted-foreground hover:bg-muted/50',
                         )}
                       >
-                        <ChannelIcon type={ch.type} />
+                        <ChannelIcon type={ch.type} className="size-4 shrink-0" />
                         <span className="w-full truncate text-center">{ch.name}</span>
                       </button>
                     )

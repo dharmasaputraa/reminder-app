@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { ChannelIcon } from '@/lib/channel-icons'
 
 export const Route = createFileRoute('/reminder/channels')({
   component: Channels,
@@ -112,7 +113,10 @@ function Channels() {
         <Card key={ch.id} className="flex flex-row items-center gap-3 p-3">
           <Badge variant={ch.enabled ? 'default' : 'secondary'}>{ch.type}</Badge>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{ch.name}</p>
+            <div className="flex items-center gap-1.5">
+              <ChannelIcon type={ch.type} className="size-4 shrink-0" />
+              <p className="truncate font-medium">{ch.name}</p>
+            </div>
             <p className="text-xs text-muted-foreground">{ch.enabled ? 'active' : 'inactive'}</p>
           </div>
           <label className="flex items-center gap-1.5 text-sm">

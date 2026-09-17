@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Channel, type Contact, type Settings } from '@/lib/api'
+import { ChannelIcon } from '@/lib/channel-icons'
 import { defaultSummary, hydratePrefsForm, invalidateContactReminders, parseList } from '@/lib/prefs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
@@ -114,6 +115,7 @@ export function ReminderPrefsTab({
                     savePrefs.mutate({ channel_ids: [...cur] })
                   }}
                 />
+                <ChannelIcon type={ch.type} className="size-4 shrink-0" />
                 {ch.name} ({ch.type})
               </label>
             ))}
