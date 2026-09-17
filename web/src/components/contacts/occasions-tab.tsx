@@ -384,7 +384,15 @@ function OccasionCard({
       </AccordionHeader>
       <AccordionContent>
         <div className="border-t px-4 pb-4 pt-3">
-          <OccasionPrefsEditor contactId={contact.id} occasion={o} channels={channels} />
+          {/* TODO(task-6): wire the real contact-level paused flag and the
+              force-activate dialog — these two props are placeholders. */}
+          <OccasionPrefsEditor
+            contactId={contact.id}
+            occasion={o}
+            channels={channels}
+            paused={false}
+            onPausedInteraction={() => {}}
+          />
         </div>
       </AccordionContent>
     </AccordionItem>

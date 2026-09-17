@@ -57,7 +57,7 @@ export interface Occasion {
  *  monthly, otonan). Absent or empty list = inherit that stream. */
 export type OffsetMap = Record<string, number[]>
 export interface Prefs { contact_id: string; offsets: OffsetMap; channel_ids: string[]; enabled: boolean }
-export interface OccasionPrefs { occasion_id: string; offsets: OffsetMap; channel_ids: string[]; enabled: boolean }
+export interface OccasionPrefs { occasion_id: string; offsets: OffsetMap; channel_ids: string[]; enabled: boolean; custom: boolean }
 export interface Contact { id: string; name: string; nickname: string; notes: string; occasions: Occasion[]; prefs: Prefs | null }
 export interface Channel { id: string; type: string; name: string; enabled: boolean }
 export interface Settings {
