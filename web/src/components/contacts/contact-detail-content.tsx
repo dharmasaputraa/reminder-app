@@ -140,7 +140,7 @@ export function ContactDetailContent({ contactId }: { contactId: string }) {
             <span className="flex flex-wrap justify-end gap-1">
               {chosen.map((ch) => (
                 <Badge key={ch.id} variant="secondary">
-                  <ChannelIcon type={ch.type} className="size-3" />
+                  <ChannelIcon type={ch.type} className="size-4" />
                   {ch.name} ({ch.type})
                 </Badge>
               ))}

@@ -2,6 +2,7 @@
  *  brand and the fallback for unknown types. Every mark inherits the text
  *  color (currentColor), so it adapts to the surrounding theme. */
 import type { ReactElement } from 'react'
+import { cn } from 'cn'
 
 type MarkProps = { className?: string }
 
@@ -64,8 +65,15 @@ const MARKS: Record<string, (props: MarkProps) => ReactElement> = {
   email: GmailMark,
 }
 
-/** Brand mark for a channel type; unknown types fall back to gotify. */
+/** Brand mark for a channel type; unknown types fall back to gotify. The mark
+ *  fills a fixed box so mixed marks align optically: the gotify art sits in a
+ *  48-viewBox with whitespace, so it is scaled up inside the box to match the
+ *  solid 24-viewBox glyphs. */
 export function ChannelIcon({ type, className }: { type: string; className?: string }) {
   const Mark = MARKS[type] ?? GotifyMark
-  return <Mark className={className ?? 'size-4'} />
+  return (
+    <span className={cn('inline-flex shrink-0 items-center justify-center', className ?? 'size-4')}>
+      <Mark className={Mark === GotifyMark ? 'size-[125%]' : 'size-full'} />
+    </span>
+  )
 }

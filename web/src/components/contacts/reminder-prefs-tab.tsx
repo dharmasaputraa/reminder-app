@@ -2,11 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api, type Channel, type Contact, type Settings } from '@/lib/api'
-import { ChannelIcon } from '@/lib/channel-icons'
 import { defaultSummary, hydratePrefsForm, invalidateContactReminders, parseList } from '@/lib/prefs'
+import { ChannelChip } from '@/components/channel-chip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Field,
   FieldContent,
@@ -104,21 +103,22 @@ export function ReminderPrefsTab({
         <Field>
           <FieldTitle>Channels</FieldTitle>
           <div className="flex flex-wrap gap-2">
-            {channels.map((ch) => (
-              <label key={ch.id} className="flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-sm">
-                <Checkbox
-                  defaultChecked={contact.prefs?.channel_ids.includes(ch.id) ?? false}
-                  onCheckedChange={(v) => {
+            {channels.map((ch) => {
+              const checked = contact.prefs?.channel_ids.includes(ch.id) ?? false
+              return (
+                <ChannelChip
+                  key={ch.id}
+                  channel={ch}
+                  checked={checked}
+                  onToggle={() => {
                     const cur = new Set(contact.prefs?.channel_ids ?? [])
-                    if (v === true) cur.add(ch.id)
-                    else cur.delete(ch.id)
+                    if (checked) cur.delete(ch.id)
+                    else cur.add(ch.id)
                     savePrefs.mutate({ channel_ids: [...cur] })
                   }}
                 />
-                <ChannelIcon type={ch.type} className="size-4 shrink-0" />
-                {ch.name} ({ch.type})
-              </label>
-            ))}
+              )
+            })}
           </div>
           <FieldDescription>
             Changes save automatically — no selection uses the system default channels.

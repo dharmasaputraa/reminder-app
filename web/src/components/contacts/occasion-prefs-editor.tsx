@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { cn } from 'cn'
 import { ChevronRightIcon } from 'lucide-react'
 import { api, type Channel, type Contact, type Occasion, type OccasionPrefs, type OffsetMap } from '@/lib/api'
-import { ChannelIcon } from '@/lib/channel-icons'
+import { ChannelChip } from '@/components/channel-chip'
 import { Frame, FrameHeader, FramePanel, FrameTitle } from '@/components/reui/frame'
 import {
   AlertDialog,
@@ -342,25 +342,16 @@ export function OccasionPrefsEditor({
                   {channels.map((ch) => {
                     const checked = row.channel_ids.includes(ch.id)
                     return (
-                      <button
+                      <ChannelChip
                         key={ch.id}
-                        type="button"
-                        aria-pressed={checked}
-                        onClick={() => {
+                        channel={ch}
+                        checked={checked}
+                        onToggle={() => {
                           const cur = rowRef.current.channel_ids
                           const next = checked ? cur.filter((id) => id !== ch.id) : [...cur, ch.id]
                           saveRow({ ...rowRef.current, channel_ids: next })
                         }}
-                        className={cn(
-                          'flex w-20 flex-col items-center gap-1.5 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                          checked
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-muted/50',
-                        )}
-                      >
-                        <ChannelIcon type={ch.type} className="size-4 shrink-0" />
-                        <span className="w-full truncate text-center">{ch.name}</span>
-                      </button>
+                      />
                     )
                   })}
                 </div>
