@@ -8,12 +8,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
-/** One label per recurrence stream, in the order the editor renders them. */
-const STREAM_LABELS: Record<string, string> = {
-  event: 'Event (the base date)',
-  yearly: 'Yearly marks',
-  monthly: 'Monthly marks',
-  otonan: 'Otonan marks',
+/** One label + explainer per recurrence stream, in the order the editor
+ *  renders them. "Base date" is the occasion's exact date; the other streams
+ *  repeat on their own cycle, and each stream takes its own offset set. */
+const STREAMS: Record<string, { label: string; hint: string }> = {
+  event: { label: 'Base date', hint: 'Reminders counting down to the date itself' },
+  yearly: { label: 'Yearly', hint: 'Reminders before each yearly anniversary of the date' },
+  monthly: { label: 'Monthly', hint: 'Reminders before each monthly mark of the date' },
+  otonan: { label: 'Otonan', hint: 'Reminders before each 210-day Pawukon cycle of the date' },
 }
 
 /** The streams a recurrence emits — only these get an offsets input:
@@ -192,9 +194,11 @@ export function OccasionPrefsEditor({
         Active
       </label>
       {streams.map((s) => {
+        const stream = STREAMS[s]
         return (
           <div key={s} className="space-y-1">
-            <Label htmlFor={`occ-${occasion.id}-${s}`}>{STREAM_LABELS[s]}</Label>
+            <Label htmlFor={`occ-${occasion.id}-${s}`}>{stream.label}</Label>
+            <p className="text-muted-foreground text-xs">{stream.hint}</p>
             <Input
               id={`occ-${occasion.id}-${s}`}
               ref={(el) => {

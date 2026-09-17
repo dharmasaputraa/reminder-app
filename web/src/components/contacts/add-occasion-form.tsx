@@ -42,10 +42,18 @@ const RECURRENCE_ITEMS: { value: Occasion['recurrence']; label: string }[] = [
   { value: 'otonan', label: 'Otonan (every 210 days)' },
 ]
 
-/** The add-an-occasion form, revealed by a toggle in OccasionsTab. Same
- *  fields and behavior as the original bottom-of-card section; the form stays
- *  open after an add (fields reset) so several can be entered in a row. */
-export function AddOccasionForm({ contactId }: { contactId: string }) {
+/** The add-an-occasion form, rendered inside OccasionsTab's dialog. Same
+ *  fields and behavior as the original bottom-of-card section; on success it
+ *  toasts, resets the entry fields (so several can be entered in a row), and
+ *  calls onSaved — the host closes the dialog. */
+export function AddOccasionForm({
+  contactId,
+  onSaved,
+}: {
+  contactId: string
+  /** Called after a successful add — the host closes the dialog. */
+  onSaved?: () => void
+}) {
   const qc = useQueryClient()
   const [type, setType] = useState('otonan') // built-in value or 'custom'
   const [customType, setCustomType] = useState('') // free text when type === 'custom'
@@ -107,6 +115,8 @@ export function AddOccasionForm({ contactId }: { contactId: string }) {
       setLabel('')
       setCustomType('')
       invalidateContactReminders(qc, contactId)
+      toast.success('Occasion added')
+      onSaved?.()
     },
     onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })

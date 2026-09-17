@@ -163,3 +163,17 @@ variants used.
 - No URL state for the active tab.
 - No changes to the docked contact panel, `ContactSummaryCard`, or the edit
   overlay.
+
+## Revision (2026-09-17, after design review)
+
+- The tabs strip becomes a proper title bar — same `h-11` anatomy as the edit
+  panel's header (tabs vertically centered, hairline below).
+- **Add occasion moves into a Dialog** (replacing the inline collapsible
+  form); success toasts "Occasion added", failures toast the error, and the
+  dialog closes via an `onSaved` callback.
+- Each occasion is wrapped in its own bordered card; the row icon is a
+  circular chip in the agenda-avatar idiom (`Avatar` + per-type icon).
+- Delete moves out of the collapsed row into the expanded detail (below the
+  editor, with the existing confirm dialog); Remind-now stays on the row.
+- Occasion editor stream labels get plain-language names + explainer hints
+  (Base date / Yearly / Monthly / Otonan) — display copy only, no logic.

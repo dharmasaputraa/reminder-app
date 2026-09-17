@@ -26,8 +26,8 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   if (contact.isLoading) {
     return (
       <div className="rounded-xl border bg-card">
-        <div className="px-4 pt-4">
-          <Skeleton className="h-7 w-64" />
+        <div className="flex h-11 items-center border-b px-3">
+          <Skeleton className="h-8 w-64" />
         </div>
         <div className="space-y-2.5 px-4 py-4">
           <Skeleton className="h-4 w-full" />
@@ -55,7 +55,9 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   return (
     <Card>
       <Tabs defaultValue="occasions">
-        <div className="border-b px-4 pt-3 pb-2">
+        {/* Same title-bar anatomy as the edit panel's header: h-11 bar, the
+            segmented tabs vertically centered, hairline below. */}
+        <div className="flex h-11 shrink-0 items-center border-b px-3">
           <TabsList>
             <TabsTrigger value="occasions">
               <CalendarDaysIcon data-icon="inline-start" aria-hidden="true" />

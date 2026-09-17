@@ -35,18 +35,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import {
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from '@/components/ui/item'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 
-/** Per-type icon tiles; custom/unknown types fall back to a plain calendar. */
+/** Per-type icons for the circular row chips; custom/unknown types fall back
+ *  to a plain calendar. */
 const TYPE_ICONS: Record<string, LucideIcon> = {
   birthday: CakeIcon,
   anniversary: HeartIcon,
@@ -63,13 +66,13 @@ const RECURRENCE_COPY: Record<Occasion['recurrence'], string> = {
 }
 
 /** The occasions list: date-ordered accordion items (collapsed by default),
- *  an add-form toggle, and the empty state. Delete + Remind-now stay on the
- *  collapsed row, OUTSIDE the accordion trigger so buttons are never nested.
- *  The per-occasion reminder editor (OccasionPrefsEditor) only renders in the
- *  expanded content — inherit occasions stay visually quiet. */
+ *  each wrapped in its own bordered card. Remind-now stays on the collapsed
+ *  row, OUTSIDE the accordion trigger so buttons are never nested; the
+ *  editor + the delete action live in the expanded content. Adding happens
+ *  in a dialog. */
 export function OccasionsTab({ contact, channels }: { contact: Contact; channels: Channel[] }) {
   const qc = useQueryClient()
-  const [adding, setAdding] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
   // Countdown per occasion — shares the grid's ['upcoming','grid'] query, no
   // extra fetch.
   const { map: upcomingByOccasion } = useUpcomingByOccasion()
@@ -78,63 +81,87 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
     mutationFn: (oid: string) => api(`/occasions/${oid}`, { method: 'DELETE' }),
     onSuccess: () => {
       invalidateContactReminders(qc, contact.id)
+      toast.success('Occasion deleted')
     },
     onError: (e) => toast.error(`Failed to delete occasion: ${String(e)}`),
   })
 
-  if (contact.occasions.length === 0 && !adding) {
+  const addDialog = (
+    <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {addOpen && (
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-left">Add occasion</DialogTitle>
+            <DialogDescription className="text-left">
+              A birthday, anniversary, or any recurring date — its reminders layer on top of the
+              contact defaults.
+            </DialogDescription>
+          </DialogHeader>
+          <AddOccasionForm contactId={contact.id} onSaved={() => setAddOpen(false)} />
+        </DialogContent>
+      )}
+    </Dialog>
+  )
+
+  if (contact.occasions.length === 0) {
     return (
-      <Empty className="py-10">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <CalendarDaysIcon aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle>No occasions yet</EmptyTitle>
-          <EmptyDescription>
-            Add a birthday, anniversary, or any recurring date to start getting reminders.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button size="sm" onClick={() => setAdding(true)}>
-            <PlusIcon data-icon="inline-start" aria-hidden="true" />
-            Add occasion
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <>
+        <Empty className="py-10">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <CalendarDaysIcon aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyTitle>No occasions yet</EmptyTitle>
+            <EmptyDescription>
+              Add a birthday, anniversary, or any recurring date to start getting reminders.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <PlusIcon data-icon="inline-start" aria-hidden="true" />
+              Add occasion
+            </Button>
+          </EmptyContent>
+        </Empty>
+        {addDialog}
+      </>
     )
   }
 
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          aria-expanded={adding}
-          onClick={() => setAdding((v) => !v)}
-        >
+        <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
           <PlusIcon data-icon="inline-start" aria-hidden="true" />
           Add occasion
         </Button>
       </div>
-      {adding && <AddOccasionForm contactId={contact.id} />}
 
-      <Accordion>
+      <Accordion className="space-y-2">
         {contact.occasions.map((o) => {
           const up = upcomingByOccasion.get(o.id)
           const TypeIcon = TYPE_ICONS[o.type] ?? CalendarDaysIcon
           return (
-            <AccordionItem key={o.id} value={o.id}>
-              <AccordionHeader className="items-center gap-1 pr-2">
-                <AccordionTrigger className="min-w-0">
-                  <ItemMedia variant="icon" className="size-8 rounded-lg">
-                    <TypeIcon aria-hidden="true" />
-                  </ItemMedia>
+            // One bordered card per occasion: header row + editor share the
+            // same container. (border + last:border-b beat the primitive's
+            // border-b/last:border-b-0 divider styling.)
+            <AccordionItem key={o.id} value={o.id} className="rounded-lg border bg-card last:border-b">
+              <AccordionHeader className="w-full items-center gap-2 py-2.5 pl-3 pr-2">
+                <AccordionTrigger className="min-w-0 flex-1 gap-3 py-0">
+                  {/* Circular chip, same avatar idiom as the agenda rows. */}
+                  <Avatar size="lg" className="shrink-0">
+                    <AvatarFallback>
+                      <TypeIcon aria-hidden="true" className="size-5" />
+                    </AvatarFallback>
+                  </Avatar>
                   <ItemContent>
                     <ItemTitle>
                       <span className="min-w-0 truncate capitalize">{o.type}</span>
                       {o.label && (
-                        <span className="min-w-0 truncate text-muted-foreground font-normal"> · {o.label}</span>
+                        <span className="min-w-0 truncate text-muted-foreground font-normal">
+                          {' '}
+                          · {o.label}
+                        </span>
                       )}
                     </ItemTitle>
                     <ItemDescription className="truncate">
@@ -167,41 +194,50 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
                       className="size-7 justify-center px-0 text-muted-foreground hover:text-foreground"
                     />
                   )}
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Delete ${o.type} occasion`}
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2Icon aria-hidden="true" />
-                        </Button>
-                      }
-                    />
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          {o.type} on {longDate(o.base_date)} will be permanently deleted.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
                 </ItemActions>
               </AccordionHeader>
-              <AccordionContent className="pb-3">
-                <OccasionPrefsEditor contactId={contact.id} occasion={o} channels={channels} />
+              <AccordionContent>
+                <div className="border-t px-3 pb-3 pt-3">
+                  <OccasionPrefsEditor contactId={contact.id} occasion={o} channels={channels} />
+                  {/* Destructive actions live in the detail, not on the row. */}
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <p className="text-muted-foreground text-xs">
+                      Deleting also removes this occasion's reminders.
+                    </p>
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <Trash2Icon data-icon="inline-start" aria-hidden="true" />
+                            Delete occasion
+                          </Button>
+                        }
+                      />
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete this occasion?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {o.type} on {longDate(o.base_date)} will be permanently deleted.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => delOcc.mutate(o.id)}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
               </AccordionContent>
             </AccordionItem>
           )
         })}
       </Accordion>
+      {addDialog}
     </div>
   )
 }
