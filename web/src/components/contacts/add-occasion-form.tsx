@@ -8,6 +8,13 @@ import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-
 import type { DateSelectorValue } from '@/components/reui/date-selector'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -127,102 +134,118 @@ export function AddOccasionForm({
   return (
     <>
       <div className="text-sm">
-        <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          items={TYPE_ITEMS}
-          value={type}
-          onValueChange={(v) => {
-            if (!v) return
-            // "Custom…" falls back to yearly while the recurrence is still
-            // the previous type's default — a manual pick is kept.
-            if (v === 'custom' && recurrence === TYPE_RECURRENCE[type]) setRecurrence('yearly')
-            setType(v)
-          }}
-        >
-          <SelectTrigger className="w-56" aria-label="Occasion type">
-            <SelectValue placeholder="Select type" />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectGroup>
-              {TYPE_ITEMS.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        {custom && (
-          <Input
-            value={customType}
-            onChange={(e) => setCustomType(e.target.value)}
-            placeholder="Custom type, e.g. graduation"
-            aria-label="Custom occasion type"
-            className="w-56"
-          />
-        )}
-        <Select
-          items={RECURRENCE_ITEMS}
-          value={recurrence}
-          onValueChange={(v) => {
-            if (!v) return
-            setRecurrence(v)
-          }}
-        >
-          <SelectTrigger className="w-52" aria-label="Recurrence">
-            <SelectValue placeholder="Recurrence" />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectGroup>
-              {RECURRENCE_ITEMS.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <DateSelectorPopover
-          value={dateSel}
-          onApply={(v) => {
-            setDateSel(v)
-            const d = dateSelectorValueToDate(v)
-            setDate(d ? format(d, 'yyyy-MM-dd') : '')
-          }}
-          placeholder="Pick a date"
-          minYear={1800}
-          maxYear={new Date().getFullYear() + 10}
-          weekStartsOn={1}
-          allowRange={false}
-          periodTypes={['day', 'month', 'year']}
-          monthCascadesToDay
-          showFilterTypes={false}
-          className="w-56 justify-start"
-        />
-        <Input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Label (optional)"
-          aria-label="Occasion label"
-          className="w-44"
-        />
-      </div>
-      {custom && typeSuggestions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-muted-foreground text-xs">Previously used:</span>
-          {typeSuggestions.map((t) => (
-            <Button key={t} type="button" variant="outline" size="xs" onClick={() => setCustomType(t)}>
-              {t}
-            </Button>
-          ))}
-        </div>
-      )}
-      {pawukon && <p className="text-sm text-emerald-700 dark:text-emerald-400">{pawukon}</p>}
-      {effectiveType === 'birthday' && date.endsWith('-02-29') && (
-        <p className="text-muted-foreground text-xs">Feb 29 in non-leap years is observed on March 1.</p>
-      )}
-        </div>
+        <FieldGroup className="gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="occ-add-type">Type</FieldLabel>
+              <Select
+                items={TYPE_ITEMS}
+                value={type}
+                onValueChange={(v) => {
+                  if (!v) return
+                  // "Custom…" falls back to yearly while the recurrence is
+                  // still the previous type's default — a manual pick is kept.
+                  if (v === 'custom' && recurrence === TYPE_RECURRENCE[type]) setRecurrence('yearly')
+                  setType(v)
+                }}
+              >
+                <SelectTrigger id="occ-add-type" className="w-full">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {TYPE_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="occ-add-recurrence">Recurrence</FieldLabel>
+              <Select
+                items={RECURRENCE_ITEMS}
+                value={recurrence}
+                onValueChange={(v) => {
+                  if (!v) return
+                  setRecurrence(v)
+                }}
+              >
+                <SelectTrigger id="occ-add-recurrence" className="w-full">
+                  <SelectValue placeholder="Recurrence" />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {RECURRENCE_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>Follows the type — change to override.</FieldDescription>
+            </Field>
+          </div>
+          {custom && (
+            <Field>
+              <FieldLabel htmlFor="occ-add-custom">Custom type</FieldLabel>
+              <Input
+                id="occ-add-custom"
+                value={customType}
+                onChange={(e) => setCustomType(e.target.value)}
+                placeholder="e.g. graduation"
+              />
+              {typeSuggestions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-muted-foreground text-xs">Previously used:</span>
+                  {typeSuggestions.map((t) => (
+                    <Button key={t} type="button" variant="outline" size="xs" onClick={() => setCustomType(t)}>
+                      {t}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </Field>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldTitle>Date</FieldTitle>
+              <DateSelectorPopover
+                value={dateSel}
+                onApply={(v) => {
+                  setDateSel(v)
+                  const d = dateSelectorValueToDate(v)
+                  setDate(d ? format(d, 'yyyy-MM-dd') : '')
+                }}
+                placeholder="Pick a date"
+                minYear={1800}
+                maxYear={new Date().getFullYear() + 10}
+                weekStartsOn={1}
+                allowRange={false}
+                periodTypes={['day', 'month', 'year']}
+                monthCascadesToDay
+                showFilterTypes={false}
+                className="w-full justify-start"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="occ-add-label">Label</FieldLabel>
+              <Input
+                id="occ-add-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Optional, e.g. Wedding"
+              />
+            </Field>
+          </div>
+          {pawukon && <p className="text-sm text-emerald-700 dark:text-emerald-400">{pawukon}</p>}
+          {effectiveType === 'birthday' && date.endsWith('-02-29') && (
+            <p className="text-muted-foreground text-xs">Feb 29 in non-leap years is observed on March 1.</p>
+          )}
+        </FieldGroup>
       </div>
       <DialogFooter>
         <Button disabled={!date || !effectiveType || addOcc.isPending} onClick={() => addOcc.mutate()}>

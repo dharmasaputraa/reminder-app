@@ -42,7 +42,18 @@ export const Route = createFileRoute('/reminder/contacts/$id')({
   },
   validateSearch: validateContactDetailSearch,
   component: ContactDetailPage,
-  head: () => ({ meta: [{ title: pageTitle('Contacts') }] }),
+  // Title carries the contact's name once the loader has it; fall back to
+  // the section label while loaderData is absent (e.g. on client navigations
+  // that render head before the match's data lands).
+  head: ({ loaderData }) => ({
+    meta: [
+      {
+        title: loaderData
+          ? pageTitle(`${loaderData.name} — Contacts`)
+          : pageTitle('Contacts'),
+      },
+    ],
+  }),
 })
 
 /** Editable sections column + sticky right identity card with the edit

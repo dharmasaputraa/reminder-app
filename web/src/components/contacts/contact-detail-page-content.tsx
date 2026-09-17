@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { CalendarDaysIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/api'
 import { OccasionsTab } from '@/components/contacts/occasions-tab'
 import { ReminderPrefsTab } from '@/components/contacts/reminder-prefs-tab'
@@ -63,14 +62,8 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
     // own titled card below (Occasions / Reminder Preferences).
     <Tabs defaultValue="occasions" className="flex flex-col gap-4">
       <TabsList>
-        <TabsTrigger value="occasions">
-          <CalendarDaysIcon data-icon="inline-start" aria-hidden="true" />
-          Occasions ({c.occasions.length})
-        </TabsTrigger>
-        <TabsTrigger value="prefs">
-          <SlidersHorizontalIcon data-icon="inline-start" aria-hidden="true" />
-          Reminder Preferences
-        </TabsTrigger>
+        <TabsTrigger value="occasions">Occasions ({c.occasions.length})</TabsTrigger>
+        <TabsTrigger value="prefs">Reminder Preferences</TabsTrigger>
       </TabsList>
       <TabsContent value="occasions" keepMounted>
         <OccasionsTab contact={c} channels={channelList} />
