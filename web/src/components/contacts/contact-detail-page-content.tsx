@@ -5,7 +5,6 @@ import { ApiError, api, type Channel, type Contact, type Settings } from '@/lib/
 import { OccasionsTab } from '@/components/contacts/occasions-tab'
 import { ReminderPrefsTab } from '@/components/contacts/reminder-prefs-tab'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -60,23 +59,19 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   const channelList = channels.data?.channels ?? []
 
   return (
-    // The tabs live on their own card; each tab renders its own titled card
-    // below (Occasions / Reminder Preferences).
+    // Bare tab switcher on the page (no card wrapper); each tab renders its
+    // own titled card below (Occasions / Reminder Preferences).
     <Tabs defaultValue="occasions" className="flex flex-col gap-4">
-      <Card className="gap-0 py-0">
-        <div className="flex h-11 items-center px-3">
-          <TabsList>
-            <TabsTrigger value="occasions">
-              <CalendarDaysIcon data-icon="inline-start" aria-hidden="true" />
-              Occasions ({c.occasions.length})
-            </TabsTrigger>
-            <TabsTrigger value="prefs">
-              <SlidersHorizontalIcon data-icon="inline-start" aria-hidden="true" />
-              Reminder Preferences
-            </TabsTrigger>
-          </TabsList>
-        </div>
-      </Card>
+      <TabsList>
+        <TabsTrigger value="occasions">
+          <CalendarDaysIcon data-icon="inline-start" aria-hidden="true" />
+          Occasions ({c.occasions.length})
+        </TabsTrigger>
+        <TabsTrigger value="prefs">
+          <SlidersHorizontalIcon data-icon="inline-start" aria-hidden="true" />
+          Reminder Preferences
+        </TabsTrigger>
+      </TabsList>
       <TabsContent value="occasions" keepMounted>
         <OccasionsTab contact={c} channels={channelList} />
       </TabsContent>
