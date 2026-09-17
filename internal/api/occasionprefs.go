@@ -13,7 +13,10 @@ import (
 
 // occasionPrefsIn: full-replace payload. An absent offsets map decodes as nil
 // and is stored as {} = inherit every stream. An absent custom decodes as
-// true: legacy payloads always meant custom-on.
+// true: legacy payloads always meant custom-on. Unlike the contact-level PUT
+// (handleSetPrefs), which merges omitted fields from the stored row, this one
+// is full-replace: a flag-only payload resets every unspecified field
+// (offsets → {}, channel_ids → [], enabled → true).
 type occasionPrefsIn struct {
 	Offsets    domain.OffsetMap `json:"offsets"`
 	ChannelIDs *[]string        `json:"channel_ids"`

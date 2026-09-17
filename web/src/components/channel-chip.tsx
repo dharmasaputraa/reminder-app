@@ -24,7 +24,7 @@ export function ChannelChip({ channel, checked, onToggle, disabled }: {
       )}
     >
       <ChannelIcon type={channel.type} className="size-4" />
-      <span className="w-full truncate text-center">{channel.name}</span>
+      <span className="w-full truncate text-center" title={channel.name}>{channel.name}</span>
     </button>
   )
 }
