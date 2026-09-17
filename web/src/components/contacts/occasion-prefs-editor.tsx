@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { cn } from 'cn'
 import { ChevronRightIcon } from 'lucide-react'
 import { api, type Channel, type Contact, type Occasion, type OccasionPrefs, type OffsetMap } from '@/lib/api'
-import { channelIcon } from '@/lib/channel-icons'
+import { ChannelIcon } from '@/lib/channel-icons'
 import { Frame, FrameHeader, FramePanel, FrameTitle } from '@/components/reui/frame'
 import {
   AlertDialog,
@@ -340,7 +340,6 @@ export function OccasionPrefsEditor({
                 <div className="text-sm font-medium">Channels</div>
                 <div className="flex flex-wrap gap-2">
                   {channels.map((ch) => {
-                    const ChIcon = channelIcon(ch.type)
                     const checked = row.channel_ids.includes(ch.id)
                     return (
                       <button
@@ -359,7 +358,7 @@ export function OccasionPrefsEditor({
                             : 'text-muted-foreground hover:bg-muted/50',
                         )}
                       >
-                        <ChIcon aria-hidden="true" className="size-4" />
+                        <ChannelIcon type={ch.type} />
                         <span className="w-full truncate text-center">{ch.name}</span>
                       </button>
                     )
