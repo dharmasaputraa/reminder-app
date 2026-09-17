@@ -119,21 +119,27 @@ function Channels() {
             </div>
             <p className="text-xs text-muted-foreground">{ch.enabled ? 'active' : 'inactive'}</p>
           </div>
-          <label className="flex items-center gap-1.5 text-sm">
+          {/* A span, not a label: a wrapping <label> forwards a second, opposite
+              click to the Checkbox's hidden input. The Checkbox carries its own
+              aria-label instead. */}
+          <span className="flex items-center gap-1.5 text-sm">
             <Checkbox
               checked={isDefault(ch.id)}
               disabled={!settings.data || setDefault.isPending}
               onCheckedChange={(v) => toggleDefault(ch.id, v === true)}
+              aria-label="Set as default channel"
             />
             Default
-          </label>
-          <label className="flex items-center gap-1.5 text-sm">
+          </span>
+          {/* Same: the Switch must not be wrapped in a label. */}
+          <span className="flex items-center gap-1.5 text-sm">
             <Switch
               checked={ch.enabled}
               onCheckedChange={(v) => toggle.mutate({ id: ch.id, enabled: v === true })}
+              aria-label="Toggle channel active"
             />
             active
-          </label>
+          </span>
           <Button variant="outline" size="sm" onClick={() => test.mutate(ch.id)} disabled={test.isPending}>
             Test
           </Button>
