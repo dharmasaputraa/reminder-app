@@ -277,7 +277,7 @@ export function OccasionPrefsEditor({
             disabled={!custom}
             className="flex flex-1 cursor-pointer items-center justify-between gap-2 rounded-lg py-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
           >
-            <FrameTitle className="text-sm font-medium">{custom ? 'Custom reminders' : 'Inherit reminders'}</FrameTitle>
+            <FrameTitle className="text-sm font-medium">Custom reminders</FrameTitle>
             {custom && (
               <ChevronRightIcon
                 aria-hidden="true"
@@ -293,6 +293,7 @@ export function OccasionPrefsEditor({
             onCheckedChange={(v) => toggleCustom(v === true)}
             aria-label="Use custom reminders"
           />
+          {!custom && <span className="text-muted-foreground text-sm">Inherit</span>}
         </FrameHeader>
         {!custom && savedHint() !== '' && (
           <FramePanel fit className="text-muted-foreground text-xs">{savedHint()}</FramePanel>
