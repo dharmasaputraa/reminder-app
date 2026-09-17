@@ -135,9 +135,8 @@ export function AddOccasionForm({
     <>
       <div className="text-sm">
         <FieldGroup className="gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="occ-add-type">Type</FieldLabel>
+          <Field>
+            <FieldLabel htmlFor="occ-add-type">Type</FieldLabel>
               <Select
                 items={TYPE_ITEMS}
                 value={type}
@@ -188,7 +187,6 @@ export function AddOccasionForm({
               </Select>
               <FieldDescription>Follows the type — change to override.</FieldDescription>
             </Field>
-          </div>
           {custom && (
             <Field>
               <FieldLabel htmlFor="occ-add-custom">Custom type</FieldLabel>
@@ -210,9 +208,8 @@ export function AddOccasionForm({
               )}
             </Field>
           )}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldTitle>Date</FieldTitle>
+          <Field>
+            <FieldTitle>Date</FieldTitle>
               <DateSelectorPopover
                 value={dateSel}
                 onApply={(v) => {
@@ -240,7 +237,6 @@ export function AddOccasionForm({
                 placeholder="Optional, e.g. Wedding"
               />
             </Field>
-          </div>
           {pawukon && <p className="text-sm text-emerald-700 dark:text-emerald-400">{pawukon}</p>}
           {effectiveType === 'birthday' && date.endsWith('-02-29') && (
             <p className="text-muted-foreground text-xs">Feb 29 in non-leap years is observed on March 1.</p>
