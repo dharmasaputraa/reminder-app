@@ -7,6 +7,7 @@ import { invalidateContactReminders } from '@/lib/prefs'
 import { DateSelectorPopover, dateSelectorValueToDate } from '@/components/date-selector-popover'
 import type { DateSelectorValue } from '@/components/reui/date-selector'
 import { Button } from '@/components/ui/button'
+import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -121,11 +122,12 @@ export function AddOccasionForm({
     onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })
 
-  // Dialog body + footer action — same structure as the edit dialog
-  // (plain fields, right-aligned submit in a footer row).
+  // Dialog body + footer action — the DialogFooter primitive gives the same
+  // full-bleed muted band as the other dialogs (event detail, day events).
   return (
-    <div className="text-sm">
-      <div className="space-y-2">
+    <>
+      <div className="text-sm">
+        <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <Select
           items={TYPE_ITEMS}
@@ -220,13 +222,13 @@ export function AddOccasionForm({
       {effectiveType === 'birthday' && date.endsWith('-02-29') && (
         <p className="text-muted-foreground text-xs">Feb 29 in non-leap years is observed on March 1.</p>
       )}
+        </div>
       </div>
-      {/* Footer action — same placement as the edit dialog's Save. */}
-      <div className="mt-4 flex justify-end">
+      <DialogFooter>
         <Button disabled={!date || !effectiveType || addOcc.isPending} onClick={() => addOcc.mutate()}>
           Add occasion
         </Button>
-      </div>
-    </div>
+      </DialogFooter>
+    </>
   )
 }
