@@ -250,7 +250,10 @@ export function OccasionPrefsEditor({
     <Frame spacing="sm" stacked className="mt-2 [--frame-radius:var(--radius-lg)]">
       <FramePanel fit className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">Reminders for this occasion</span>
-        <label className="flex items-center gap-2 text-sm font-medium">
+        {/* A span, not a label: a wrapping <label> forwards a second click to
+            the Switch's hidden form input, firing onCheckedChange twice with
+            opposite values. The Switch carries its own aria-label instead. */}
+        <span className="flex items-center gap-2 text-sm font-medium">
           <Switch
             checked={row.enabled}
             aria-disabled={paused || undefined}
@@ -263,9 +266,10 @@ export function OccasionPrefsEditor({
               if (v) saveRow({ ...rowRef.current, enabled: true })
               else setConfirm('occasion')
             }}
+            aria-label="Toggle reminders for this occasion"
           />
           {row.enabled ? 'Active' : 'Inactive'}
-        </label>
+        </span>
       </FramePanel>
       <Collapsible open={customOpen} onOpenChange={setCustomOpen} className="group/collapsible">
         <FrameHeader className="flex flex-row items-center justify-between gap-2">
