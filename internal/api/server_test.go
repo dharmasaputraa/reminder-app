@@ -818,6 +818,61 @@ func TestOccasionPrefsEndpoints(t *testing.T) {
 	}
 }
 
+// The custom flag: default GET payload says inherit (custom=false), a legacy
+// PUT without the field lands as custom=true, and PUT custom=false retains
+// the stored offsets/channels instead of wiping them.
+func TestOccasionPrefsCustomFlag(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid,
+		`{"type":"birthday","date":"2025-06-16","recurrence":"yearly"}`)
+
+	prefsReq := func(method, id, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, method, "/api/v1/occasions/"+id+"/prefs", "admin@x.id", body))
+		return w
+	}
+
+	// No row → the inherit default carries custom:false.
+	w := prefsReq("GET", occID, "")
+	var d store.OccasionPrefs
+	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Custom {
+		t.Errorf("default payload custom = true, want false: %s", w.Body.String())
+	}
+
+	// Legacy payload (no custom field) → custom=true on the stored row.
+	if w := prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true}`); w.Code != 200 {
+		t.Fatalf("legacy put: %d %s", w.Code, w.Body.String())
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs == nil || !oc.Prefs.Custom {
+		t.Errorf("legacy put must store custom=true, got %+v", oc.Prefs)
+	}
+
+	// PUT custom=false keeps the values (they are retained, not wiped).
+	w = prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true,"custom":false}`)
+	if w.Code != 200 {
+		t.Fatalf("put custom=false: %d %s", w.Code, w.Body.String())
+	}
+	oc := contactOccasion(t, srv, "admin@x.id", cid, occID)
+	if oc.Prefs == nil || oc.Prefs.Custom {
+		t.Fatalf("custom = %+v, want false with values retained", oc.Prefs)
+	}
+	if !reflect.DeepEqual(oc.Prefs.Offsets[domain.StreamYearly], []int{7}) {
+		t.Errorf("offsets = %v, want [7] retained", oc.Prefs.Offsets[domain.StreamYearly])
+	}
+
+	// Flipping back on reactivates the retained values.
+	if w := prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true,"custom":true}`); w.Code != 200 {
+		t.Fatalf("put custom=true: %d %s", w.Code, w.Body.String())
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs == nil || !oc.Prefs.Custom {
+		t.Errorf("custom = %+v, want true", oc.Prefs)
+	}
+}
+
 // Path ids are canonicalized before they reach the store: SQLite compares ids
 // with the BINARY collation, so an uppercase (pasted) UUID must resolve to the
 // same row as the stored lowercase form instead of 404ing — on contacts and on

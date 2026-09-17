@@ -12,11 +12,13 @@ import (
 // owner-scoped via s.scope(c); a malformed path id is a 404 (pathID).
 
 // occasionPrefsIn: full-replace payload. An absent offsets map decodes as nil
-// and is stored as {} = inherit every stream.
+// and is stored as {} = inherit every stream. An absent custom decodes as
+// true: legacy payloads always meant custom-on.
 type occasionPrefsIn struct {
 	Offsets    domain.OffsetMap `json:"offsets"`
 	ChannelIDs *[]string        `json:"channel_ids"`
 	Enabled    *bool            `json:"enabled"`
+	Custom     *bool            `json:"custom"`
 }
 
 // handleGetOccasionPrefs: without a row the occasion inherits, which the SPA
@@ -32,7 +34,7 @@ func (s *Server) handleGetOccasionPrefs(c *gin.Context) {
 		return
 	}
 	if occ.Prefs == nil {
-		c.JSON(200, store.OccasionPrefs{OccasionID: id, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}, Enabled: true})
+		c.JSON(200, store.OccasionPrefs{OccasionID: id, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}, Enabled: true, Custom: false})
 		return
 	}
 	c.JSON(200, *occ.Prefs)
@@ -55,7 +57,7 @@ func (s *Server) handleSetOccasionPrefs(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	p := store.OccasionPrefs{OccasionID: id, Offsets: in.Offsets, ChannelIDs: []string{}, Enabled: true}
+	p := store.OccasionPrefs{OccasionID: id, Offsets: in.Offsets, ChannelIDs: []string{}, Enabled: true, Custom: true}
 	if p.Offsets == nil {
 		p.Offsets = domain.OffsetMap{}
 	}
@@ -64,6 +66,9 @@ func (s *Server) handleSetOccasionPrefs(c *gin.Context) {
 	}
 	if in.Enabled != nil {
 		p.Enabled = *in.Enabled
+	}
+	if in.Custom != nil {
+		p.Custom = *in.Custom
 	}
 	if err := s.st.SetOccasionPrefs(c.Request.Context(), p); err != nil {
 		respondErr(c, err)
