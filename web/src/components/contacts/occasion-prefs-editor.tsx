@@ -268,7 +268,7 @@ export function OccasionPrefsEditor({
             }}
             aria-label="Toggle reminders for this occasion"
           />
-          {row.enabled ? 'Active' : 'Inactive'}
+          {row.enabled ? 'Active' : 'Paused'}
         </span>
       </FramePanel>
       <Collapsible open={customOpen} onOpenChange={setCustomOpen} className="group/collapsible">
@@ -293,7 +293,7 @@ export function OccasionPrefsEditor({
             onCheckedChange={(v) => toggleCustom(v === true)}
             aria-label="Use custom reminders"
           />
-          {!custom && <span className="text-muted-foreground text-sm">Inherit</span>}
+          <span className="text-muted-foreground text-sm">{custom ? 'Custom' : 'Inherit'}</span>
         </FrameHeader>
         {!custom && savedHint() !== '' && (
           <FramePanel fit className="text-muted-foreground text-xs">{savedHint()}</FramePanel>
@@ -372,7 +372,7 @@ export function OccasionPrefsEditor({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm === 'custom'
-                ? 'The occasion will use the contact defaults. Saved days and channels are kept and restored when you re-enable custom reminders.'
+                ? 'The occasion will use the contact defaults.'
                 : 'This occasion sends no notifications until you turn it back on.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
