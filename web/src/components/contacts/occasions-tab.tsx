@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { cn } from 'cn'
 import {
+  BellOffIcon,
   CalendarDaysIcon,
   CakeIcon,
   ChevronDownIcon,
@@ -93,6 +94,19 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
   // extra fetch.
   const { map: upcomingByOccasion } = useUpcomingByOccasion()
 
+  // Contact-level master switch off → every per-occasion switch is locked.
+  const paused = contact.prefs?.enabled === false
+  const [pausedDialogOpen, setPausedDialogOpen] = useState(false)
+  const activateAll = useMutation({
+    mutationFn: () =>
+      api(`/contacts/${contact.id}/prefs`, { method: 'PUT', body: JSON.stringify({ enabled: true }) }),
+    onSuccess: () => {
+      invalidateContactReminders(qc, contact.id)
+      toast.success('Notifications enabled')
+    },
+    onError: (e) => toast.error(`Failed to enable notifications: ${String(e)}`),
+  })
+
   const deleteOcc = useMutation({
     mutationFn: (oid: string) => api(`/occasions/${oid}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -156,6 +170,24 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
     </AlertDialog>
   )
 
+  const pausedDialog = (
+    <AlertDialog open={pausedDialogOpen} onOpenChange={setPausedDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Notifications are paused</AlertDialogTitle>
+          <AlertDialogDescription>
+            Reminders for this contact are paused in Reminder Preferences. Turn notifications back on to
+            unlock the switches below — nothing else changes.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => activateAll.mutate()}>Activate</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
   return (
     // The tab's own card: titled header with the Add action (justify-between),
     // list body below.
@@ -168,6 +200,12 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
         </Button>
       </div>
       <CardContent className="p-4">
+        {paused && (
+          <div className="text-muted-foreground mb-2 flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+            <BellOffIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            <span>Notifications are paused for this contact — enable them in Reminder Preferences.</span>
+          </div>
+        )}
         {contact.occasions.length === 0 ? (
           <Empty className="py-10">
             <EmptyHeader>
@@ -199,6 +237,8 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
                 occasion={o}
                 up={upcomingByOccasion.get(o.id)}
                 channels={channels}
+                paused={paused}
+                onPausedInteraction={() => setPausedDialogOpen(true)}
                 open={openItems.includes(o.id)}
                 onEdit={() => setEditOcc(o)}
                 onDelete={() => setDelOcc(o)}
@@ -209,6 +249,7 @@ export function OccasionsTab({ contact, channels }: { contact: Contact; channels
         {addDialog}
         {editDialog}
         {deleteDialog}
+        {pausedDialog}
       </CardContent>
     </Card>
   )
@@ -226,6 +267,8 @@ function OccasionCard({
   occasion: o,
   up,
   channels,
+  paused,
+  onPausedInteraction,
   open,
   onEdit,
   onDelete,
@@ -235,6 +278,8 @@ function OccasionCard({
   /** Next occurrence of this occasion — undefined when none is upcoming. */
   up?: { date: string; days_until: number }
   channels: Channel[]
+  paused: boolean
+  onPausedInteraction: () => void
   open: boolean
   onEdit: () => void
   onDelete: () => void
@@ -334,7 +379,7 @@ function OccasionCard({
             {/* Mobile-only: all badges stack under the date, out of the
                 cramped right edge. mt-2 separates them from the date line. */}
             <span className="mt-2 flex items-center gap-1 sm:hidden">
-              {o.prefs && <Badge variant="outline">Custom</Badge>}
+              {o.prefs?.custom === true && <Badge variant="outline">Custom</Badge>}
               {o.prefs?.enabled === false && <Badge variant="warning-outline">Paused</Badge>}
               {countdown && up && (
                 <Badge variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}>
@@ -344,7 +389,7 @@ function OccasionCard({
             </span>
           </ItemContent>
           <span className="flex shrink-0 items-center gap-1 max-sm:hidden">
-            {o.prefs && <Badge variant="outline">Custom</Badge>}
+            {o.prefs?.custom === true && <Badge variant="outline">Custom</Badge>}
             {o.prefs?.enabled === false && <Badge variant="warning-outline">Paused</Badge>}
             {countdown && up && (
               <Badge variant={up.days_until <= 7 ? 'warning-outline' : 'secondary'}>
@@ -384,14 +429,12 @@ function OccasionCard({
       </AccordionHeader>
       <AccordionContent>
         <div className="border-t px-4 pb-4 pt-3">
-          {/* TODO(task-6): wire the real contact-level paused flag and the
-              force-activate dialog — these two props are placeholders. */}
           <OccasionPrefsEditor
             contactId={contact.id}
             occasion={o}
             channels={channels}
-            paused={false}
-            onPausedInteraction={() => {}}
+            paused={paused}
+            onPausedInteraction={onPausedInteraction}
           />
         </div>
       </AccordionContent>
