@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { cn } from 'cn'
 import { ChevronRightIcon } from 'lucide-react'
 import { api, type Channel, type Contact, type Occasion, type OccasionPrefs, type OffsetMap } from '@/lib/api'
+import { channelIcon } from '@/lib/channel-icons'
 import { Frame, FrameHeader, FramePanel, FrameTitle } from '@/components/reui/frame'
 import {
   AlertDialog,
@@ -16,7 +17,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -335,19 +335,31 @@ export function OccasionPrefsEditor({
               <div className="space-y-1.5">
                 <div className="text-sm font-medium">Channels</div>
                 <div className="flex flex-wrap gap-2">
-                  {channels.map((ch) => (
-                    <label key={ch.id} className="bg-muted flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm">
-                      <Checkbox
-                        checked={row.channel_ids.includes(ch.id)}
-                        onCheckedChange={(v) => {
+                  {channels.map((ch) => {
+                    const ChIcon = channelIcon(ch.type)
+                    const checked = row.channel_ids.includes(ch.id)
+                    return (
+                      <button
+                        key={ch.id}
+                        type="button"
+                        aria-pressed={checked}
+                        onClick={() => {
                           const cur = rowRef.current.channel_ids
-                          const next = v === true ? [...cur, ch.id] : cur.filter((id) => id !== ch.id)
+                          const next = checked ? cur.filter((id) => id !== ch.id) : [...cur, ch.id]
                           saveRow({ ...rowRef.current, channel_ids: next })
                         }}
-                      />
-                      {ch.name}
-                    </label>
-                  ))}
+                        className={cn(
+                          'flex w-20 flex-col items-center gap-1.5 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                          checked
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:bg-muted/50',
+                        )}
+                      >
+                        <ChIcon aria-hidden="true" className="size-4" />
+                        <span className="w-full truncate text-center">{ch.name}</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
