@@ -151,6 +151,8 @@ func (s *Server) multiProvider() calendarprov.MultiProvider {
 // contactPrefsOf / occasionPrefsOf: the per-stream override maps of one prefs
 // layer, nil when the row is absent (pure inherit). Enabled is a delivery kill
 // switch handled by the scheduler; it does not select which offsets apply.
+// A custom=false occasion row holds retained-but-inactive values: it inherits
+// as if the row were absent (same gate as the scheduler).
 func contactPrefsOf(cw store.ContactWithOccasions) domain.OffsetMap {
 	if cw.Prefs == nil {
 		return nil
@@ -159,7 +161,7 @@ func contactPrefsOf(cw store.ContactWithOccasions) domain.OffsetMap {
 }
 
 func occasionPrefsOf(o store.Occasion) domain.OffsetMap {
-	if o.Prefs == nil {
+	if o.Prefs == nil || !o.Prefs.Custom {
 		return nil
 	}
 	return o.Prefs.Offsets

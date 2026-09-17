@@ -169,3 +169,61 @@ func TestUpcomingOccasionRemindersFlag(t *testing.T) {
 		t.Errorf("reminders = %v, want [2 0]", o.Reminders)
 	}
 }
+
+// A custom=false occasion_prefs row holds retained-but-inactive values:
+// /upcoming must resolve through the contact chain (same gate as the
+// scheduler), not surface the retained offsets. Flipping custom back on
+// re-activates them — proving the gate, not a seeding accident.
+func TestUpcomingInactiveCustomOccasionPrefsInheritContact(t *testing.T) {
+	srv, st := newUpcomingTestServer(t, nil)
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made","nickname":"De"}`)
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	today := domain.DateFromTime(time.Now().In(loc))
+	ocBody, _ := json.Marshal(map[string]string{"type": "otonan", "date": today.AddDays(-domain.PawukonCycleDays).String()})
+	occID := addOccasion(t, srv, "admin@x.id", cid, string(ocBody))
+
+	ctx := context.Background()
+	if err := st.SetReminderPrefs(ctx, store.ReminderPrefs{
+		ContactID: cid, Enabled: true, Offsets: domain.OffsetMap{domain.StreamOtonan: {2, 0}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Retained-but-inactive: custom=false with DIFFERENT offsets.
+	if err := st.SetOccasionPrefs(ctx, store.OccasionPrefs{OccasionID: occID, Custom: false, Enabled: true,
+		Offsets: domain.OffsetMap{domain.StreamOtonan: {9, 7, 5}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	occ := func(items []UpcomingItem) *UpcomingItem {
+		for i := range items {
+			if items[i].Kind == "occasion" {
+				return &items[i]
+			}
+		}
+		return nil
+	}
+
+	o := occ(upcomingItems(t, srv, "?days=30"))
+	if o == nil {
+		t.Fatal("no occasion item in /upcoming")
+	}
+	if o.RemindersDefault {
+		t.Error("reminders_default must be false: the contact chain supplies the offsets")
+	}
+	if !reflect.DeepEqual(o.Reminders, []int{2, 0}) {
+		t.Errorf("custom=false reminders = %v, want contact chain [2 0]", o.Reminders)
+	}
+
+	// Same row, custom flipped on: the occasion offsets are active again.
+	if err := st.SetOccasionPrefs(ctx, store.OccasionPrefs{OccasionID: occID, Custom: true, Enabled: true,
+		Offsets: domain.OffsetMap{domain.StreamOtonan: {9, 7, 5}}}); err != nil {
+		t.Fatal(err)
+	}
+	o = occ(upcomingItems(t, srv, "?days=30"))
+	if o == nil {
+		t.Fatal("no occasion item after custom=true")
+	}
+	if !reflect.DeepEqual(o.Reminders, []int{9, 7, 5}) {
+		t.Errorf("custom=true reminders = %v, want occasion offsets [9 7 5]", o.Reminders)
+	}
+}
