@@ -121,11 +121,11 @@ export function AddOccasionForm({
     onError: (e) => toast.error(`Failed to add occasion: ${String(e)}`),
   })
 
-  // flex-wrap: the w-56 controls share the row only when there is room and
-  // stack on narrow viewports. Custom types reveal a free-text input in place,
-  // with the previously used types as clickable suggestion chips underneath.
+  // Dialog body + footer action — same structure as the edit dialog
+  // (plain fields, right-aligned submit in a footer row).
   return (
-    <div className="space-y-2 rounded-xl bg-muted/40 p-3">
+    <div className="text-sm">
+      <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <Select
           items={TYPE_ITEMS}
@@ -205,9 +205,6 @@ export function AddOccasionForm({
           aria-label="Occasion label"
           className="w-44"
         />
-        <Button disabled={!date || !effectiveType || addOcc.isPending} onClick={() => addOcc.mutate()}>
-          Add
-        </Button>
       </div>
       {custom && typeSuggestions.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -223,6 +220,13 @@ export function AddOccasionForm({
       {effectiveType === 'birthday' && date.endsWith('-02-29') && (
         <p className="text-muted-foreground text-xs">Feb 29 in non-leap years is observed on March 1.</p>
       )}
+      </div>
+      {/* Footer action — same placement as the edit dialog's Save. */}
+      <div className="mt-4 flex justify-end">
+        <Button disabled={!date || !effectiveType || addOcc.isPending} onClick={() => addOcc.mutate()}>
+          Add occasion
+        </Button>
+      </div>
     </div>
   )
 }

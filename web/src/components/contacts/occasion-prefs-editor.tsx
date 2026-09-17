@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ChevronDownIcon } from 'lucide-react'
+import { cn } from 'cn'
 import { api, type Channel, type Contact, type Occasion, type OccasionPrefs, type OffsetMap } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -158,6 +160,12 @@ export function OccasionPrefsEditor({
   // a focused input is left alone and reconciles itself on blur.
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const streams = STREAMS_FOR[occasion.recurrence]
+  // The custom offsets/channels section starts open only when the occasion
+  // already carries an override; plain inherit occasions stay collapsed.
+  const [customOpen, setCustomOpen] = useState(
+    () =>
+      streams.some((s) => (row.offsets[s] ?? []).length > 0) || row.channel_ids.length > 0,
+  )
   useEffect(() => {
     for (const s of streams) {
       const el = inputRefs.current[s]
@@ -193,61 +201,80 @@ export function OccasionPrefsEditor({
         />
         Active
       </label>
-      {streams.map((s) => {
-        const stream = STREAMS[s]
-        return (
-          <div key={s} className="space-y-1">
-            <Label htmlFor={`occ-${occasion.id}-${s}`}>{stream.label}</Label>
-            <p className="text-muted-foreground text-xs">{stream.hint}</p>
-            <Input
-              id={`occ-${occasion.id}-${s}`}
-              ref={(el) => {
-                inputRefs.current[s] = el
-              }}
-              // Uncontrolled: mount-time value only, the effect above syncs it.
-              defaultValue={(row.offsets[s] ?? []).join(', ')}
-              placeholder="inherit"
-              onBlur={(e) => {
-                const el = e.target
-                const saved = rowRef.current.offsets[s] ?? []
-                const list = el.value
-                  .split(',')
-                  .map((x) => parseInt(x.trim(), 10))
-                  .filter((n) => !Number.isNaN(n))
-                // Blur without an edit must not create an override row; just
-                // re-canonicalize the text ("5,3" → "5, 3").
-                if (list.join(',') === saved.join(',')) {
-                  el.value = saved.join(', ')
-                  return
-                }
-                saveRow({ ...rowRef.current, offsets: { ...rowRef.current.offsets, [s]: list } })
-              }}
-              className="max-w-xs"
-            />
-          </div>
-        )
-      })}
-      {channels.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-sm font-medium">Channels</div>
-          <div className="flex flex-wrap gap-2">
-            {channels.map((ch) => (
-              <label key={ch.id} className="bg-muted flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm">
-                <Checkbox
-                  checked={row.channel_ids.includes(ch.id)}
-                  onCheckedChange={(v) => {
-                    const cur = rowRef.current.channel_ids
-                    const next = v === true ? [...cur, ch.id] : cur.filter((id) => id !== ch.id)
-                    saveRow({ ...rowRef.current, channel_ids: next })
+      {/* Disclosure: the per-stream offsets + channels only appear on demand,
+          so a plain inherit occasion reads as one quiet row. Inputs remount
+          with their saved values (the sync effect re-applies row state). */}
+      <button
+        type="button"
+        aria-expanded={customOpen}
+        onClick={() => setCustomOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-lg px-1 py-0.5 text-left text-sm font-medium hover:bg-muted/60"
+      >
+        Custom reminders
+        <ChevronDownIcon
+          aria-hidden="true"
+          className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', customOpen && 'rotate-180')}
+        />
+      </button>
+      {customOpen && (
+        <>
+          {streams.map((s) => {
+            const stream = STREAMS[s]
+            return (
+              <div key={s} className="space-y-1">
+                <Label htmlFor={`occ-${occasion.id}-${s}`}>{stream.label}</Label>
+                <p className="text-muted-foreground text-xs">{stream.hint}</p>
+                <Input
+                  id={`occ-${occasion.id}-${s}`}
+                  ref={(el) => {
+                    inputRefs.current[s] = el
                   }}
+                  // Uncontrolled: mount-time value only, the effect above syncs it.
+                  defaultValue={(row.offsets[s] ?? []).join(', ')}
+                  placeholder="inherit"
+                  onBlur={(e) => {
+                    const el = e.target
+                    const saved = rowRef.current.offsets[s] ?? []
+                    const list = el.value
+                      .split(',')
+                      .map((x) => parseInt(x.trim(), 10))
+                      .filter((n) => !Number.isNaN(n))
+                    // Blur without an edit must not create an override row; just
+                    // re-canonicalize the text ("5,3" → "5, 3").
+                    if (list.join(',') === saved.join(',')) {
+                      el.value = saved.join(', ')
+                      return
+                    }
+                    saveRow({ ...rowRef.current, offsets: { ...rowRef.current.offsets, [s]: list } })
+                  }}
+                  className="max-w-xs"
                 />
-                {ch.name}
-              </label>
-            ))}
-          </div>
-        </div>
+              </div>
+            )
+          })}
+          {channels.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-sm font-medium">Channels</div>
+              <div className="flex flex-wrap gap-2">
+                {channels.map((ch) => (
+                  <label key={ch.id} className="bg-muted flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm">
+                    <Checkbox
+                      checked={row.channel_ids.includes(ch.id)}
+                      onCheckedChange={(v) => {
+                        const cur = rowRef.current.channel_ids
+                        const next = v === true ? [...cur, ch.id] : cur.filter((id) => id !== ch.id)
+                        saveRow({ ...rowRef.current, channel_ids: next })
+                      }}
+                    />
+                    {ch.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="text-muted-foreground text-xs">Empty = inherit from contact defaults.</p>
+        </>
       )}
-      <p className="text-muted-foreground text-xs">Empty = inherit from contact defaults.</p>
     </div>
   )
 }

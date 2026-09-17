@@ -26,7 +26,7 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   if (contact.isLoading) {
     return (
       <div className="rounded-xl border bg-card">
-        <div className="flex h-11 items-center border-b px-3">
+        <div className="flex h-11 items-center border-b px-4">
           <Skeleton className="h-8 w-64" />
         </div>
         <div className="space-y-2.5 px-4 py-4">
@@ -53,10 +53,11 @@ export function ContactDetailPageContent({ contactId }: { contactId: string }) {
   const channelList = channels.data?.channels ?? []
 
   return (
-    <Card>
-      <Tabs defaultValue="occasions">
-        {/* Same title-bar anatomy as the agenda panel's header: h-11 bar,
-            px-4, content vertically centered, hairline below. */}
+    // Same card structure as the edit contact card: the h-11 title bar sits
+    // FLUSH at the top of the card — the Card's built-in padding/gap are
+    // removed so the hairline spans edge to edge.
+    <Card className="gap-0 py-0">
+      <Tabs defaultValue="occasions" className="flex flex-col">
         <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-4">
           <TabsList>
             <TabsTrigger value="occasions">
