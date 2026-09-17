@@ -835,6 +835,9 @@ func TestOccasionPrefsCustomFlag(t *testing.T) {
 
 	// No row → the inherit default carries custom:false.
 	w := prefsReq("GET", occID, "")
+	if w.Code != 200 {
+		t.Fatalf("rowless prefs GET = %d, want 200: %s", w.Code, w.Body.String())
+	}
 	var d store.OccasionPrefs
 	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil {
 		t.Fatal(err)
@@ -852,6 +855,9 @@ func TestOccasionPrefsCustomFlag(t *testing.T) {
 	}
 
 	// PUT custom=false keeps the values (they are retained, not wiped).
+	// Limit: this proves the flag write does not wipe; preservation of values
+	// across omitted fields is full-replace semantics (the store test covers
+	// row survival).
 	w = prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true,"custom":false}`)
 	if w.Code != 200 {
 		t.Fatalf("put custom=false: %d %s", w.Code, w.Body.String())

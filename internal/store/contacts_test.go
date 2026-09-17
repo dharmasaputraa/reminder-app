@@ -303,6 +303,48 @@ func TestOccasionPrefsCustomRetainedWhenOff(t *testing.T) {
 	}
 }
 
+// Backfill: a row written the pre-002 way (explicit column list, no `custom`)
+// must come back custom=true — migration 002's DEFAULT 1 is what makes the
+// old toggle-on rows active instead of silently retained-but-off.
+func TestOccasionPrefsCustomDefaultsTrueOnBackfill(t *testing.T) {
+	ctx := context.Background()
+	st, _ := OpenInMemory()
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	u, err := st.GetOrCreateUser(ctx, "backfill@x.id", "A", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := st.CreateContact(ctx, u.ID, "Ani", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, err := st.AddOccasion(ctx, ct.ID, "birthday", domain.RecurYearly, domain.NewDate(2025, 6, 16), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx,
+		`INSERT INTO occasion_prefs (occasion_id, offsets, channel_ids, enabled) VALUES (?,?,?,?)`,
+		oc.ID, `{"yearly":[7]}`, `[]`, 1); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.OccasionByID(ctx, u.ID, oc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Prefs == nil {
+		t.Fatal("prefs row missing after raw INSERT")
+	}
+	if !got.Prefs.Custom {
+		t.Error("custom = false, want true (migration DEFAULT 1 backfill)")
+	}
+	if !reflect.DeepEqual(got.Prefs.Offsets[domain.StreamYearly], []int{7}) {
+		t.Errorf("offsets = %v, want [7]", got.Prefs.Offsets[domain.StreamYearly])
+	}
+}
+
 // fill() must load occasion prefs even when the contact has no contact-level
 // reminder_prefs row: the ErrNoRows case is a plain skip, not an early return.
 func TestOccasionPrefsWithoutContactPrefs(t *testing.T) {

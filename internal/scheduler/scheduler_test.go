@@ -764,8 +764,9 @@ func TestOccasionCustomFalseInheritsContactChain(t *testing.T) {
 		t.Error("retained D-1 must not fire while custom=false")
 	}
 
-	// The same row with enabled=false still skips the occasion entirely: the
-	// second scan produces nothing new (no pushes beyond run 1's single one).
+	// Phase 2 recomposes the flags (enabled=false + custom=false): the scan
+	// still produces nothing new, i.e. composition does not regress. The kill
+	// switch itself is covered by TestOccasionDisabledByOccasionPrefs.
 	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
 		OccasionID: f.Occasion.ID, Enabled: false, Custom: false,
 		Offsets:    domain.OffsetMap{domain.StreamMonthly: {1, 0}},
