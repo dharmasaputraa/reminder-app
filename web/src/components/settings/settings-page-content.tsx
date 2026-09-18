@@ -105,11 +105,11 @@ export function SettingsPageContent() {
     })
   }
   // Every tab's Save persists the whole form (recurrence offsets ride along),
-  // so all three carry the same validation gate. The contact edit card's
-  // pinned footer: full-bleed band, full-width Save.
+  // so all three carry the same validation gate. Pinned footer band like the
+  // contact edit card's, with the button on the right.
   const saveButton = (
-    <div className="border-t p-3">
-      <Button className="w-full" onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
+    <div className="flex justify-end border-t p-3">
+      <Button onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
     </div>
   )
 
