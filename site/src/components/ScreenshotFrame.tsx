@@ -19,7 +19,7 @@ export function ScreenshotFrame({
         alt={label}
         loading={loading}
         decoding="async"
-        className="w-full rounded-md"
+        className="w-full rounded-md outline-1 outline-white/10 -outline-offset-1"
       />
     </div>
   );

@@ -23,10 +23,16 @@ export function Nav() {
           wimember
         </a>
         <div className="flex items-center gap-2">
-          <Button href="#features" className="border-0 px-3 py-2 hover:text-bone">
+          <Button
+            href="#features"
+            className="border-0 px-3 py-2 hover:text-bone hover:underline hover:decoration-smoke hover:underline-offset-[6px]"
+          >
             Features
           </Button>
-          <Button href="#deploy" className="border-0 px-3 py-2 hover:text-bone">
+          <Button
+            href="#deploy"
+            className="border-0 px-3 py-2 hover:text-bone hover:underline hover:decoration-smoke hover:underline-offset-[6px]"
+          >
             Deploy
           </Button>
           <Button variant="white-pill" href={REPO}>
