@@ -127,8 +127,11 @@ make dev     # backend with hot reload (air): rebuild + restart on .go changes
 make web     # pnpm install --frozen-lockfile + build SPA → internal/api/webroot (embed)
 make build   # build SPA + binary to bin/wimember
 make run     # build + run dev mode on :8080 (without hot reload)
+make e2e     # build + run the Playwright e2e suite (web/e2e, chromium)
 make container  # docker compose build, podman-compose fallback (Makefile)
 ```
+
+The e2e suite spawns a real `bin/wimember` per worker (`AUTH_MODE=dev`, fresh SQLite under a temp `DATA_DIR`) and asserts against the database file directly. First run needs `cd web && pnpm exec playwright install chromium`; debug a failure with `E2E_KEEP_DATA=1 make e2e` (keeps the temp dir + server log) and `cd web && pnpm run test:e2e:report`.
 
 Full-stack dev flow (two terminals): `make dev` for the backend (air, ~1s auto-rebuild) and `cd web && pnpm run dev` for the frontend (Vite HMR, proxying `/api` to `:8080`). Air is pinned via the `tool` directive in go.mod — no manual install needed, just `go tool air`. Configuration lives in `.air.toml` (only non-test `.go` files trigger a rebuild; the SPA still goes through Vite).
 
