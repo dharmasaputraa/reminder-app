@@ -135,6 +135,19 @@ The e2e suite spawns a real `bin/wimember` per worker (`AUTH_MODE=dev`, fresh SQ
 
 Full-stack dev flow (two terminals): `make dev` for the backend (air, ~1s auto-rebuild) and `cd web && pnpm run dev` for the frontend (Vite HMR, proxying `/api` to `:8080`). Air is pinned via the `tool` directive in go.mod — no manual install needed, just `go tool air`. Configuration lives in `.air.toml` (only non-test `.go` files trigger a rebuild; the SPA still goes through Vite).
 
+**Landing page (`site/`)** — the public marketing page deployed to GitHub Pages at `https://dharmasaputraa.github.io/reminder-app/`. Standalone Vite + React + Tailwind package with its own lockfile (not a workspace with `web/`, and not embedded in the binary):
+
+```bash
+cd site
+pnpm install
+pnpm dev       # dev server at http://localhost:5173/reminder-app/ (HMR)
+pnpm lint      # oxlint
+pnpm build     # tsc --noEmit + vite build → site/dist
+pnpm preview   # serve site/dist at http://localhost:4173/reminder-app/
+```
+
+Deploy is automatic via `.github/workflows/pages.yml` on pushes that touch `site/**`. One-time repo setup: Settings → Pages → Source: **GitHub Actions**.
+
 Pawukon fixtures are scraped once at dev time (not at runtime) with a separate module:
 
 ```bash
@@ -216,6 +229,7 @@ code/
 │   └── calendarprov/           # HolidayProvider + computed/remote impls
 ├── scripts/fetch_fixtures/     # kalenderbali.org scraper → testdata/*.csv (separate module)
 ├── web/                        # Vite + React SPA; build output → internal/api/webroot (embed)
+├── site/                       # Vite + React landing page → GitHub Pages (separate from web/)
 ├── deploy/                     # litestream.yml, example deploy config
 ├── testdata/                   # pawukon CSV fixtures (kalenderbali.org, do not redistribute)
 ├── Dockerfile                  # multi-stage: node build → go build → alpine (verified with podman)
