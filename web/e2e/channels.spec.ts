@@ -2,7 +2,7 @@ import { test, expect, APP_SECRET, MEMBER_A, MEMBER_B, type App } from './fixtur
 import type { Page } from '@playwright/test'
 import { channelConfigEnc, count, rowById, settingsJson } from './helpers/db'
 import { decryptConfig } from './helpers/crypto'
-import { uniq } from './helpers/seed'
+import { seedChannel, uniq } from './helpers/seed'
 
 /** The add-channel dialog is the only open role=dialog on the page; every
  *  control below is scoped to it because the header carries an `Add channel`
@@ -51,8 +51,10 @@ async function addGotify(page: Page, app: App, name: string) {
   await submitAdd(page)
 }
 
-/** SMTP on 127.0.0.1:9 (discard) — resolvable but always refused, so test
- *  sends fail fast instead of waiting on a timeout. */
+/** The UI's email form sends `to` as one raw string; the round-trip test below
+ *  only asserts the stored ciphertext, so the shape is left as the UI writes it
+ *  (a product bug, reported separately). Channels that must actually reach SMTP
+ *  are API-seeded with the `to` array the notifier expects. */
 async function addDeadEmail(page: Page, name: string) {
   await openAddDialog(page)
   await pickType(page, 'Email')
@@ -105,8 +107,9 @@ test('adds telegram and email channels; all configs decrypt to their exact JSON'
     bot_token: '123456:ABC-def_GHI', chat_id: '-100200300',
   })
   const mail = app.db.prepare('SELECT * FROM channels WHERE name = ?').get(deadName) as any
-  expect(JSON.parse(decryptConfig(APP_SECRET, channelConfigEnc(app.db, mail.id)))).toMatchObject({
-    host: '127.0.0.1', port: 9, from: 'from@local.test', to: 'to@local.test',
+  expect(JSON.parse(decryptConfig(APP_SECRET, channelConfigEnc(app.db, mail.id)))).toEqual({
+    host: '127.0.0.1', port: 9, username: 'u', password: 'p',
+    from: 'from@local.test', to: 'to@local.test',
   })
 })
 
@@ -164,11 +167,27 @@ test('Test send: success pushes to the stub; failure toasts and pushes nothing',
   expect(msgs.some((m) => m.title === 'wimember tes')).toBe(true)
   expect(msgs.some((m) => m.token === 'stub-token-xyz')).toBe(true)
 
+  // API-seeded, not UI-added: the UI writes `to` as a string, which the email
+  // factory rejects (400 before any dial), so a UI-created channel could not
+  // tell a config-shape rejection from a real connection failure. The array
+  // form parses, so this one genuinely reaches 127.0.0.1:9 and gets refused.
   const deadName = uniq('email-test-dead')
-  await addDeadEmail(page, deadName)
+  await seedChannel(await session.apiAs(), {
+    type: 'email',
+    name: deadName,
+    config: {
+      host: '127.0.0.1', port: 9, username: 'u', password: 'p',
+      from: 'from@local.test', to: ['to@local.test'],
+    },
+  })
+  await page.goto('/reminder/channels') // reload the list so the seeded row shows
 
   const before = app.stubMessages().length
-  await page.getByRole('button', { name: `Test ${deadName}` }).click()
+  const [res] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/test')),
+    page.getByRole('button', { name: `Test ${deadName}` }).click(),
+  ])
+  expect(res.status()).toBe(502) // reached the dial, refused — not a 400 config rejection
   await expect(page.getByText(/Test failed/)).toBeVisible()
   expect(app.stubMessages().length).toBe(before)
 })
