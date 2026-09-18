@@ -129,21 +129,38 @@ async function startApp(): Promise<{ app: App; stop: () => Promise<void> }> {
     const stub = await startGotifyStub()
     stubServer = stub.server
 
+    // Teardown must be exception-safe: a throw from db.close()/stub close must
+    // not skip the child kill and temp-dir removal, or a leaked server holds its
+    // port and DATA_DIR for the rest of the run.
     const stop = async () => {
-      db.close()
-      stub.server.close()
-      if (child.exitCode === null) {
-        child.kill('SIGTERM')
-        const deadline = Date.now() + 5_000
-        while (child.exitCode === null && Date.now() < deadline) await sleep(50)
-        if (child.exitCode === null) child.kill('SIGKILL')
+      try {
+        try {
+          db.close()
+        } catch (err) {
+          console.error(`[e2e] teardown: db.close failed — ${String(err)}`)
+        }
+        try {
+          stub.server.close()
+        } catch (err) {
+          console.error(`[e2e] teardown: stub close failed — ${String(err)}`)
+        }
+      } finally {
+        try {
+          if (child.exitCode === null) {
+            child.kill('SIGTERM')
+            const deadline = Date.now() + 5_000
+            while (child.exitCode === null && Date.now() < deadline) await sleep(50)
+            if (child.exitCode === null) child.kill('SIGKILL')
+          }
+        } finally {
+          logStream.end()
+          if (process.env.E2E_KEEP_DATA === '1') {
+            console.log(`E2E_KEEP_DATA=1 — keeping ${dataDir} (server log: ${logPath})`)
+          } else {
+            await rm(dataDir, { recursive: true, force: true })
+          }
+        }
       }
-      logStream.end()
-      if (process.env.E2E_KEEP_DATA === '1') {
-        console.log(`E2E_KEEP_DATA=1 — keeping ${dataDir} (server log: ${logPath})`)
-        return
-      }
-      await rm(dataDir, { recursive: true, force: true })
     }
 
     return {

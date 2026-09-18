@@ -29,7 +29,7 @@ test('migrations created the full schema', async ({ app }) => {
   }
 })
 
-test('each worker runs against its own temp database file', async ({ app }) => {
+test('app runs against a temp database under os.tmpdir()', async ({ app }) => {
   // Worker-local check only: a worker may run several spec files over one
   // lifetime, so no assertion may depend on the DB still being pristine.
   const dataDir = path.dirname(app.dbPath)

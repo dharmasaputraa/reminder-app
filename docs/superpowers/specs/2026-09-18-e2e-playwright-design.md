@@ -97,7 +97,7 @@ Happy paths (each: UI assertion **and** DB assertion):
 | Spec | Happy flows | DB checks |
 |---|---|---|
 | `contacts.spec.ts` | create (full-page + docked `?c=new` form), edit, delete with confirm dialog, search filter | row created/updated; delete cascades — occasions, `reminder_prefs`, `occasion_prefs` all gone |
-| `occasions.spec.ts` | add birthday/anniversary/otonan occasions, custom type free-text, edit, delete, per-occasion prefs (offsets, custom label) | occasions row fields; `occasion_prefs` row with `custom=1`; reset deletes the prefs row |
+| `occasions.spec.ts` | add birthday/anniversary/otonan occasions, custom type free-text, edit, delete, per-occasion prefs (offsets, custom label) | occasions row fields; `occasion_prefs` row with `custom=1`; reset flips `custom=0` and retains the row |
 | `channels.spec.ts` | add Gotify/Telegram/Email channel, enable toggle, set Default, delete | channels row + type; enabled flag; `default_channel_ids` in settings JSON |
 | `settings.spec.ts` | save timezone / send-time / catch-up / offsets / holiday toggles | settings JSON blob matches saved values exactly |
 | `upcoming.spec.ts` | calendar + agenda render seeded occasions, event detail dialog, Remind Now via stub channel, deep-link `/reminder/contacts/<uuid>` | Remind Now leaves `notification_log` empty (unlogged by design) |

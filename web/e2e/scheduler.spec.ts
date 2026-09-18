@@ -9,12 +9,10 @@ import { dueSettings, futureSettings, utcDaysFromToday, utcToday } from './helpe
  *  design (every owner's contacts), and a worker's app/DB is shared by every
  *  spec file that lands in it.
  *
- *  - channels.spec leaves MEMBER_A owning enabled channels, including an email
- *    channel the UI wrote with a string `to` — the SMTP notifier rejects that
- *    shape at resolve time, and resolve errors get no 15-minute backoff, so any
- *    scan that reaches one of MEMBER_A's due occurrences counts it `failed`
- *    every time. Sibling files (occasions/upcoming) also leave recurring
- *    occasions behind.
+ *  - channels.spec leaves MEMBER_A owning enabled channels, but they all point
+ *    at the local stub; the email channel the UI wrote with a string `to` now
+ *    belongs to a throwaway owner with no contacts, so no scan can reach it.
+ *    Sibling files (occasions/upcoming) also leave recurring occasions behind.
  *  - On a date when one of those leftover occurrences lands in the scan window,
  *    the manual run's counters pick up ambient sends/failures. A strict-zero
  *    counter failure (the future test's `res` in particular) can therefore be

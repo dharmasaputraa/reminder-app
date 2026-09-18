@@ -1005,7 +1005,7 @@ test('deletes an occasion after confirm', async ({ app, session }) => {
   expect(count(app.db, 'occasions', { id: occId })).toBe(0)
 })
 
-test('per-occasion custom prefs write occasion_prefs (custom=1) and reset deletes the row', async ({ app, session }) => {
+test('per-occasion custom prefs write occasion_prefs (custom=1) and going back to inherit retains the row', async ({ app, session }) => {
   const contactId = await seedContact(await session.apiAs(), { name: uniq('Occ Prefs') })
   const api = await session.apiAs()
   const occ = (await api.post(`/api/v1/contacts/${contactId}/occasions`, {

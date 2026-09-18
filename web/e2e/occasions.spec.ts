@@ -1,4 +1,5 @@
-import { test, expect, type Page } from './fixtures'
+import { test, expect } from './fixtures'
+import type { Page } from '@playwright/test'
 import { count, rowById } from './helpers/db'
 import { seedContact, uniq } from './helpers/seed'
 

@@ -4,6 +4,19 @@ import { channelConfigEnc, count, rowById, settingsJson } from './helpers/db'
 import { decryptConfig } from './helpers/crypto'
 import { seedChannel, uniq } from './helpers/seed'
 
+/** A throwaway channel owner for tests whose channels could leave the machine.
+ *
+ *  The scheduler delivers to EVERY enabled channel of the contact owner and the
+ *  worker's DB is shared by every test in it, so an enabled channel under a user
+ *  that sibling specs give due occasions to is an ambient delivery target. That
+ *  is harmless for the gotify channels pointed at the local stub, but a Telegram
+ *  channel hardcodes https://api.telegram.org and the UI writes email `to` as a
+ *  raw string the factory rejects — a scan reaching those would hit the real
+ *  internet or log failures against ambient state. A fresh owner seeds no
+ *  contacts, so no scan can ever reach its channels. */
+const ownerEmail = (label: string) =>
+  `${uniq(label).toLowerCase().replace(/\s+/g, '-')}@local.test`
+
 /** The add-channel dialog is the only open role=dialog on the page; every
  *  control below is scoped to it because the header carries an `Add channel`
  *  button too. */
@@ -86,7 +99,10 @@ test('adds a gotify channel; config stored encrypted and decrypts exactly', asyn
 })
 
 test('adds telegram and email channels; all configs decrypt to their exact JSON', async ({ app, session }) => {
-  const page = await session.pageAs()
+  // Throwaway owner: both channels would otherwise stay enabled under MEMBER_A
+  // and could be reached by an ambient scheduler scan (telegram egresses to the
+  // real API; the UI email shape always fails at resolve time).
+  const page = await session.pageAs(ownerEmail('chan-enc'))
   await page.goto('/reminder/channels')
 
   const tgName = uniq('tg-real-shaped')
@@ -154,25 +170,31 @@ test('row controls persist to the DB: Active toggle and Default flag', async ({ 
 })
 
 test('Test send: success pushes to the stub; failure toasts and pushes nothing', async ({ app, session }) => {
-  const page = await session.pageAs()
+  // Throwaway owner: the dead email channel below must not stay enabled under a
+  // user that sibling specs give due occasions to (a scan would count it failed
+  // on every ambient hit). The stub-pointed gotify channels travel along.
+  const owner = ownerEmail('chan-testsend')
+  const page = await session.pageAs(owner)
   await page.goto('/reminder/channels')
   const okName = uniq('gotify-test-ok')
   await addGotify(page, app, okName)
 
+  // The stub is worker-cumulative and four channels in this file share the
+  // token — assert on the delta this click adds, not the whole history.
   const beforeOk = app.stubMessages().length
   await page.getByRole('button', { name: `Test ${okName}` }).click()
   await expect(page.getByText('Test succeeded — notification sent.')).toBeVisible()
-  const msgs = app.stubMessages()
-  expect(msgs.length).toBeGreaterThan(beforeOk)
-  expect(msgs.some((m) => m.title === 'wimember tes')).toBe(true)
-  expect(msgs.some((m) => m.token === 'stub-token-xyz')).toBe(true)
+  const delta = app.stubMessages().slice(beforeOk)
+  expect(delta.length).toBeGreaterThan(0)
+  expect(delta.some((m) => m.title === 'wimember tes')).toBe(true)
+  expect(delta.some((m) => m.token === 'stub-token-xyz')).toBe(true)
 
   // API-seeded, not UI-added: the UI writes `to` as a string, which the email
   // factory rejects (400 before any dial), so a UI-created channel could not
   // tell a config-shape rejection from a real connection failure. The array
   // form parses, so this one genuinely reaches 127.0.0.1:9 and gets refused.
   const deadName = uniq('email-test-dead')
-  await seedChannel(await session.apiAs(), {
+  await seedChannel(await session.apiAs(owner), {
     type: 'email',
     name: deadName,
     config: {
