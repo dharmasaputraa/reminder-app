@@ -59,7 +59,14 @@ test('deleting a contact cascades to occasions and prefs in the DB', async ({ ap
   const api = await session.apiAs()
   const id = await seedContact(api, { name })
   const occId = await seedOccasion(api, id, { type: 'birthday', date: '1990-06-15', recurrence: 'yearly' })
-  await api.put(`/api/v1/contacts/${id}/prefs`, { data: { offsets: { yearly: [7, 0] } } })
+  const contactPrefs = await api.put(`/api/v1/contacts/${id}/prefs`, { data: { offsets: { yearly: [7, 0] } } })
+  expect(contactPrefs.status(), await contactPrefs.text()).toBe(200)
+  const occPrefs = await api.put(`/api/v1/occasions/${occId}/prefs`, { data: { offsets: { yearly: [7, 0] } } })
+  expect(occPrefs.status(), await occPrefs.text()).toBe(200)
+  // Both prefs rows exist before the delete — without this the post-delete
+  // zero-counts below would pass even if nothing was cascaded.
+  expect(count(app.db, 'reminder_prefs', { contact_id: id })).toBe(1)
+  expect(count(app.db, 'occasion_prefs', { occasion_id: occId })).toBe(1)
 
   const page = await session.pageAs()
   await page.goto('/reminder/contacts')
@@ -131,6 +138,9 @@ test('owner scoping: member B never sees member A data; admin sees all', async (
 
   const bPage = await session.pageAs(MEMBER_B)
   await bPage.goto('/reminder/contacts')
+  // Anchor on the loaded grid (its search box) first — an empty-count check
+  // against a still-loading skeleton would pass vacuously.
+  await expect(bPage.getByPlaceholder('Search name or nickname…')).toBeVisible()
   await expect(bPage.getByText(name)).toHaveCount(0)
 
   const adminPage = await session.pageAs(ADMIN)
