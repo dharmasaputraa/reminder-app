@@ -38,6 +38,8 @@ test('agenda lists a birthday due today and an event due tomorrow', async ({ ses
   const { items } = await res.json()
   const birthday = items.find((i: any) => i.type === 'birthday' && i.contact_name === name)
   expect(birthday).toMatchObject({ kind: 'occasion', days_until: 0 })
+  const wedding = items.find((i: any) => i.type === 'wedding' && i.contact_name === name)
+  expect(wedding).toMatchObject({ kind: 'occasion', days_until: 1 })
 })
 
 test('Remind Now sends via the stub but never writes notification_log', async ({ app, session }) => {
@@ -48,6 +50,14 @@ test('Remind Now sends via the stub but never writes notification_log', async ({
   const api = await session.apiAs(email)
   const name = uniq('Remind Komang')
   const contactId = await seedContact(api, { name })
+  // Keep the app's per-minute scheduler (cmd/server/main.go tick → scheduler
+  // scan) off this contact: a tick landing between the seed and the assertion
+  // would deliver — and log — the same birthday, breaking both the stub-delta
+  // and the empty-log checks. Contact prefs are a scheduler-only kill switch;
+  // the manual /upcoming/notify path never reads them, so Remind Now still
+  // sends. (Merge PUT: only `enabled` changes.)
+  const off = await api.put(`/api/v1/contacts/${contactId}/prefs`, { data: { enabled: false } })
+  expect(off.status(), await off.text()).toBe(200)
   const today = await serverToday(api)
   const occId = await seedOccasion(api, contactId, { type: 'birthday', date: today, recurrence: 'yearly' })
   await seedChannel(api, { type: 'gotify', name: uniq('stub-gotify'), config: { base_url: app.stubUrl, token: 'stub-token-xyz' } })
