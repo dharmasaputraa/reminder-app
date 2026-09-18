@@ -92,6 +92,11 @@ export function AddChannelDialog({ open, onOpenChange }: {
         </DialogHeader>
         {/* Wrapped in a form so Enter in the text inputs submits. */}
         <form onSubmit={(e) => { e.preventDefault(); if (!name.trim() || create.isPending) return; create.mutate() }}>
+          {/* The encryption notice leads, right under the dialog header. */}
+          <Alert className="mb-3">
+            <AlertTitle>Config is stored encrypted (AES-256-GCM)</AlertTitle>
+            <AlertDescription>It cannot be viewed again after saving.</AlertDescription>
+          </Alert>
           {/* pb-5: extra air between the last field and the footer band. */}
           <div className="pb-5">
             <FieldGroup className="gap-3">
@@ -152,10 +157,6 @@ export function AddChannelDialog({ open, onOpenChange }: {
                 </Field>
               ))}
             </FieldGroup>
-            <Alert className="mt-3">
-              <AlertTitle>Config is stored encrypted (AES-256-GCM)</AlertTitle>
-              <AlertDescription>It cannot be viewed again after saving.</AlertDescription>
-            </Alert>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={!name.trim() || create.isPending}>Add channel</Button>
