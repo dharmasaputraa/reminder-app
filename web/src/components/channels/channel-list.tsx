@@ -52,10 +52,12 @@ export function ChannelList({ onAdd }: { onAdd: () => void }) {
     mutationFn: (v: { id: string; enabled: boolean }) =>
       api(`/channels/${v.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: v.enabled }) }),
     onSuccess: invalidate,
+    onError: (e) => toast.error(`Failed to update channel: ${String(e)}`),
   })
   const del = useMutation({
     mutationFn: (id: string) => api(`/channels/${id}`, { method: 'DELETE' }),
     onSuccess: invalidate,
+    onError: (e) => toast.error(`Failed to delete channel: ${String(e)}`),
   })
   const test = useMutation({
     mutationFn: (id: string) => api(`/channels/${id}/test`, { method: 'POST' }),
@@ -71,7 +73,7 @@ export function ChannelList({ onAdd }: { onAdd: () => void }) {
         <Skeleton className="h-[70px] w-full rounded-xl" />
       </div>
     )
-  if (q.isError) return <p className="text-red-600">{String(q.error)}</p>
+  if (q.isError && !q.data) return <p className="text-red-600">{String(q.error)}</p>
 
   const channels = q.data?.channels ?? []
   if (channels.length === 0)

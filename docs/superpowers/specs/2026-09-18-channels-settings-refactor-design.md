@@ -34,7 +34,8 @@ Components own their own queries/mutations; routes only compose. This mirrors
    set-default (PUT `/settings` `default_channel_ids`), toggle active (PATCH),
    test (POST `/channels/:id/test`), delete (DELETE with AlertDialog confirm).
    Renders: skeleton while loading; error line on query failure; an empty
-   state ("No channels yet" + hint to use the header button) when the list
+   state (an "Add channel" button inside the Empty opens the dialog via an
+   onAdd prop) when the list
    is empty; otherwise the channel cards (type badge,
    `ChannelIcon`, name, Default checkbox, active Switch, Test, Delete) exactly
    as today. The span-not-label wrapping around Checkbox/Switch is preserved
@@ -73,6 +74,8 @@ Components own their own queries/mutations; routes only compose. This mirrors
 2. **Settings has one Save button** instead of two identical ones (both
    saved everything). Still disabled while `save.isPending` or any recurrence
    stream parses to an empty list; same validation message.
+3. **Channel create shows a success toast** ('Channel created'), matching the
+   contacts create flow.
 
 ## Behavior preservation checklist
 

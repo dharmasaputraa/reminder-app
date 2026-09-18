@@ -22,7 +22,7 @@ import {
 
 const TIPE = ['gotify', 'telegram', 'email'] as const
 
-const FIELDS: Record<string, { key: string; label: string; type?: string }[]> = {
+const FIELDS: Record<(typeof TIPE)[number], { key: string; label: string; type?: string }[]> = {
   gotify: [
     { key: 'base_url', label: 'Gotify Base URL' },
     { key: 'token', label: 'App Token' },
@@ -62,6 +62,7 @@ export function AddChannelDialog({ open, onOpenChange }: {
       toast.success('Channel created')
       onOpenChange(false)
     },
+    onError: (e) => toast.error(`Failed to create channel: ${String(e)}`),
   })
 
   return (
