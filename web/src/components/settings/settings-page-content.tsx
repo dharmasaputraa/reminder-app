@@ -105,10 +105,11 @@ export function SettingsPageContent() {
     })
   }
   // Every tab's Save persists the whole form (recurrence offsets ride along),
-  // so all three carry the same validation gate.
+  // so all three carry the same validation gate. The contact edit card's
+  // pinned footer: full-bleed band, full-width Save.
   const saveButton = (
-    <div className="flex justify-end">
-      <Button onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
+    <div className="border-t p-3">
+      <Button className="w-full" onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
     </div>
   )
 
@@ -156,8 +157,8 @@ export function SettingsPageContent() {
                 The fallback for holiday reminders too — empty per-category offsets use this list.
               </FieldDescription>
             </Field>
-            {saveButton}
           </CardContent>
+          {saveButton}
         </Card>
       </TabsContent>
 
@@ -218,8 +219,8 @@ export function SettingsPageContent() {
                 Reset to default
               </Button>
             </div>
-            {saveButton}
           </CardContent>
+          {saveButton}
         </Card>
       </TabsContent>
 
@@ -250,8 +251,8 @@ export function SettingsPageContent() {
             {!recurrenceOffsetsValid && (
               <p className="text-sm text-red-600">Every stream needs at least one offset.</p>
             )}
-            {saveButton}
           </CardContent>
+          {saveButton}
         </Card>
       </TabsContent>
       </Tabs>
