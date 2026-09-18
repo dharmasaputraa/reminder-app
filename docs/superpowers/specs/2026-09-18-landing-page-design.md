@@ -21,6 +21,7 @@ attract users and contributors.
 | Language | English |
 | Stack | Vite + React 19 + Tailwind 4 in a new `site/` package — same toolchain as `web/` |
 | Repo layout | Independent package with its own lockfile; **not** a pnpm workspace |
+| Visual style | Linear style reference — dark-only midnight theme, one acid-lime accent (appendix: `2026-09-18-linear-style-reference.md`) |
 
 Rejected alternatives:
 
@@ -40,7 +41,7 @@ lockfiles (`web/`, `site/`) is the deliberate trade-off.
 
 ```
 site/
-├── package.json        # vite, react, tailwind 4, motion, oxlint — same majors as web/
+├── package.json        # vite, react, tailwind 4, motion, oxlint, @fontsource-variable/inter
 ├── pnpm-lock.yaml      # own lockfile
 ├── vite.config.ts      # base: '/reminder-app/', plugins: react + tailwindcss
 ├── tsconfig.json
@@ -50,13 +51,17 @@ site/
     ├── main.tsx
     ├── App.tsx         # composes sections; no router
     ├── sections/       # Nav, Hero, Features, Quickstart, Screenshot, Footer
-    └── index.css       # Tailwind 4 + design tokens copied from web/src/index.css
+    └── index.css       # Tailwind 4 @theme — Linear style reference tokens (dark-only)
 ```
 
 - **No router.** Single page; navigation is anchor scrolling (`#features`, `#deploy`).
 - **No data layer.** No React Query, no fetch, no API. All copy lives directly in
   components.
-- **`web/` is untouched.** No change to the app binary, embed, or build.
+- **Fonts:** Inter Variable self-hosted via `@fontsource-variable/inter`; mono text
+  (quickstart code block) uses the `ui-monospace` stack — Berkeley Mono is licensed,
+  and the reference itself lists system mono as the fallback.
+- **`web/` is untouched.** No change to the app binary, embed, or build. The landing
+  page has its own visual identity and does **not** reuse the app's shadcn tokens.
 
 ## CI/CD (`.github/workflows/pages.yml`)
 
@@ -78,29 +83,49 @@ site/
 
 ## Page content (single page, English)
 
-1. **Nav** — wordmark "wimember", GitHub link, "Deploy" button → `#deploy`.
-2. **Hero** — tagline: "Self-hosted reminders for Balinese otonan, birthdays &
-   anniversaries". Subtext: the 210-day pawukon cycle computed automatically, delivered
-   via Gotify, Telegram, or email — everything in one container. CTAs: GitHub repo and
-   "Get started". Entrance animation via `motion`.
-3. **Features grid** (6 cards, from the README): otonan & pawukon computation ·
-   multi-channel notifications (Gotify, Telegram, SMTP) · never miss a reminder
-   (catch-up + deduplication) · single-container self-hosted (SQLite + embedded SPA) ·
-   encrypted channel configs (AES-256-GCM) · installable PWA.
-4. **Quickstart** — the 3 deploy steps from the README (clone → `cp .env.example .env` →
-   `compose up -d`), a Cloudflare Access note, link to the README for details.
-5. **Screenshot** — app screenshot in a browser frame. Ships with a styled placeholder
-   first; real screenshots follow as a small PR (asset from the author).
+1. **Nav** — wordmark "wimember" left, ghost text links, white pill "GitHub" right
+   (the high-contrast nav CTA in the Linear system).
+2. **Hero** — oversized left-aligned headline (64–72px): "Self-hosted reminders for
+   Balinese otonan, birthdays & anniversaries". Subtext: the 210-day pawukon cycle
+   computed automatically, delivered via Gotify, Telegram, or email — everything in
+   one container. **One** acid-lime CTA "Get started" → `#deploy` plus a ghost
+   "View source" link. Beneath: the product screenshot floating on a subtle gradient
+   floor (styled placeholder first; real screenshots follow as a small PR).
+3. **Features** — the six README features (otonan & pawukon computation ·
+   multi-channel notifications · catch-up + deduplication · single-container
+   self-hosted · encrypted channel configs · installable PWA) as alternating
+   text/visual rows or a 2-column composition. The style reference forbids dense
+   3-column card grids; information density stays low with one focal point per
+   screen.
+4. **Quickstart** — the 3 deploy steps from the README (clone → `cp .env.example .env`
+   → `compose up -d`) as a terminal-styled mono code block in a carbon card, a
+   Cloudflare Access note, link to the README for details.
+5. **Product showcase** — full-width app screenshot band (browser-frame card, hairline
+   inset border).
 6. **Footer** — repo link, license, kalenderbali.org fixture attribution (per README),
    "built for the Balinese community".
 
-## Visual design
+## Visual design — Linear style reference
 
-- **Tokens:** copy `web/src/index.css` (shadcn-style CSS vars + `@theme inline`) so
-  colors, radii, and fonts match the app. Light/dark both supported, defaulting to
-  `prefers-color-scheme`.
-- **Identity:** a subtle Balinese-inspired accent (geometric motif/gradient in the
-  hero) — finalized visually during implementation.
+The full token set lives in the appendix
+(`2026-09-18-linear-style-reference.md`); the essentials:
+
+- **Dark-only.** Near-black canvas `#08090a` (void), surfaces `#0f1011`/`#161718`,
+  hairline borders `#23252a`. No light theme, no `prefers-color-scheme` switch.
+- **Type:** Inter Variable, weights 300–590, never 700+. Display sizes at
+  `-0.022em` tracking; body 16px/1.5 in the grey scale (`#d0d6e0`/`#8a8f98`/`#62666d`).
+  `font-feature-settings: 'cv01' 'ss03' 'zero'` for the alternate glyphs.
+- **One chromatic action per view.** Acid lime `#e4f222` only for the hero CTA; every
+  other button is neutral (ghost/outline or white pill).
+- **Shape vocabulary:** card radius 12px, buttons/inputs 6px, pills 9999px — nothing
+  else. Elevation via hairline borders and inset shadows, not drop shadows.
+- **Layout rhythm:** max-width 1200px, 96px section gaps, single focal point per
+  screen, fixed top nav.
+- **Imagery is product-screenshot-first** — the app UI is the only visual texture.
+  No stock art, no abstract illustration, no decorative gradients outside the hero
+  floor.
+- The Balinese identity is carried by the copy and the real product screenshots, not
+  by decorative chrome.
 - **Mobile-first**, one primary breakpoint.
 - **SEO/OG:** `<title>`, meta description, Open Graph + Twitter card in `index.html`;
   favicon + og-image in `site/public/`. No sitemap (single page).
