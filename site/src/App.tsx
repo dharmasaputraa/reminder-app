@@ -2,6 +2,7 @@ import { Nav } from "./sections/Nav";
 import { Hero } from "./sections/Hero";
 import { Features } from "./sections/Features";
 import { Quickstart } from "./sections/Quickstart";
+import { Showcase } from "./sections/Showcase";
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Hero />
         <Features />
         <Quickstart />
+        <Showcase />
       </main>
     </>
   );
