@@ -1,7 +1,10 @@
-.PHONY: test web build run dev container
+.PHONY: test lint web build run dev container
 
 test:
 	CGO_ENABLED=0 go test ./... -count=1
+
+lint:
+	go tool staticcheck ./...
 
 web:
 	cd web && pnpm install --frozen-lockfile && pnpm run build
@@ -15,7 +18,7 @@ build: web
 run: build
 	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data ./bin/wimember
 
-# Hot reload: rebuild + restart otomatis saat file .go berubah (SPA via npm run dev)
+# Hot reload: rebuild + restart automatically when .go files change (SPA via npm run dev)
 dev:
 	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data go tool air
 

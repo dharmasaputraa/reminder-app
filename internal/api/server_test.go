@@ -297,7 +297,7 @@ func TestSettingsRecurrenceOffsets(t *testing.T) {
 	if o := srv.LoadSettings(context.Background()).RecurrenceOffsets[domain.StreamYearly]; len(o) != 2 || o[0] != 2 {
 		t.Fatalf("stored yearly offsets: %v", o)
 	}
-	if out.DefaultOffsets == nil || len(out.DefaultOffsets) == 0 {
+	if len(out.DefaultOffsets) == 0 {
 		t.Fatal("default_offsets still required (holiday fallback)")
 	}
 

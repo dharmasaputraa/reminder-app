@@ -1,7 +1,7 @@
-# Deployment ke Dokploy — Panduan Setup
+# Deploying to Dokploy — Setup Guide
 
-Alur versioning: **git tag → GitHub Actions build image → push ke GHCR → Dokploy pull & jalankan**.
-Server tidak pernah build — semua build terjadi di GitHub Actions.
+Versioning flow: **git tag → GitHub Actions builds the image → push to GHCR → Dokploy pulls & runs it**.
+The server never builds — all builds happen in GitHub Actions.
 
 ```
 git tag v1.2.3 && git push origin v1.2.3
@@ -12,130 +12,132 @@ GitHub Actions (release.yml)
         │
         ▼
 ghcr.io/dharmasaputraa/reminder-app
-  tag: 1.2.3 · 1.2 · 1 · latest · sha-xxxxxxx
-        │  (API call: POST /api/application.deploy)
+  tags: 1.2.3 · 1.2 · 1 · latest · sha-xxxxxxx
+        │  (API call: POST /api/application.deploy, pinned to sha-xxxxxxx)
         ▼
-Dokploy (pull :latest → container baru → healthz → routing)
+Dokploy (pull the pinned tag → new container → healthz → routing)
 ```
 
-Image yang sudah terbit bisa dilihat di: `github.com/dharmasaputraa/reminder-app/pkgs/container/reminder-app`.
+Published images can be viewed at: `github.com/dharmasaputraa/reminder-app/pkgs/container/reminder-app`.
 
 ---
 
-## Tahap 1 — GitHub: buat PAT untuk GHCR
+## Step 1 — GitHub: create a PAT for GHCR
 
-Dokploy butuh token untuk **menarik** image dari GHCR.
+Dokploy needs a token to **pull** images from GHCR.
 
-1. Buka <https://github.com/settings/tokens> → **Generate new token (classic)**.
-2. Beri note, mis. `dokploy-ghcr-read`.
-3. Centang scope **`read:packages`** (cukup untuk pull; pakai `write:packages` hanya jika ingin Dokploy bisa push juga).
-4. Generate, **copy token** (hanya tampil sekali).
+1. Open <https://github.com/settings/tokens> → **Generate new token (classic)**.
+2. Give it a note, e.g. `dokploy-ghcr-read`.
+3. Check the **`read:packages`** scope (enough for pulling; use `write:packages` only if you want Dokploy to be able to push too).
+4. Generate, **copy the token** (shown only once).
 
-## Tahap 2 — Dokploy: daftarkan Registry GHCR
+## Step 2 — Dokploy: register the GHCR Registry
 
-1. Panel Dokploy → menu **Registry** → pilih **GHCR**.
-2. Isi:
-   - **Registry Name**: `ghcr` (bebas)
+1. Dokploy panel → **Registry** menu → choose **GHCR**.
+2. Fill in:
+   - **Registry Name**: `ghcr` (free choice)
    - **Username**: `dharmasaputraa`
-   - **Password/Token**: token PAT dari Tahap 1
+   - **Password/Token**: the PAT from Step 1
    - **Registry URL**: `ghcr.io`
-3. Klik **Test** (harus sukses) → **Create**.
+3. Click **Test** (must succeed) → **Create**.
 
-## Tahap 3 — Dokploy: buat Application
+## Step 3 — Dokploy: create the Application
 
 1. Project → **Create Service** → **Application**.
-2. Tab **General** → Source Type: **Docker**.
+2. **General** tab → Source Type: **Docker**.
 3. **Docker Image**: `ghcr.io/dharmasaputraa/reminder-app:latest`
-4. Pilih registry `ghcr` yang didaftarkan di Tahap 2 (atau isi registry URL + credential manual).
-5. **Save** — jangan Deploy dulu; lengkapi dulu Environment & Volume (Tahap 4–5).
+4. Pick the `ghcr` registry registered in Step 2 (or fill in the registry URL + credentials manually).
+5. **Save** — don't Deploy yet; first complete Environment & Volume (Steps 4–5).
 
-> Setelah rilis pertama, package GHCR masih **private** (default). Selama registry di Tahap 2 benar, pull tetap jalan. Ingin pull tanpa credential? Ubah visibility package jadi public lewat halaman Packages di GitHub.
+> After the first release, the GHCR package is still **private** (default). As long as the registry from Step 2 is correct, pulls keep working. Want to pull without credentials? Change the package visibility to public via the Packages page on GitHub.
 
-## Tahap 4 — Environment variables (tab Environment)
+## Step 4 — Environment variables (Environment tab)
 
-| Variabel | Wajib | Nilai / contoh |
+| Variable | Required | Value / example |
 | --- | --- | --- |
-| `APP_SECRET` | ✅ | acak min. 16 char — `openssl rand -base64 32`. Kunci enkripsi channel notifikasi; **jangan pernah diubah** setelah ada data |
+| `APP_SECRET` | ✅ | random, min. 16 chars — `openssl rand -base64 32`. Encryption key for notification channels; **never change it** once data exists |
 | `AUTH_MODE` | ✅ | `cfaccess` |
-| `CF_ACCESS_TEAM_DOMAIN` | ✅ | `team-anda.cloudflareaccess.com` (lihat Tahap 7) |
-| `CF_ACCESS_AUD` | ✅ | AUD tag aplikasi Access (lihat Tahap 7) |
-| `ADMIN_EMAILS` | ✅ | email admin, pisah koma |
-| `TZ` | opsional | `Asia/Makassar` (timezone log; jadwal reminder dikonfigurasi dari UI Settings) |
+| `CF_ACCESS_TEAM_DOMAIN` | ✅ | `your-team.cloudflareaccess.com` (see Step 7) |
+| `CF_ACCESS_AUD` | ✅ | the Access application's AUD tag (see Step 7) |
+| `ADMIN_EMAILS` | ✅ | admin emails, comma-separated |
+| `TZ` | optional | `Asia/Makassar` (log timezone; reminder schedules are configured from the UI Settings) |
 
-Yang **tidak perlu** diisi (sudah di-default oleh image / hanya untuk dev):
-`DATA_DIR` (default `/data`), `ADDR` (default `:8080`), `APP_PORT` & `TUNNEL_TOKEN` (khusus docker-compose manual di VPS), `DEV_SEED_*` (khusus `AUTH_MODE=dev`).
+What you **don't** need to set (already defaulted by the image / dev only):
+`DATA_DIR` (default `/data`), `ADDR` (default `:8080`), `APP_PORT` & `TUNNEL_TOKEN` (only for manual docker-compose on a VPS), `DEV_SEED_*` (only for `AUTH_MODE=dev`).
 
-## Tahap 5 — Volume (tab Volumes) — WAJIB
+## Step 5 — Volume (Volumes tab) — REQUIRED
 
-SQLite disimpan di `/data`. **Tanpa volume, seluruh data hilang setiap redeploy/restart.**
+SQLite is stored in `/data`. **Without a volume, all data is lost on every redeploy/restart.**
 
-- Mount: `/data` → named volume (mis. `wimember-data`) atau host path (mis. `/var/lib/wimember`).
+- Mount: `/data` → a named volume (e.g. `wimember-data`) or a host path (e.g. `/var/lib/wimember`).
 
-## Tahap 6 — Domain (tab Domains)
+## Step 6 — Domain (Domains tab)
 
-1. Add domain → arahkan ke **port 8080** (port internal app).
-2. DNS: A/CNAME domain → VPS, dan **proxy Cloudflare ON** (oranye).
-3. HTTPS: biarkan Dokploy (Traefik + Let's Encrypt) yang handle, atau set Full (strict) jika terminate di Cloudflare.
+1. Add domain → point it at **port 8080** (the app's internal port).
+2. DNS: A/CNAME the domain → the VPS, with **Cloudflare proxy ON** (orange).
+3. HTTPS: let Dokploy handle it (Traefik + Let's Encrypt), or set Full (strict) if terminating at Cloudflare.
 
-## Tahap 7 — Cloudflare Access (autentikasi app)
+## Step 7 — Cloudflare Access (app authentication)
 
-App memvalidasi JWT Cloudflare Access (`AUTH_MODE=cfaccess`), jadi domain harus dilindungi Access:
+The app validates the Cloudflare Access JWT (`AUTH_MODE=cfaccess`), so the domain must be protected by Access:
 
 1. Cloudflare Zero Trust → **Access → Applications → Add → Self-hosted**.
-2. Application domain: domain app dari Tahap 6.
-3. Policy: **Allow** → Include → Emails → isi sama dengan `ADMIN_EMAILS`.
-4. Dari halaman aplikasi Access, copy **Team domain** (`xxx.cloudflareaccess.com`) dan **AUD tag** → isi ke env `CF_ACCESS_TEAM_DOMAIN` & `CF_ACCESS_AUD` di Tahap 4.
+2. Application domain: the app domain from Step 6.
+3. Policy: **Allow** → Include → Emails → same list as `ADMIN_EMAILS`.
+4. From the Access application page, copy the **Team domain** (`xxx.cloudflareaccess.com`) and **AUD tag** → fill them into the `CF_ACCESS_TEAM_DOMAIN` & `CF_ACCESS_AUD` env vars in Step 4.
 
-Detail tambahan: README §Cloudflare Access setup.
+More details: README §Cloudflare Access setup.
 
-## Tahap 8 — Health check
+## Step 8 — Health check
 
-Image sudah membawa `HEALTHCHECK` bawaan (GET `/healthz`, port 8080, tiap 30s). Jika tab **Advanced** di aplikasi Dokploy menyediakan opsi health check/restart, set path `/healthz` port `8080` — kalau tidak ada, bawaan image sudah cukup.
+The image ships with a built-in `HEALTHCHECK` (GET `/healthz`, port 8080, every 30s). If the **Advanced** tab of the Dokploy application offers a health check/restart option, set path `/healthz` port `8080` — if not, the image default is enough.
 
-## Tahap 9 — Sambungkan CI/CD (sekali saja)
+## Step 9 — Hook up CI/CD (once)
 
-1. **API key Dokploy**: avatar/profile → **API Keys** → buat baru → copy (hanya tampil sekali).
-2. **Application ID**: buka application di panel — ID-nya ada di URL, `.../service/<applicationId>`.
+1. **Dokploy API key**: avatar/profile → **API Keys** → create new → copy (shown only once).
+2. **Application ID**: open the application in the panel — the ID is in the URL, `.../service/<applicationId>`.
 3. **GitHub secrets** (repo → Settings → Secrets and variables → Actions → New repository secret):
 
-   | Secret | Isi |
+   | Secret | Value |
    | --- | --- |
-   | `DOKPLOY_URL` | `https://panel-dokploy-anda.com` (tanpa trailing slash) |
-   | `DOKPLOY_API_KEY` | API key dari langkah 1 |
-   | `DOKPLOY_APPLICATION_ID` | ID dari langkah 2 |
+   | `DOKPLOY_URL` | `https://your-dokploy-panel.com` (no trailing slash) |
+   | `DOKPLOY_API_KEY` | API key from step 1 |
+   | `DOKPLOY_APPLICATION_ID` | ID from step 2 |
 
-   Tanpa secrets ini workflow release **tetap** build & push image — hanya langkah auto-redeploy yang dilewati.
+   Without these secrets the release workflow **still** builds & pushes the image — only the auto-redeploy step is skipped.
 
-## Tahap 10 — Rilis pertama & verifikasi
+   Optional: add `APP_HEALTH_URL` (the production app's base URL) and the workflow will wait for `/healthz` to return 200 after deploying, failing the run if it doesn't.
+
+## Step 10 — First release & verification
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-1. Pantau tab **Actions** di GitHub (workflow *Release*, ± 3–6 menit untuk multi-arch).
-2. Image muncul di halaman **Packages** repo.
-3. Dokploy otomatis redeploy — cek tab **Deployments** di aplikasi.
-4. Verifikasi:
+1. Watch the **Actions** tab on GitHub (the *Release* workflow, ± 3–6 minutes for multi-arch).
+2. The image appears on the repo's **Packages** page.
+3. Dokploy redeploys automatically — check the **Deployments** tab of the application.
+4. Verify:
    ```bash
-   curl https://domain-anda.com/healthz     # {"ok":true}
+   curl https://your-domain.com/healthz     # {"ok":true}
    ```
-   Lalu buka domain → login lewat Cloudflare Access → app tampil.
+   Then open the domain → log in through Cloudflare Access → the app shows up.
 
 ---
 
-## Operasional sehari-hari
+## Day-to-day operations
 
-**Rilis versi baru**: `git tag v1.2.4 && git push origin v1.2.4` — selesai.
+**Release a new version**: `git tag v1.2.4 && git push origin v1.2.4` — done.
 
-### Build image di lokal (opsional)
+### Building the image locally (optional)
 
-Jalur utama build adalah GitHub Actions — server **tidak pernah build** (hanya pull).
-Untuk eksperimen/hotfix cepat, image bisa dibangun di mesin lokal (Podman, tanpa Docker):
+The main build path is GitHub Actions — the server **never builds** (it only pulls).
+For experiments/quick hotfixes, the image can be built on a local machine (Podman, no Docker needed):
 
 ```bash
-make test                                        # build lokal tidak lewat gerbang CI — test manual dulu
+make test                                        # local builds don't pass the CI gate — test manually first
 podman build --platform linux/amd64 \
-  -t ghcr.io/dharmasaputraa/reminder-app:0.1.0 . # sesuaikan arch server (uname -m)
+  -t ghcr.io/dharmasaputraa/reminder-app:0.1.0 . # match the server arch (uname -m)
 podman run --rm -d --name smoke -p 8081:8080 \
   -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c \
   ghcr.io/dharmasaputraa/reminder-app:0.1.0
@@ -144,54 +146,54 @@ echo "<TOKEN>" | podman login ghcr.io -u dharmasaputraa --password-stdin
 podman push ghcr.io/dharmasaputraa/reminder-app:0.1.0
 ```
 
-- PAT untuk push harus **`write:packages`** (read-only tidak cukup).
-- Setelah push: ganti tag di Dokploy → Deploy, atau trigger `POST /api/application.deploy` seperti CI.
-- Catatan: build lokal melewati test CI dan cross-arch di Mac jalan via emulasi (lebih lambat) — pakai hanya untuk hotfix; rilis resmi tetap lewat `git tag`.
+- The PAT for pushing must have **`write:packages`** (read-only is not enough).
+- After pushing: change the tag in Dokploy → Deploy, or trigger `POST /api/application.deploy` like CI does.
+- Note: local builds skip CI tests and cross-arch builds on a Mac run via emulation (slower) — use only for hotfixes; official releases still go through `git tag`.
 
-**Rollback**: tab **General** di aplikasi Dokploy → ganti tag image ke versi lama (mis. `ghcr.io/dharmasaputraa/reminder-app:1.2.2`) → **Deploy**. Semua versi tersimpan di GHCR.
+**Rollback**: the **General** tab of the Dokploy application → change the image tag to an older version (e.g. `ghcr.io/dharmasaputraa/reminder-app:1.2.2`) → **Deploy**. All versions are kept in GHCR.
 
-**Redeploy versi yang sama**: tombol **Deploy** di panel, atau ulangi workflow Release via *Run workflow* (manual dispatch).
+**Redeploy the same version**: the **Deploy** button in the panel, or re-run the Release workflow via *Run workflow* (manual dispatch).
 
 ## Backup
 
-Satu-satunya state adalah SQLite di `/data` (`wimember.db`). Prinsip: backup harus berada **di luar server** — VPS mati = semua hilang. Tujuan yang praktis: Cloudflare R2 (free 10 GB; db ini hanya beberapa MB).
+The only state is the SQLite file in `/data` (`wimember.db`). Principle: backups must live **outside the server** — VPS dies = everything is lost. A practical target: Cloudflare R2 (free 10 GB; this db is only a few MB).
 
-> Tips: mount volume `/data` sebagai **host path** (mis. `/opt/wimember/data:/data`), bukan named volume — filenya langsung terlihat di host dan mudah dibackup.
+> Tip: mount the `/data` volume as a **host path** (e.g. `/opt/wimember/data:/data`), not a named volume — the file is directly visible on the host and easy to back up.
 
-### Opsi A — Cron + rclone (sederhana, rekomendasi awal)
+### Option A — Cron + rclone (simple, good starting point)
 
-Backup harian dengan `.backup` bawaan sqlite3 — aman dijalankan saat app tetap jalan (WAL-safe):
+Daily backup using sqlite3's built-in `.backup` — safe to run while the app keeps running (WAL-safe):
 
 ```bash
-apt install -y sqlite3 rclone          # atau apk add di alpine
-rclone config                          # sekali: buat remote, mis. nama "r2" (endpoint + access key R2)
+apt install -y sqlite3 rclone          # or apk add on alpine
+rclone config                          # once: create a remote, e.g. named "r2" (R2 endpoint + access key)
 mkdir -p /opt/wimember/backups
 crontab -e
-# tambahkan (satu baris; \% di-escape untuk cron):
+# add (single line; \% is escaped for cron):
 30 2 * * * sqlite3 /opt/wimember/data/wimember.db ".backup '/opt/wimember/backups/wimember-$(date +\%F).db'" && find /opt/wimember/backups -name 'wimember-*.db' -mtime +14 -delete && rclone copy /opt/wimember/backups r2:wimember-backup --max-age 48h
 ```
 
-**Restore**: Stop app di Dokploy → timpa `/opt/wimember/data/wimember.db` dengan file backup → Start → cek `/healthz`.
+**Restore**: stop the app in Dokploy → overwrite `/opt/wimember/data/wimember.db` with the backup file → Start → check `/healthz`.
 
-### Opsi B — Litestream (continuous, point-in-time recovery)
+### Option B — Litestream (continuous, point-in-time recovery)
 
-Replikasi real-time ke S3/R2; config sudah tersedia di repo (`deploy/litestream.yml`):
+Real-time replication to S3/R2; a config is available in the repo (`deploy/litestream.yml`):
 
-1. Buat bucket + access key (R2: isi juga `LITESTREAM_ENDPOINT`), sesuaikan replica URL di `deploy/litestream.yml`.
-2. Upload `deploy/litestream.yml` ke host, lalu di Dokploy buat **service kedua**: image `litestream/litestream`, command `replicate -config /etc/litestream.yml`, mount host path yang sama (`/opt/wimember/data:/data`) dan config read-only (`/opt/wimember/litestream.yml:/etc/litestream.yml:ro`), env `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY` / `LITESTREAM_ENDPOINT`.
-3. **Restore**: stop app → `litestream restore -o /data/wimember.db s3://bucket/wimember/wimember.db` → start.
+1. Create a bucket + access key (R2: also set `LITESTREAM_ENDPOINT`), adjust the replica URL in `deploy/litestream.yml`.
+2. Upload `deploy/litestream.yml` to the host, then in Dokploy create a **second service**: image `litestream/litestream`, command `replicate -config /etc/litestream.yml`, mount the same host path (`/opt/wimember/data:/data`) and the config read-only (`/opt/wimember/litestream.yml:/etc/litestream.yml:ro`), env `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY` / `LITESTREAM_ENDPOINT`.
+3. **Restore**: stop the app → `litestream restore -o /data/wimember.db s3://bucket/wimember/wimember.db` → start.
 
-Jalankan Litestream baru setelah db ada isinya (atau lakukan satu backup awal via Opsi A) agar replikasi punya baseline.
+Start the new Litestream after the db has content (or do one initial backup via Option A) so replication has a baseline.
 
 ## Troubleshooting
 
-| Gejala | Sebab umum |
+| Symptom | Common cause |
 | --- | --- |
-| Badge **Host Error** di tab Domains (padahal app jalan) | Kosmetik: validasi DNS Dokploy membandingkan IP resolve vs IP server — domain yang di-proxy Cloudflare selalu gagal cek ini. **Abaikan**; jangan ubah record ke DNS-only untuk menghilangkannya (Access butuh proxy, dan IP VPS jadi terbuka) |
-| Deploy gagal pull `manifest unknown` | Tag belum ada di GHCR — build Actions belum selesai / tag salah ketik |
-| Deploy gagal pull `denied` | Package private + credential registry salah / PAT tanpa `read:packages` |
-| API deploy 401/403 | `DOKPLOY_API_KEY` atau `DOKPLOY_APPLICATION_ID` salah |
-| API deploy tidak sampai (timeout) | Cloudflare di depan panel memblok POST — matikan Bot Fight Mode / buat rule allow untuk path `/api/*` |
-| App error `APP_SECRET required` | Env belum diisi di tab Environment |
-| Data kontak hilang setelah redeploy | Volume `/data` tidak terpasang (Tahap 5) |
-| Redirect loop / 403 dari Access | `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` tidak cocok dengan aplikasi Access |
+| **Host Error** badge on the Domains tab (while the app runs) | Cosmetic: Dokploy's DNS validation compares the resolved IP vs the server IP — domains proxied by Cloudflare always fail this check. **Ignore it**; don't switch the record to DNS-only to make it disappear (Access needs the proxy, and the VPS IP would be exposed) |
+| Deploy fails to pull `manifest unknown` | The tag isn't on GHCR yet — the Actions build isn't finished / the tag is mistyped |
+| Deploy fails to pull `denied` | Private package + wrong registry credential / PAT without `read:packages` |
+| Deploy API 401/403 | Wrong `DOKPLOY_API_KEY` or `DOKPLOY_APPLICATION_ID` |
+| Deploy API never arrives (timeout) | Cloudflare in front of the panel blocks the POST — disable Bot Fight Mode / create an allow rule for the `/api/*` path |
+| App error `APP_SECRET required` | Env not filled in on the Environment tab |
+| Contact data lost after redeploy | The `/data` volume isn't mounted (Step 5) |
+| Redirect loop / 403 from Access | `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` don't match the Access application |
