@@ -55,6 +55,12 @@ html {
   color-scheme: dark;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   font-feature-settings: "cv01", "ss03", "zero";

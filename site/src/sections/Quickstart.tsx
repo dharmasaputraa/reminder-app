@@ -43,9 +43,9 @@ export function Quickstart() {
           <ol className="px-6 py-5 font-mono text-[13px] leading-[1.71] tracking-[-0.013em]">
             {STEPS.map(({ prompt, command, comment }) => (
               <li key={command}>
-                <span className="text-ash">{prompt} </span>
+                <span className="text-fog">{prompt} </span>
                 <span className="text-mist">{command}</span>
-                {comment ? <span className="text-ash"> {comment}</span> : null}
+                {comment ? <span className="text-fog"> {comment}</span> : null}
               </li>
             ))}
           </ol>
