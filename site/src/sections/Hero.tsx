@@ -21,9 +21,10 @@ export function Hero() {
           Never miss an otonan again
         </h1>
         <p className="mt-6 max-w-[560px] text-[16px] leading-[1.5] text-fog">
-          wiminder watches the 210-day pawukon cycle for every birth date you
-          add, and delivers each otonan, birthday, and anniversary via Gotify,
-          Telegram, or email — from one container on your own server.
+          Self-hosted reminders for Balinese otonan, birthdays, and
+          anniversaries. wiminder watches the 210-day pawukon cycle for every
+          birth date you add and delivers each one via Gotify, Telegram, or
+          email — one container, your server.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Button variant="primary" href="#deploy">
