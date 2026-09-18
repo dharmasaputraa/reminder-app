@@ -70,29 +70,48 @@ async function startApp(): Promise<{ app: App; stop: () => Promise<void> }> {
     }
   })
 
-  let up = false
-  for (let i = 0; i < 150 && !up; i++) {
-    if (spawnError || child.exitCode !== null) break
-    try {
-      const res = await fetch(`${baseUrl}/healthz`)
-      up = res.ok
-    } catch {
-      // not listening yet
+  try {
+    let up = false
+    for (let i = 0; i < 150 && !up; i++) {
+      if (spawnError || child.exitCode !== null) break
+      try {
+        const res = await fetch(`${baseUrl}/healthz`, { signal: AbortSignal.timeout(2_000) })
+        up = res.ok
+      } catch {
+        // not listening yet (or the request stalled past the 2s abort timeout)
+      }
+      if (!up) await sleep(200)
     }
-    if (!up) await sleep(200)
-  }
-  if (!up) {
-    if (spawnError) throw new Error(`failed to spawn ${bin}: ${spawnError.message} — log: ${logPath}`)
-    throw new Error(`server did not become healthy on ${baseUrl} — see ${logPath}`)
-  }
+    if (!up) {
+      if (spawnError) throw new Error(`failed to spawn ${bin}: ${spawnError.message} — log: ${logPath}`)
+      throw new Error(`server did not become healthy on ${baseUrl} — see ${logPath}`)
+    }
 
-  const db = new DatabaseSync(dbPath)
-  // The server holds the same file open in WAL mode; give our reads/writes the
-  // same busy timeout it uses (PRAGMA via the Go DSN is per-connection).
-  db.exec('PRAGMA busy_timeout = 5000')
+    const db = new DatabaseSync(dbPath)
+    // The server holds the same file open in WAL mode; give our reads/writes the
+    // same busy timeout it uses (PRAGMA via the Go DSN is per-connection).
+    db.exec('PRAGMA busy_timeout = 5000')
 
-  const stop = async () => {
-    db.close()
+    const stop = async () => {
+      db.close()
+      if (child.exitCode === null) {
+        child.kill('SIGTERM')
+        const deadline = Date.now() + 5_000
+        while (child.exitCode === null && Date.now() < deadline) await sleep(50)
+        if (child.exitCode === null) child.kill('SIGKILL')
+      }
+      logStream.end()
+      if (process.env.E2E_KEEP_DATA === '1') {
+        console.log(`E2E_KEEP_DATA=1 — keeping ${dataDir} (server log: ${logPath})`)
+        return
+      }
+      await rm(dataDir, { recursive: true, force: true })
+    }
+
+    return { app: { baseUrl, dataDir, dbPath, db, logPath }, stop }
+  } catch (err) {
+    // Startup failed after spawn: without this the child keeps running and holds
+    // both its port and the temp DATA_DIR forever.
     if (child.exitCode === null) {
       child.kill('SIGTERM')
       const deadline = Date.now() + 5_000
@@ -102,12 +121,11 @@ async function startApp(): Promise<{ app: App; stop: () => Promise<void> }> {
     logStream.end()
     if (process.env.E2E_KEEP_DATA === '1') {
       console.log(`E2E_KEEP_DATA=1 — keeping ${dataDir} (server log: ${logPath})`)
-      return
+    } else {
+      await rm(dataDir, { recursive: true, force: true })
     }
-    await rm(dataDir, { recursive: true, force: true })
+    throw err
   }
-
-  return { app: { baseUrl, dataDir, dbPath, db, logPath }, stop }
 }
 
 export const test = base.extend<{ app: App }, { app: App }>({
