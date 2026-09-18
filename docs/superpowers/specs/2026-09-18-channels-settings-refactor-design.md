@@ -98,3 +98,20 @@ Components own their own queries/mutations; routes only compose. This mirrors
 - Manual pass over both pages in the dev server: load, create channel,
   toggle default/active, test, delete; settings load, edit, save, reset
   holiday categories.
+
+## Revision (2026-09-18, user feedback)
+
+After the first implementation, three presentation changes (verified live,
+behavior unchanged):
+
+1. **Add-channel dialog** — fields restructured into labeled `Field` rows;
+   submit moved into the `DialogFooter` band, labeled "Add channel" (the
+   OccasionForm idiom).
+2. **Channels list** — each channel is an accordion item (the occasion-item
+   idiom): brand chip, name/type, Default/Inactive badges, chevron, row
+   Test button (left of the ⋮ menu), ⋮ menu with Delete; expanding reveals
+   the Default checkbox and Active switch. The list sits in one borderless
+   card with no header bar; Add stays on the page header.
+3. **Settings** — a bare Tabs switcher (General / Holidays / Recurrence),
+   each tab rendering its own titled card with the Save action in the card
+   footer; one shared form state, any tab's Save persists everything.

@@ -8,9 +8,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -43,7 +45,8 @@ const FIELDS: Record<(typeof TIPE)[number], { key: string; label: string; type?:
 
 /** Add-channel dialog: type + name + per-type config (stored encrypted).
  *  The route owns the open state; on success the form resets and the
- *  dialog closes. */
+ *  dialog closes. Same shape as OccasionForm — labeled Field rows, submit
+ *  in the DialogFooter band. */
 export function AddChannelDialog({ open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -74,41 +77,59 @@ export function AddChannelDialog({ open, onOpenChange }: {
             A delivery channel for reminders — Gotify, Telegram, or email.
           </DialogDescription>
         </DialogHeader>
-        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); create.mutate() }}>
-          <div className="flex flex-wrap gap-2">
-            <Select
-              value={type}
-              onValueChange={(v) => {
-                if (!v) return
-                setType(v as typeof type)
-                setCfg({})
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {TIPE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Name (e.g. gotify-home)"
-              className="flex-1"
-            />
+        {/* Wrapped in a form so Enter in the text inputs submits. */}
+        <form onSubmit={(e) => { e.preventDefault(); if (!name.trim() || create.isPending) return; create.mutate() }}>
+          {/* pb-5: extra air between the last field and the footer band. */}
+          <div className="pb-5">
+            <FieldGroup className="gap-3">
+              <Field>
+                <FieldLabel htmlFor="ch-type">Type</FieldLabel>
+                <Select
+                  value={type}
+                  onValueChange={(v) => {
+                    if (!v || v === type) return
+                    setType(v as typeof type)
+                    setCfg({})
+                  }}
+                >
+                  <SelectTrigger id="ch-type" className="w-full">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="ch-name">Name</FieldLabel>
+                <Input
+                  id="ch-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. gotify-home"
+                />
+              </Field>
+              {FIELDS[type].map((f) => (
+                <Field key={f.key}>
+                  <FieldLabel htmlFor={`ch-cfg-${f.key}`}>{f.label}</FieldLabel>
+                  <Input
+                    id={`ch-cfg-${f.key}`}
+                    type={f.type ?? 'text'}
+                    required
+                    value={cfg[f.key] ?? ''}
+                    onChange={(e) => setCfg({ ...cfg, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
+                  />
+                </Field>
+              ))}
+            </FieldGroup>
+            <Alert className="mt-3">
+              <AlertTitle>Config is stored encrypted (AES-256-GCM)</AlertTitle>
+              <AlertDescription>It cannot be viewed again after saving.</AlertDescription>
+            </Alert>
           </div>
-          {FIELDS[type].map((f) => (
-            <Input key={f.key} type={f.type ?? 'text'} required
-              value={cfg[f.key] ?? ''}
-              onChange={(e) => setCfg({ ...cfg, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
-              placeholder={f.label} />
-          ))}
-          <Button type="submit" disabled={!name.trim() || create.isPending}>Save</Button>
-          <Alert>
-            <AlertTitle>Config is stored encrypted (AES-256-GCM)</AlertTitle>
-            <AlertDescription>It cannot be viewed again after saving.</AlertDescription>
-          </Alert>
+          <DialogFooter>
+            <Button type="submit" disabled={!name.trim() || create.isPending}>Add channel</Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
