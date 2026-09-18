@@ -5,6 +5,27 @@ import { putSettings, runScheduler, seedChannel, seedContact, seedOccasion, uniq
 import type { SettingsPayload } from './helpers/time'
 import { dueSettings, futureSettings, utcDaysFromToday, utcToday } from './helpers/time'
 
+/** Ambient-state hazards. There is no in-file fix: the admin scan is global by
+ *  design (every owner's contacts), and a worker's app/DB is shared by every
+ *  spec file that lands in it.
+ *
+ *  - channels.spec leaves MEMBER_A owning enabled channels, including an email
+ *    channel the UI wrote with a string `to` — the SMTP notifier rejects that
+ *    shape at resolve time, and resolve errors get no 15-minute backoff, so any
+ *    scan that reaches one of MEMBER_A's due occurrences counts it `failed`
+ *    every time. Sibling files (occasions/upcoming) also leave recurring
+ *    occasions behind.
+ *  - On a date when one of those leftover occurrences lands in the scan window,
+ *    the manual run's counters pick up ambient sends/failures. A strict-zero
+ *    counter failure (the future test's `res` in particular) can therefore be
+ *    ambient state rather than a regression — check the scoped log rows, the
+ *    stub delta and the app log before assuming a product bug.
+ *  - The two-channel test asserts only `res.sent ≤ 2`: `failed`/`missed` are
+ *    deliberately left unasserted there because ambient channels and contacts
+ *    can move them; the scoped per-channel log rows and stub tokens already
+ *    carry that test's coverage.
+ */
+
 /** A throwaway contact owner per test.
  *
  *  The scheduler delivers to EVERY enabled channel of the contact's owner, and
@@ -171,10 +192,9 @@ test('occurrence beyond the catch-up window is recorded missed, not sent', async
 
   const res = await runScheduler(admin)
   expect(res.sent).toBe(0)
-  // A background tick landing in the few ms since the channel was seeded can
-  // write the row first and leave this run nothing to count; the single
-  // 'missed' row below is the terminal evidence either way.
-  expect(res.missed).toBeGreaterThanOrEqual(1)
+  // No `res.missed` assertion on purpose: a background tick landing in the few
+  // ms since the channel seed can write the row first and leave this run
+  // nothing to count. The single 'missed' row below is the terminal evidence.
 
   const log = notificationLog(app.db, { occasion_id: occId })
   expect(log).toHaveLength(1) // one missed row per channel, never a send
