@@ -109,7 +109,8 @@ Edge cases (mixed into the same files):
 
 - **Validation**: empty contact name rejected; invalid timezone, bad
   `send_time` format, empty recurrence-offset streams rejected by Settings;
-  API `days=91` → 400 (via `page.request`).
+  upcoming range validation → 400 (invalid `from`, `to < from`, range > 400
+  days — an out-of-range `days` silently clamps to 30, it is not an error).
 - **Routing**: bogus UUID deep-link `/reminder/contacts/not-a-uuid` → graceful
   not-found, no crash.
 - **Owner scoping (multi-user)**: member A's contact invisible to member B
