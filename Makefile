@@ -1,4 +1,4 @@
-.PHONY: test lint web build run dev container
+.PHONY: test lint web build run dev container e2e
 
 test:
 	CGO_ENABLED=0 go test ./... -count=1
@@ -14,6 +14,10 @@ web:
 
 build: web
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/wimember ./cmd/server
+
+# E2E: build SPA+binary, then run the Playwright suite (web/e2e).
+e2e: build
+	cd web && pnpm exec playwright test
 
 run: build
 	APP_SECRET=dev-secret-long-enough-16 AUTH_MODE=dev DATA_DIR=./data ./bin/wimember
