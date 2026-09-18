@@ -5,11 +5,12 @@ import { api, type Settings } from '@/lib/api'
 import { parseList } from '@/lib/prefs'
 import { TimezoneSelect } from '@/components/settings/timezone-select'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const KATEGORI = [
   { key: 'pawukon', label: 'Pawukon holidays (computed locally)' },
@@ -26,8 +27,11 @@ const RECURRENCE_STREAMS = [
   { key: 'otonan', label: 'Otonan marks', placeholder: '7,4,2,1,0' },
 ]
 
-/** The settings form — both cards, one Save. Owns the settings/me queries,
- *  the text-field state, and the PUT; the route only supplies the title. */
+/** The settings page body, in the contact detail page's shape: a bare tab
+ *  switcher, each tab rendering its own titled card with the save action in
+ *  the card footer. One shared form state sits behind the tabs (all panels
+ *  stay mounted) and one PUT persists everything, so any tab's Save writes
+ *  the whole form. */
 export function SettingsPageContent() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/settings') })
@@ -74,8 +78,8 @@ export function SettingsPageContent() {
   if (!form)
     return (
       <div className="space-y-4">
+        <Skeleton className="h-9 w-72" />
         <Skeleton className="h-[430px] w-full rounded-xl" />
-        <Skeleton className="h-64 w-full rounded-xl" />
       </div>
     )
   const set = (patch: Partial<Settings>) => setForm({ ...form, ...patch })
@@ -100,43 +104,69 @@ export function SettingsPageContent() {
       recurrence_offsets: recurrenceOffsets,
     })
   }
+  // Every tab's Save persists the whole form (recurrence offsets ride along),
+  // so all three carry the same validation gate.
+  const saveButton = (
+    <div className="flex justify-end">
+      <Button onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
+    </div>
+  )
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Reminder Preferences</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Field>
-            <FieldLabel>Timezone</FieldLabel>
-            <TimezoneSelect value={form.timezone} onChange={(tz) => set({ timezone: tz })} />
-            <FieldDescription>Sets "today" for the calendar and the reminder send time.</FieldDescription>
-          </Field>
+    <>
+      <Tabs defaultValue="general" className="flex flex-col gap-4">
+      <TabsList>
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="holidays">Holidays</TabsTrigger>
+        <TabsTrigger value="recurrence">Recurrence</TabsTrigger>
+      </TabsList>
 
-          <Field>
-            <FieldLabel htmlFor="send-time">Send time (HH:MM)</FieldLabel>
-            <Input id="send-time" value={form.send_time} onChange={(e) => set({ send_time: e.target.value })} />
-          </Field>
+      <TabsContent value="general" keepMounted>
+        <Card className="gap-0 py-0">
+          <div className="flex h-11 shrink-0 items-center border-b px-4">
+            <CardTitle className="text-sm font-semibold">Reminder Preferences</CardTitle>
+          </div>
+          <CardContent className="space-y-4 p-4">
+            <Field>
+              <FieldLabel>Timezone</FieldLabel>
+              <TimezoneSelect value={form.timezone} onChange={(tz) => set({ timezone: tz })} />
+              <FieldDescription>Sets "today" for the calendar and the reminder send time.</FieldDescription>
+            </Field>
 
-          <Field>
-            <FieldLabel htmlFor="catch-up">Catch-up window (hours)</FieldLabel>
-            <Input
-              id="catch-up"
-              type="number"
-              value={form.catch_up_hours}
-              onChange={(e) => set({ catch_up_hours: Number(e.target.value) })}
-            />
-            <FieldDescription>Reminders missed while the device was off.</FieldDescription>
-          </Field>
+            <Field>
+              <FieldLabel htmlFor="send-time">Send time (HH:MM)</FieldLabel>
+              <Input id="send-time" value={form.send_time} onChange={(e) => set({ send_time: e.target.value })} />
+            </Field>
 
-          <Field>
-            <FieldLabel htmlFor="offsets">Default offsets (days before D, comma-separated)</FieldLabel>
-            <Input id="offsets" value={offsetsText} onChange={(e) => setOffsetsText(e.target.value)} />
-          </Field>
+            <Field>
+              <FieldLabel htmlFor="catch-up">Catch-up window (hours)</FieldLabel>
+              <Input
+                id="catch-up"
+                type="number"
+                value={form.catch_up_hours}
+                onChange={(e) => set({ catch_up_hours: Number(e.target.value) })}
+              />
+              <FieldDescription>Reminders missed while the device was off.</FieldDescription>
+            </Field>
 
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Holiday reminder categories</legend>
+            <Field>
+              <FieldLabel htmlFor="offsets">Default offsets (days before D, comma-separated)</FieldLabel>
+              <Input id="offsets" value={offsetsText} onChange={(e) => setOffsetsText(e.target.value)} />
+              <FieldDescription>
+                The fallback for holiday reminders too — empty per-category offsets use this list.
+              </FieldDescription>
+            </Field>
+            {saveButton}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="holidays" keepMounted>
+        <Card className="gap-0 py-0">
+          <div className="flex h-11 shrink-0 items-center border-b px-4">
+            <CardTitle className="text-sm font-semibold">Holiday Reminder Categories</CardTitle>
+          </div>
+          <CardContent className="space-y-3 p-4">
             {KATEGORI.map((k) => {
               const enabled = form.holiday_categories[k.key] ?? false
               return (
@@ -173,7 +203,7 @@ export function SettingsPageContent() {
             <div className="flex items-center justify-between gap-2">
               <p className="text-muted-foreground text-xs">
                 Unchecked sources stop notifying and are hidden from the calendar.
-                Empty offsets fall back to the default offsets above.
+                Empty offsets fall back to the default offsets on the General tab.
               </p>
               <Button
                 type="button"
@@ -188,41 +218,43 @@ export function SettingsPageContent() {
                 Reset to default
               </Button>
             </div>
-          </fieldset>
-        </CardContent>
-      </Card>
+            {saveButton}
+          </CardContent>
+        </Card>
+      </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recurrence offsets</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground text-sm">
-            Default reminder offsets per occurrence stream, used when neither the occasion nor the
-            contact sets a list. Days before the date, comma-separated; every stream needs at least
-            one offset (0 = on the day). Saved with the Settings above.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {RECURRENCE_STREAMS.map((s) => (
-              <Field key={s.key}>
-                <FieldLabel htmlFor={`rec-offsets-${s.key}`}>{s.label}</FieldLabel>
-                <Input
-                  id={`rec-offsets-${s.key}`}
-                  value={recurrenceTexts[s.key] ?? ''}
-                  onChange={(e) => setRecurrenceTexts((t) => ({ ...t, [s.key]: e.target.value }))}
-                  placeholder={s.placeholder}
-                />
-              </Field>
-            ))}
+      <TabsContent value="recurrence" keepMounted>
+        <Card className="gap-0 py-0">
+          <div className="flex h-11 shrink-0 items-center border-b px-4">
+            <CardTitle className="text-sm font-semibold">Recurrence Offsets</CardTitle>
           </div>
-          {!recurrenceOffsetsValid && (
-            <p className="text-sm text-red-600">Every stream needs at least one offset.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* One Save for both cards — they share the settings PUT. */}
-      <Button onClick={saveNow} disabled={save.isPending || !recurrenceOffsetsValid}>Save</Button>
+          <CardContent className="space-y-4 p-4">
+            <p className="text-muted-foreground text-sm">
+              Default reminder offsets per occurrence stream, used when neither the occasion nor the
+              contact sets a list. Days before the date, comma-separated; every stream needs at least
+              one offset (0 = on the day).
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {RECURRENCE_STREAMS.map((s) => (
+                <Field key={s.key}>
+                  <FieldLabel htmlFor={`rec-offsets-${s.key}`}>{s.label}</FieldLabel>
+                  <Input
+                    id={`rec-offsets-${s.key}`}
+                    value={recurrenceTexts[s.key] ?? ''}
+                    onChange={(e) => setRecurrenceTexts((t) => ({ ...t, [s.key]: e.target.value }))}
+                    placeholder={s.placeholder}
+                  />
+                </Field>
+              ))}
+            </div>
+            {!recurrenceOffsetsValid && (
+              <p className="text-sm text-red-600">Every stream needs at least one offset.</p>
+            )}
+            {saveButton}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      </Tabs>
 
       {me.data && (
         <p className="text-sm text-muted-foreground">
@@ -230,6 +262,6 @@ export function SettingsPageContent() {
           production via Cloudflare Access.
         </p>
       )}
-    </div>
+    </>
   )
 }
