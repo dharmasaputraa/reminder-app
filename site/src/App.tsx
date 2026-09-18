@@ -1,13 +1,12 @@
 import { Nav } from "./sections/Nav";
+import { Hero } from "./sections/Hero";
 
 export default function App() {
   return (
     <>
       <Nav />
       <main id="top" className="pt-14">
-        <p className="mx-auto max-w-[1200px] px-6 py-[96px] text-mist">
-          wimember
-        </p>
+        <Hero />
       </main>
     </>
   );
