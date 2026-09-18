@@ -47,7 +47,6 @@
 
   /* Shadows — hairline inset is the card edge; no drop shadows on cards */
   --shadow-card-inset: rgb(35, 37, 42) 0px 0px 0px 1px inset;
-  --shadow-subtle-card: rgba(0, 0, 0, 0.4) 0px 2px 4px 0px;
 }
 
 html {
