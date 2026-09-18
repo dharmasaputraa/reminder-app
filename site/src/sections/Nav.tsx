@@ -1,4 +1,5 @@
 import { Button } from "../components/Button";
+import logoMark from "../assets/logo-mark.svg";
 
 const REPO = "https://github.com/dharmasaputraa/reminder-app";
 
@@ -17,7 +18,8 @@ export function Nav() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-graphite bg-void/80 backdrop-blur">
       <nav className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between px-6">
-        <a href="#top" className="text-[16px] font-[510] text-paper">
+        <a href="#top" className="flex items-center gap-2 text-[16px] font-[510] text-paper">
+          <img src={logoMark} alt="" aria-hidden className="h-5 w-auto" />
           wimember
         </a>
         <div className="flex items-center gap-2">

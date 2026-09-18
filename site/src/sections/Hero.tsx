@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { Button } from "../components/Button";
 import { ScreenshotFrame } from "../components/ScreenshotFrame";
+import calendarShot from "../assets/shots/calendar.png";
 
 const REPO = "https://github.com/dharmasaputraa/reminder-app";
 
@@ -44,7 +45,11 @@ export function Hero() {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,rgba(8,9,10,0)_10%,rgba(208,214,224,0.13)_100%)]"
         />
-        <ScreenshotFrame label="wimember calendar — screenshot coming soon" />
+        <ScreenshotFrame
+          src={calendarShot}
+          label="wimember calendar — otonan and events at a glance"
+          loading="eager"
+        />
       </motion.div>
     </section>
   );
