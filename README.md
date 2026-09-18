@@ -1,6 +1,6 @@
-# wimember
+# wiminder
 
-**wimember** is a self-hosted reminder service for Balinese otonan based on the 210-day Pawukon cycle, birthdays, anniversaries, and holidays — computed automatically and delivered via Gotify, Telegram, or email. Everything runs from a single container: the SPA is embedded in the Go binary, the SQLite database lives on a volume, and access is secured through Cloudflare Access with no additional password.
+**wiminder** is a self-hosted reminder service for Balinese otonan based on the 210-day Pawukon cycle, birthdays, anniversaries, and holidays — computed automatically and delivered via Gotify, Telegram, or email. Everything runs from a single container: the SPA is embedded in the Go binary, the SQLite database lives on a volume, and access is secured through Cloudflare Access with no additional password.
 
 ## Features
 
@@ -22,13 +22,13 @@
 You need Docker (+ Compose) **or** Podman (+ podman-compose), and a domain pointed at Cloudflare (for the tunnel).
 
 ```bash
-git clone <your-repo> wimember && cd wimember
+git clone <your-repo> wiminder && cd wiminder
 cp .env.example .env   # set APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS
 podman-compose up -d                 # app only; no profile needed if cloudflared already runs on the host
 # (Docker users: docker compose up -d --build; need an in-container tunnel: add --profile cloudflared)
 ```
 
-The application only listens on the internal compose network; public access goes through the Cloudflare tunnel. Open `https://wimember.your-domain.com`.
+The application only listens on the internal compose network; public access goes through the Cloudflare tunnel. Open `https://wiminder.your-domain.com`.
 
 Compose profiles (all optional, `app` is always included):
 
@@ -61,13 +61,13 @@ Profiles can be combined, e.g. `docker compose --profile cloudflared --profile g
 ## Cloudflare Access setup
 
 1. Zero Trust → **Access** → **Applications** → **Add an application** → **Self-hosted**.
-2. Domain: `wimember.your-domain.com` (the subdomain used by the tunnel).
+2. Domain: `wiminder.your-domain.com` (the subdomain used by the tunnel).
 3. Add a policy: Action **Allow**, Include **Emails** → your email (and family members').
 4. Note the two values from the Access application:
    - **Team domain**: `your-team.cloudflareaccess.com` → `CF_ACCESS_TEAM_DOMAIN`
    - **Application Audience (AUD) tag** → `CF_ACCESS_AUD`
 5. Create the tunnel: Zero Trust → **Networks** → **Tunnels** → **Create a tunnel** (Cloudflared) → copy **TUNNEL_TOKEN** into `.env`.
-6. Add a **Public hostname** to the tunnel: `wimember.your-domain.com` → Service `http://app:8080`.
+6. Add a **Public hostname** to the tunnel: `wiminder.your-domain.com` → Service `http://app:8080`.
 7. Fill in `.env` (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ADMIN_EMAILS`) and run `docker compose --profile cloudflared up -d`.
 
 The application validates the Cloudflare Access JWT (JWKS is cached); the email from the JWT claim is used to auto-provision users, and emails listed in `ADMIN_EMAILS` are granted the admin role.
@@ -111,11 +111,11 @@ The main data is a single file: `./data/wimember.db` (SQLite in WAL mode). While
 ```bash
 docker compose stop app
 docker compose --profile litestream run --rm litestream \
-  restore -o /data/wimember.db s3://your-bucket/wimember/wimember.db
+  restore -o /data/wimember.db s3://your-bucket/wiminder/wimember.db
 docker compose start app
 ```
 
-For a one-off restore without filling in `.env`, pass the credentials directly to `docker compose run`, e.g. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/wimember.db s3://your-bucket/wimember/wimember.db`.
+For a one-off restore without filling in `.env`, pass the credentials directly to `docker compose run`, e.g. `docker compose --profile litestream run --rm -e LITESTREAM_ACCESS_KEY_ID=… -e LITESTREAM_SECRET_ACCESS_KEY=… litestream restore -o /data/wimember.db s3://your-bucket/wiminder/wimember.db`.
 
 Alternative without Litestream: stop the app, copy `wimember.db` back, start the app.
 
@@ -125,25 +125,25 @@ Alternative without Litestream: stop the app, copy `wimember.db` back, start the
 make test    # CGO_ENABLED=0 go test ./... -count=1
 make dev     # backend with hot reload (air): rebuild + restart on .go changes
 make web     # pnpm install --frozen-lockfile + build SPA → internal/api/webroot (embed)
-make build   # build SPA + binary to bin/wimember
+make build   # build SPA + binary to bin/wiminder
 make run     # build + run dev mode on :8080 (without hot reload)
 make e2e     # build + run the Playwright e2e suite (web/e2e, chromium)
 make container  # docker compose build, podman-compose fallback (Makefile)
 ```
 
-The e2e suite spawns a real `bin/wimember` per worker (`AUTH_MODE=dev`, fresh SQLite under a temp `DATA_DIR`) and asserts against the database file directly. First run needs `cd web && pnpm exec playwright install chromium`; debug a failure with `E2E_KEEP_DATA=1 make e2e` (keeps the temp dir + server log) and `cd web && pnpm run test:e2e:report`.
+The e2e suite spawns a real `bin/wiminder` per worker (`AUTH_MODE=dev`, fresh SQLite under a temp `DATA_DIR`) and asserts against the database file directly. First run needs `cd web && pnpm exec playwright install chromium`; debug a failure with `E2E_KEEP_DATA=1 make e2e` (keeps the temp dir + server log) and `cd web && pnpm run test:e2e:report`.
 
 Full-stack dev flow (two terminals): `make dev` for the backend (air, ~1s auto-rebuild) and `cd web && pnpm run dev` for the frontend (Vite HMR, proxying `/api` to `:8080`). Air is pinned via the `tool` directive in go.mod — no manual install needed, just `go tool air`. Configuration lives in `.air.toml` (only non-test `.go` files trigger a rebuild; the SPA still goes through Vite).
 
-**Landing page (`site/`)** — the public marketing page deployed to GitHub Pages at `https://dharmasaputraa.github.io/reminder-app/`. Standalone Vite + React + Tailwind package with its own lockfile (not a workspace with `web/`, and not embedded in the binary):
+**Landing page (`site/`)** — the public marketing page deployed to GitHub Pages at `https://dharmasaputraa.github.io/wiminder/`. Standalone Vite + React + Tailwind package with its own lockfile (not a workspace with `web/`, and not embedded in the binary):
 
 ```bash
 cd site
 pnpm install
-pnpm dev       # dev server at http://localhost:5173/reminder-app/ (HMR)
+pnpm dev       # dev server at http://localhost:5173/wiminder/ (HMR)
 pnpm lint      # oxlint
 pnpm build     # tsc --noEmit + vite build → site/dist
-pnpm preview   # serve site/dist at http://localhost:4173/reminder-app/
+pnpm preview   # serve site/dist at http://localhost:4173/wiminder/
 ```
 
 Deploy is automatic via `.github/workflows/pages.yml` on pushes that touch `site/**`. One-time repo setup: Settings → Pages → Source: **GitHub Actions**.
@@ -154,13 +154,13 @@ Pawukon fixtures are scraped once at dev time (not at runtime) with a separate m
 cd scripts/fetch_fixtures && go run . -year 2026 -out ../../testdata
 ```
 
-Fixture data © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Universitas Udayana) — used as personal test fixtures with attribution; **do not redistribute**. wimember at runtime never depends on third-party sites.
+Fixture data © [kalenderbali.org](https://kalenderbali.org) (I Wayan Nuarsa, Universitas Udayana) — used as personal test fixtures with attribution; **do not redistribute**. wiminder at runtime never depends on third-party sites.
 
-**Remote holiday provider note:** the `dayoffapi` and `kresnasatya` providers use cache-first with a 10-minute negative cache — if the remote service is down, wimember stops trying temporarily and uses the existing cache. Local Pawukon/otonan calculation keeps working in full; only national holidays are temporarily empty.
+**Remote holiday provider note:** the `dayoffapi` and `kresnasatya` providers use cache-first with a 10-minute negative cache — if the remote service is down, wiminder stops trying temporarily and uses the existing cache. Local Pawukon/otonan calculation keeps working in full; only national holidays are temporarily empty.
 
 ## Container verification
 
-**Verified with Podman 6.0.2 + podman-compose 1.6.0** on the developer's machine: `podman build -t wimember:latest .` succeeds (39.7 MB image), smoke containers pass (healthz, SPA, deep-link, scheduler-run). Podman note: HEALTHCHECK is ignored with the OCI format — add `--format docker` to `podman build` if you want the healthcheck. The following steps remain relevant for Docker users:
+**Verified with Podman 6.0.2 + podman-compose 1.6.0** on the developer's machine: `podman build -t wiminder:latest .` succeeds (39.7 MB image), smoke containers pass (healthz, SPA, deep-link, scheduler-run). Podman note: HEALTHCHECK is ignored with the OCI format — add `--format docker` to `podman build` if you want the healthcheck. The following steps remain relevant for Docker users:
 
 The current development environment has no Docker, so the following steps must be run manually on a machine that does:
 
@@ -168,17 +168,17 @@ The current development environment has no Docker, so the following steps must b
 cp .env.example .env   # set at least APP_SECRET
 docker compose config                        # validate compose, no errors
 docker compose build app                     # image builds
-docker run --rm -d --name wimember-smoke -p 8081:8080 \
-  -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c wimember-app:latest
+docker run --rm -d --name wiminder-smoke -p 8081:8080 \
+  -e APP_SECRET=dev-secret-long-16 -e AUTH_MODE=dev -e ADMIN_EMAILS=a@b.c wiminder-app:latest
 sleep 2
 curl -s localhost:8081/healthz               # expect: {"ok":true}
 curl -s localhost:8081/ | head -c 120        # expect: SPA HTML (<!doctype html> / <div id="root">)
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8081/contacts/1   # expect: 200 (SPA deep-link)
 curl -s -H 'X-Dev-Email: a@b.c' -X POST localhost:8081/api/v1/scheduler/run   # expect: {"sent":...,"failed":...,"missed":...}
-docker rm -f wimember-smoke
+docker rm -f wiminder-smoke
 ```
 
-Note: `ADMIN_EMAILS` must be included because `/scheduler/run` is admin-only. The image name produced by `docker compose build app` follows the project directory name (e.g. `wimember-app` if the repo is in a folder named `wimember`); if it differs, adjust the tag or build with `docker build -t wimember-app .`.
+Note: `ADMIN_EMAILS` must be included because `/scheduler/run` is admin-only. The image name produced by `docker compose build app` follows the project directory name (e.g. `wiminder-app` if the repo is in a folder named `wiminder`); if it differs, adjust the tag or build with `docker build -t wiminder-app .`.
 
 Verification without Docker is still possible via `make test` + `make build` + `make run` (see §Development).
 
@@ -189,7 +189,7 @@ Images are **built in GitHub Actions and pushed to GHCR** — Dokploy only pulls
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | push to `main`, PRs | `go test` + `go vet`, web lint + typecheck/build, full Docker image build (no push) |
-| `release.yml` | push tag `v*` (or manual) | `go test`, multi-arch image → `ghcr.io/dharmasaputraa/reminder-app`, redeploy via Dokploy API |
+| `release.yml` | push tag `v*` (or manual) | `go test`, multi-arch image → `ghcr.io/dharmasaputraa/wiminder`, redeploy via Dokploy API |
 
 ### Release flow
 
@@ -202,7 +202,7 @@ Pushes image tags `1.2.3`, `1.2`, `1`, `latest`, `sha-<sha>` to GHCR (linux/amd6
 ### One-time Dokploy setup
 
 1. **Registry**: in Dokploy add a registry (GHCR) — username `dharmasaputraa`, password = GitHub PAT with `read:packages`.
-2. **Application**: Source Type **Docker**, image `ghcr.io/dharmasaputraa/reminder-app:latest`.
+2. **Application**: Source Type **Docker**, image `ghcr.io/dharmasaputraa/wiminder:latest`.
 3. **Volumes**: mount a volume at `/data` (SQLite lives there — without it, data is lost on redeploy).
 4. **Environment**: `APP_SECRET` (≥16 chars), `AUTH_MODE=cfaccess`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `ADMIN_EMAILS`, `TZ`.
 5. **Health check**: path `/healthz`, port 8080.
@@ -211,7 +211,7 @@ Pushes image tags `1.2.3`, `1.2`, `1`, `latest`, `sha-<sha>` to GHCR (linux/amd6
 
 ### Rollback
 
-Point the application's image tag at an older version (e.g. `ghcr.io/dharmasaputraa/reminder-app:1.2.2`) in Dokploy → Deploy. Every release stays pullable from GHCR.
+Point the application's image tag at an older version (e.g. `ghcr.io/dharmasaputraa/wiminder:1.2.2`) in Dokploy → Deploy. Every release stays pullable from GHCR.
 
 > Full step-by-step setup walkthrough (registry, app, volumes, Cloudflare Access, CI wiring, backup, troubleshooting): **[docs/dokploy-setup.md](docs/dokploy-setup.md)**.
 

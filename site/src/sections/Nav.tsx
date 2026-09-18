@@ -1,7 +1,7 @@
 import { Button } from "../components/Button";
 import logoMark from "../assets/logo-mark.svg";
 
-const REPO = "https://github.com/dharmasaputraa/reminder-app";
+const REPO = "https://github.com/dharmasaputraa/wiminder";
 
 // GitHub mark (octicons `mark-github`, MIT). Inlined because lucide-react v1
 // dropped all brand icons — `import { Github } from "lucide-react"` no longer
@@ -20,7 +20,7 @@ export function Nav() {
       <nav className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between px-6">
         <a href="#top" className="flex items-center gap-2 text-[16px] font-[510] text-paper">
           <img src={logoMark} alt="" aria-hidden className="h-5 w-auto" />
-          wimember
+          wiminder
         </a>
         <div className="flex items-center gap-2">
           <Button

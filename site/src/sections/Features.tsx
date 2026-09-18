@@ -51,7 +51,7 @@ export function Features() {
           Quietly keeps track
         </h2>
         <p className="mt-4 max-w-[560px] text-[16px] leading-[1.5] text-fog">
-          Everything wimember does, it does on your own infrastructure.
+          Everything wiminder does, it does on your own infrastructure.
         </p>
       </motion.div>
       <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -3,7 +3,7 @@ import { Button } from "../components/Button";
 import { ScreenshotFrame } from "../components/ScreenshotFrame";
 import calendarShot from "../assets/shots/calendar.png";
 
-const REPO = "https://github.com/dharmasaputraa/reminder-app";
+const REPO = "https://github.com/dharmasaputraa/wiminder";
 
 export function Hero() {
   return (
@@ -47,7 +47,7 @@ export function Hero() {
         />
         <ScreenshotFrame
           src={calendarShot}
-          label="wimember calendar — otonan and events at a glance"
+          label="wiminder calendar — otonan and events at a glance"
           loading="eager"
         />
       </motion.div>

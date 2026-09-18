@@ -1,4 +1,4 @@
-const REPO = "https://github.com/dharmasaputraa/reminder-app";
+const REPO = "https://github.com/dharmasaputraa/wiminder";
 
 export function Footer() {
   return (

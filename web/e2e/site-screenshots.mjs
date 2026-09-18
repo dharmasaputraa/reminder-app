@@ -2,7 +2,7 @@
 // real dev-mode server with seeded demo data. Not part of the e2e suite.
 //
 // Usage:  cd web && node e2e/site-screenshots.mjs
-// Needs:  make build first (bin/wimember with the embedded SPA).
+// Needs:  make build first (bin/wiminder with the embedded SPA).
 
 import { chromium } from '@playwright/test'
 import { spawn } from 'node:child_process'
@@ -31,11 +31,11 @@ function freePort() {
 }
 
 async function startApp() {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'wimember-shots-'))
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'wiminder-shots-'))
   const logPath = path.join(dataDir, 'server.log')
   const port = await freePort()
   const baseUrl = `http://127.0.0.1:${port}`
-  const bin = fileURLToPath(new URL('../../bin/wimember', import.meta.url))
+  const bin = fileURLToPath(new URL('../../bin/wiminder', import.meta.url))
   const logStream = createWriteStream(logPath)
   const child = spawn(bin, [], {
     env: {
@@ -137,8 +137,8 @@ async function main() {
       extraHTTPHeaders: { 'X-Dev-Email': ADMIN },
     })
     await ctx.addInitScript(() => {
-      localStorage.setItem('wimember-dev-email', 'admin@local.test')
-      localStorage.setItem('wimember.theme', 'dark')
+      localStorage.setItem('wiminder-dev-email', 'admin@local.test')
+      localStorage.setItem('wiminder.theme', 'dark')
     })
     const page = await ctx.newPage()
 

@@ -6,11 +6,11 @@ const STEPS: { prompt: string; command: string; comment?: string }[] = [
   {
     prompt: "$",
     command:
-      "git clone https://github.com/dharmasaputraa/reminder-app.git wimember",
+      "git clone https://github.com/dharmasaputraa/wiminder.git wiminder",
   },
   {
     prompt: "$",
-    command: "cd wimember && cp .env.example .env",
+    command: "cd wiminder && cp .env.example .env",
     comment: "# set APP_SECRET, CF_ACCESS_*, ADMIN_EMAILS",
   },
   { prompt: "$", command: "docker compose up -d --build" },
@@ -30,7 +30,7 @@ export function Quickstart() {
             Access in front — no extra password to manage.
           </p>
           <a
-            href="https://github.com/dharmasaputraa/reminder-app#readme"
+            href="https://github.com/dharmasaputraa/wiminder#readme"
             className="mt-6 inline-block text-[15px] text-mist underline decoration-graphite underline-offset-4 transition-colors duration-150 hover:text-bone"
           >
             Read the full setup guide in the README
