@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { ChannelIcon } from '@/lib/channel-icons'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,14 +18,23 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 
-const TIPE = ['gotify', 'telegram', 'email'] as const
+type ChannelType = 'gotify' | 'telegram' | 'email'
 
-const FIELDS: Record<(typeof TIPE)[number], { key: string; label: string; type?: string }[]> = {
+/** The channel types with their brand marks — the reUI c-select-32 shape:
+ *  object items, icon + label in both the items and the trigger value. */
+const TIPE: { value: ChannelType; label: string; icon: ReactNode }[] = [
+  { value: 'gotify', label: 'Gotify', icon: <ChannelIcon type="gotify" className="size-4" /> },
+  { value: 'telegram', label: 'Telegram', icon: <ChannelIcon type="telegram" className="size-4" /> },
+  { value: 'email', label: 'Email', icon: <ChannelIcon type="email" className="size-4" /> },
+]
+
+const FIELDS: Record<ChannelType, { key: string; label: string; type?: string }[]> = {
   gotify: [
     { key: 'base_url', label: 'Gotify Base URL' },
     { key: 'token', label: 'App Token' },
@@ -52,9 +62,12 @@ export function AddChannelDialog({ open, onOpenChange }: {
   onOpenChange: (open: boolean) => void
 }) {
   const qc = useQueryClient()
-  const [type, setType] = useState<(typeof TIPE)[number]>('gotify')
+  const [type, setType] = useState<ChannelType>('gotify')
   const [name, setName] = useState('')
   const [cfg, setCfg] = useState<Record<string, string | number>>({})
+  // The select is object-valued (the c-select-32 shape); the form keeps
+  // working off the plain string.
+  const typeItem = TIPE.find((t) => t.value === type) ?? TIPE[0]
 
   const create = useMutation({
     mutationFn: () => api('/channels', { method: 'POST', body: JSON.stringify({ type, name, config: cfg }) }),
@@ -85,18 +98,35 @@ export function AddChannelDialog({ open, onOpenChange }: {
               <Field>
                 <FieldLabel htmlFor="ch-type">Type</FieldLabel>
                 <Select
-                  value={type}
-                  onValueChange={(v) => {
-                    if (!v || v === type) return
-                    setType(v as typeof type)
+                  value={typeItem}
+                  items={TIPE}
+                  onValueChange={(item) => {
+                    if (!item || item.value === type) return
+                    setType(item.value)
                     setCfg({})
                   }}
                 >
                   <SelectTrigger id="ch-type" className="w-full">
-                    <SelectValue placeholder="Select type" />
+                    <SelectValue>
+                      {(item: (typeof TIPE)[number]) => (
+                        <span className="flex items-center gap-2">
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </span>
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
-                    {TIPE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {TIPE.map((t) => (
+                        <SelectItem key={t.value} value={t}>
+                          <span className="flex items-center gap-2">
+                            {t.icon}
+                            <span>{t.label}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
