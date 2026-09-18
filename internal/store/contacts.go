@@ -42,6 +42,7 @@ type OccasionPrefs struct {
 	Offsets    domain.OffsetMap `json:"offsets"`
 	ChannelIDs []string         `json:"channel_ids"`
 	Enabled    bool             `json:"enabled"`
+	Custom     bool             `json:"custom"`
 }
 
 type ContactWithOccasions struct {
@@ -245,6 +246,33 @@ func (s *Store) AddOccasion(ctx context.Context, contactID string, typ domain.Oc
 	return Occasion{ID: id, ContactID: contactID, Type: typ, Recurrence: rec, BaseDate: base, Label: label}, nil
 }
 
+// UpdateOccasion is owner-scoped — ownerID "" = admin (all contacts). Full
+// replace of the editable fields (type, recurrence, base date, label); the
+// row's prefs are untouched.
+func (s *Store) UpdateOccasion(ctx context.Context, ownerID, id string, typ domain.OccurrenceType, rec domain.Recurrence, base domain.Date, label string) error {
+	if err := domain.ValidateRecurrence(rec); err != nil {
+		return err
+	}
+	if typ == "" {
+		return fmt.Errorf("occasion type is required")
+	}
+	if len(typ) > 64 {
+		return fmt.Errorf("occasion type too long (max 64)")
+	}
+	clause, args := ownerScope(ownerID)
+	all := append([]any{typ, rec, base.String(), label, id}, args...)
+	r, err := s.db.ExecContext(ctx,
+		`UPDATE occasions SET type = ?, recurrence = ?, base_date = ?, label = ? WHERE id = ? AND contact_id IN
+			(SELECT id FROM contacts WHERE `+clause+`)`, all...)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteOccasion is owner-scoped — ownerID "" = admin (all contacts).
 func (s *Store) DeleteOccasion(ctx context.Context, ownerID, id string) error {
 	clause, args := ownerScope(ownerID)
@@ -305,17 +333,18 @@ func (s *Store) OccasionByID(ctx context.Context, ownerID, occasionID string) (*
 
 func (s *Store) getOccasionPrefsRow(ctx context.Context, occasionID string) (*OccasionPrefs, error) {
 	var offsets, channelIDs string
-	var enabled int
+	var enabled, custom int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT offsets, channel_ids, enabled FROM occasion_prefs WHERE occasion_id = ?`, occasionID).
-		Scan(&offsets, &channelIDs, &enabled)
+		`SELECT offsets, channel_ids, enabled, custom FROM occasion_prefs WHERE occasion_id = ?`, occasionID).
+		Scan(&offsets, &channelIDs, &enabled, &custom)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // inherit — not an error
 	}
 	if err != nil {
 		return nil, err
 	}
-	p := &OccasionPrefs{OccasionID: occasionID, Enabled: enabled == 1, Offsets: domain.OffsetMap{}, ChannelIDs: []string{}}
+	p := &OccasionPrefs{OccasionID: occasionID, Enabled: enabled == 1, Custom: custom == 1,
+		Offsets: domain.OffsetMap{}, ChannelIDs: []string{}}
 	if err := json.Unmarshal([]byte(offsets), &p.Offsets); err != nil {
 		return nil, err
 	}
@@ -334,10 +363,10 @@ func (s *Store) SetOccasionPrefs(ctx context.Context, p OccasionPrefs) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO occasion_prefs (occasion_id, offsets, channel_ids, enabled)
-		VALUES (?,?,?,?) ON CONFLICT(occasion_id) DO UPDATE SET offsets=excluded.offsets,
-		channel_ids=excluded.channel_ids, enabled=excluded.enabled`,
-		p.OccasionID, string(off), string(ch), boolInt(p.Enabled))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO occasion_prefs (occasion_id, offsets, channel_ids, enabled, custom)
+		VALUES (?,?,?,?,?) ON CONFLICT(occasion_id) DO UPDATE SET offsets=excluded.offsets,
+		channel_ids=excluded.channel_ids, enabled=excluded.enabled, custom=excluded.custom`,
+		p.OccasionID, string(off), string(ch), boolInt(p.Enabled), boolInt(p.Custom))
 	return err
 }
 

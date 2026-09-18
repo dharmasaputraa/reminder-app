@@ -544,7 +544,7 @@ func TestOccasionDisabledByOccasionPrefs(t *testing.T) {
 	h := newBareHarness(t, now)
 	f := seedAnniversary(t, h.st, "disabled-occasion@x.id")
 	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
-		OccasionID: f.Occasion.ID, Enabled: false,
+		OccasionID: f.Occasion.ID, Enabled: false, Custom: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -677,7 +677,7 @@ func TestOccasionChannelOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
-		OccasionID: f.Occasion.ID, ChannelIDs: []string{chB.ID}, Enabled: true,
+		OccasionID: f.Occasion.ID, ChannelIDs: []string{chB.ID}, Enabled: true, Custom: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -711,6 +711,147 @@ func TestOccasionChannelOverride(t *testing.T) {
 	}
 }
 
+// custom=false suspends the occasion overrides without deleting them: the
+// occasion falls back to the contact chain (settings monthly [0], channel A)
+// even though the retained row points at offset D-1 and channel B — and the
+// enabled kill switch still wins on the same row.
+func TestOccasionCustomFalseInheritsContactChain(t *testing.T) {
+	h := newBareHarness(t, time.Date(2025, 12, 16, 8, 1, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "custom-off-inherit@x.id")
+	chB, err := h.st.CreateChannel(context.Background(), f.User.ID, "telegram", "b", []byte("enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The contact chain selects channel A (no contact offsets: settings
+	// monthly [0] still applies), so the retained channel B must be ignored.
+	if err := h.st.SetReminderPrefs(context.Background(), store.ReminderPrefs{
+		ContactID: f.Contact.ID, ChannelIDs: []string{f.Channel.ID}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Retained-but-inactive overrides: D-1 on the monthly stream, channel B.
+	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
+		OccasionID: f.Occasion.ID, Enabled: true, Custom: false,
+		Offsets:    domain.OffsetMap{domain.StreamMonthly: {1, 0}},
+		ChannelIDs: []string{chB.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec := h.recordChannels()
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The k=6 monthly mark D-0 fires on the cascade channel A, not B; no D-1
+	// row exists because the retained monthly [1,0] never became live.
+	if res.Sent != 1 || res.Missed != 1 {
+		t.Fatalf("res = %+v, want Sent 1 Missed 1 (contact-chain behavior)", res)
+	}
+	got := rec.messages()
+	if len(got) != 1 || got[0].ChannelID != f.Channel.ID {
+		t.Fatalf("pushes = %+v, want exactly one on channel A %s", got, f.Channel.ID)
+	}
+	if !hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("contact-chain D-0 row missing on channel A")
+	}
+	if hasNotif(t, h.st, f.Occasion.ID, chB.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("inactive custom override leaked onto channel B")
+	}
+	if hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 1) {
+		t.Error("retained D-1 must not fire while custom=false")
+	}
+
+	// Phase 2 recomposes the flags (enabled=false + custom=false): the scan
+	// still produces nothing new, i.e. composition does not regress. The kill
+	// switch itself is covered by TestOccasionDisabledByOccasionPrefs.
+	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
+		OccasionID: f.Occasion.ID, Enabled: false, Custom: false,
+		Offsets:    domain.OffsetMap{domain.StreamMonthly: {1, 0}},
+		ChannelIDs: []string{chB.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err = h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != (Result{}) || len(rec.messages()) != 1 {
+		t.Fatalf("res = %+v, want zero once enabled=false (pushes stay at 1)", res)
+	}
+}
+
+// The channel gate follows custom: on one and the same contact, a custom
+// occasion narrows to its retained channel B, while an identical inherit
+// occasion (custom=false, same retained channel B) falls back to the contact
+// cascade [A, B]. A single scan proves both branches — and that the inactive
+// channel_ids never leak onto the cascade.
+func TestOccasionChannelGateFollowsCustom(t *testing.T) {
+	h := newBareHarness(t, time.Date(2025, 12, 16, 8, 1, 0, 0, time.UTC))
+	f := seedAnniversary(t, h.st, "channel-gate-custom@x.id")
+	chB, err := h.st.CreateChannel(context.Background(), f.User.ID, "telegram", "b", []byte("enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The contact cascade is [A, B]: the inherit occasion must push to both.
+	if err := h.st.SetReminderPrefs(context.Background(), store.ReminderPrefs{
+		ContactID: f.Contact.ID, ChannelIDs: []string{f.Channel.ID, chB.ID}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A second identical occasion on the same contact, differing only in custom.
+	inh, err := h.st.AddOccasion(context.Background(), f.Contact.ID, domain.Anniversary, domain.RecurAnniversary, domain.NewDate(2025, 6, 16), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []store.OccasionPrefs{
+		{OccasionID: f.Occasion.ID, Enabled: true, Custom: true, ChannelIDs: []string{chB.ID}},
+		{OccasionID: inh.ID, Enabled: true, Custom: false, ChannelIDs: []string{chB.ID}},
+	} {
+		if err := h.st.SetOccasionPrefs(context.Background(), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := h.recordChannels()
+	snap := snapUTC()
+	snap.RecurrenceOffsets = domain.DefaultRecurrenceOffsets()
+
+	res, err := h.svc.RunOnce(context.Background(), snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// k=6 D-0: custom → 1 push (B); inherit → 2 pushes (A and B). The k=5
+	// D-0 is missed on the same channels: 1 + 2.
+	if res.Sent != 3 || res.Missed != 3 {
+		t.Fatalf("res = %+v, want Sent 3 (B + A,B) Missed 3", res)
+	}
+	perCh := map[string]int{}
+	for _, m := range rec.messages() {
+		perCh[m.ChannelID]++
+	}
+	if len(perCh) != 2 || perCh[f.Channel.ID] != 1 || perCh[chB.ID] != 2 {
+		t.Fatalf("pushes per channel = %v, want A=1 B=2", perCh)
+	}
+	// Durable evidence: the custom occasion only on B; the inherit one on both.
+	if !hasNotif(t, h.st, f.Occasion.ID, chB.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("custom occasion D-0 row missing on channel B")
+	}
+	if hasNotif(t, h.st, f.Occasion.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("custom occasion leaked onto channel A")
+	}
+	if !hasNotif(t, h.st, inh.ID, f.Channel.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("inherit occasion D-0 row missing on channel A")
+	}
+	if !hasNotif(t, h.st, inh.ID, chB.ID, domain.NewDate(2025, 12, 16), 0) {
+		t.Error("inherit occasion D-0 row missing on channel B")
+	}
+	if hasNotif(t, h.st, inh.ID, chB.ID, domain.NewDate(2025, 12, 16), 1) {
+		t.Error("retained D-1 must not fire on the inherit occasion")
+	}
+}
+
 // Per-occasion offset override: occasion_prefs.offsets = {monthly: [1, 0]}
 // replaces the inherited monthly set, so the k=6 mark reminds the day before
 // (15 Dec) and on the day (16 Dec) instead of only on the day.
@@ -718,7 +859,7 @@ func TestOccasionOffsetsOverride(t *testing.T) {
 	h := newBareHarness(t, time.Date(2025, 12, 16, 7, 0, 0, 0, time.UTC))
 	f := seedAnniversary(t, h.st, "offsets-override@x.id")
 	if err := h.st.SetOccasionPrefs(context.Background(), store.OccasionPrefs{
-		OccasionID: f.Occasion.ID, Enabled: true,
+		OccasionID: f.Occasion.ID, Enabled: true, Custom: true,
 		Offsets: domain.OffsetMap{domain.StreamMonthly: {1, 0}},
 	}); err != nil {
 		t.Fatal(err)

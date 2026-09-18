@@ -207,17 +207,19 @@ func (s *Service) RunOnce(ctx context.Context, snap Snapshot) (Result, error) {
 				continue // per-occasion kill switch
 			}
 			// Channels: occasion override → contact cascade (already resolved).
+			// An override row with custom=false holds retained-but-inactive
+			// values: the occasion inherits as if the row were absent.
 			channels := defaultChannels
-			if occ.Prefs != nil && len(occ.Prefs.ChannelIDs) > 0 {
+			if occ.Prefs != nil && occ.Prefs.Custom && len(occ.Prefs.ChannelIDs) > 0 {
 				if byID := filterChannels(defaultChannels, occ.Prefs.ChannelIDs); len(byID) > 0 {
 					channels = byID
 				}
 			}
 			// Offsets per stream: occasion → contact → settings → DefaultOffsets.
 			// Prefs rows are optional, so the offsets maps are read through the
-			// pointers (nil prefs = pure inherit).
+			// pointers (nil prefs = pure inherit); custom=false ignores occOff.
 			var occOff, contactOff domain.OffsetMap
-			if occ.Prefs != nil {
+			if occ.Prefs != nil && occ.Prefs.Custom {
 				occOff = occ.Prefs.Offsets
 			}
 			if cw.Prefs != nil {

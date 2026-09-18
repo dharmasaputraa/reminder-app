@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     />
                   }
                 >
-                  <span className="flex size-5 items-center justify-center rounded-full border text-[10px]">{initial}</span>
+                  <span className="flex size-8 items-center justify-center rounded-full border text-xs">{initial}</span>
                   <span className="hidden text-sm font-medium md:inline">{email}</span>
                   <ChevronDown className="hidden size-3 md:block" />
                 </DropdownMenuTrigger>

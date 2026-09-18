@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -246,6 +247,101 @@ func TestOccasionPrefsRoundTrip(t *testing.T) {
 	}
 	if got, _ := st.OccasionByID(ctx, u.ID, oc.ID); got.Prefs != nil {
 		t.Fatalf("delete override: %+v", got.Prefs)
+	}
+}
+
+// Toggling custom off persists the row: custom=false keeps offsets and
+// channel_ids in place (they reactivate when custom flips back to true).
+func TestOccasionPrefsCustomRetainedWhenOff(t *testing.T) {
+	ctx := context.Background()
+	st, _ := OpenInMemory()
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	u, err := st.GetOrCreateUser(ctx, "custom-off@b.c", "A", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := st.CreateContact(ctx, u.ID, "Ani", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, err := st.AddOccasion(ctx, ct.ID, "birthday", domain.RecurYearly, domain.NewDate(2025, 6, 16), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetOccasionPrefs(ctx, OccasionPrefs{OccasionID: oc.ID, Custom: true, Enabled: true,
+		Offsets:    domain.OffsetMap{domain.StreamYearly: {7, 3, 0}},
+		ChannelIDs: []string{"ch-1", "ch-2"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Toggle custom OFF: the row survives with its values.
+	if err := st.SetOccasionPrefs(ctx, OccasionPrefs{OccasionID: oc.ID, Custom: false, Enabled: true,
+		Offsets:    domain.OffsetMap{domain.StreamYearly: {7, 3, 0}},
+		ChannelIDs: []string{"ch-1", "ch-2"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.OccasionByID(ctx, u.ID, oc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Prefs == nil {
+		t.Fatal("prefs row must exist after custom=false")
+	}
+	if got.Prefs.Custom {
+		t.Error("custom = true, want false")
+	}
+	if !got.Prefs.Enabled {
+		t.Error("enabled must be independent of custom")
+	}
+	if !reflect.DeepEqual(got.Prefs.Offsets[domain.StreamYearly], []int{7, 3, 0}) {
+		t.Errorf("offsets = %v, want [7 3 0] retained", got.Prefs.Offsets[domain.StreamYearly])
+	}
+	if !reflect.DeepEqual(got.Prefs.ChannelIDs, []string{"ch-1", "ch-2"}) {
+		t.Errorf("channel_ids = %v, want retained", got.Prefs.ChannelIDs)
+	}
+}
+
+// Backfill: a row written the pre-002 way (explicit column list, no `custom`)
+// must come back custom=true — migration 002's DEFAULT 1 is what makes the
+// old toggle-on rows active instead of silently retained-but-off.
+func TestOccasionPrefsCustomDefaultsTrueOnBackfill(t *testing.T) {
+	ctx := context.Background()
+	st, _ := OpenInMemory()
+	defer st.Close()
+	if err := st.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	u, err := st.GetOrCreateUser(ctx, "backfill@x.id", "A", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := st.CreateContact(ctx, u.ID, "Ani", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, err := st.AddOccasion(ctx, ct.ID, "birthday", domain.RecurYearly, domain.NewDate(2025, 6, 16), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx,
+		`INSERT INTO occasion_prefs (occasion_id, offsets, channel_ids, enabled) VALUES (?,?,?,?)`,
+		oc.ID, `{"yearly":[7]}`, `[]`, 1); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.OccasionByID(ctx, u.ID, oc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Prefs == nil {
+		t.Fatal("prefs row missing after raw INSERT")
+	}
+	if !got.Prefs.Custom {
+		t.Error("custom = false, want true (migration DEFAULT 1 backfill)")
+	}
+	if !reflect.DeepEqual(got.Prefs.Offsets[domain.StreamYearly], []int{7}) {
+		t.Errorf("offsets = %v, want [7]", got.Prefs.Offsets[domain.StreamYearly])
 	}
 }
 

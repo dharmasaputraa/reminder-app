@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { Minimize2Icon, UserPlusIcon, XIcon } from 'lucide-react'
 import { ApiError, api, type Contact } from '@/lib/api'
@@ -143,6 +143,15 @@ export function ContactEditForm({ contactId, variant, onClose, onSaved }: Contac
     </div>
   )
 
+  // Enter submits the identity form from the text inputs (notes textarea
+  // keeps Enter for newlines — textareas are exempt from implicit
+  // submission). The guard mirrors the Save button's disabled state.
+  const submitIdentity = (e: FormEvent) => {
+    e.preventDefault()
+    if (!identityDirty || !name.trim() || saveIdentity.isPending) return
+    saveIdentity.mutate()
+  }
+
   // ============ PANEL: docked anatomy — h-11 title bar with the close
   // action, body, pinned Save/Create footer. ============
   if (variant === 'panel') {
@@ -154,35 +163,37 @@ export function ContactEditForm({ contactId, variant, onClose, onSaved }: Contac
             <XIcon aria-hidden="true" />
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {errorBlock ? (
-            <div className="px-4 py-4">{errorBlock}</div>
-          ) : loadingBlock ? (
-            <div className="px-4 py-4">{loadingBlock}</div>
-          ) : (
-            <div className="px-4 py-4">
-              {isNew && (
-                <p className="text-muted-foreground mb-3 text-sm">
-                  Occasions and preferences can be added on the detail page after saving.
-                </p>
-              )}
-              <div className="space-y-3">
-                {nameField}
-                {nicknameField}
-                {notesField}
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={submitIdentity}>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {errorBlock ? (
+              <div className="px-4 py-4">{errorBlock}</div>
+            ) : loadingBlock ? (
+              <div className="px-4 py-4">{loadingBlock}</div>
+            ) : (
+              <div className="px-4 py-4">
+                {isNew && (
+                  <p className="text-muted-foreground mb-3 text-sm">
+                    Occasions and preferences can be added on the detail page after saving.
+                  </p>
+                )}
+                <div className="space-y-3">
+                  {nameField}
+                  {nicknameField}
+                  {notesField}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-        <div className="border-t p-3">
-          <Button
-            className="w-full"
-            disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
-            onClick={() => saveIdentity.mutate()}
-          >
-            {isNew ? 'Create contact' : 'Save'}
-          </Button>
-        </div>
+            )}
+          </div>
+          <div className="border-t p-3">
+            <Button
+              className="w-full"
+              type="submit"
+              disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
+            >
+              {isNew ? 'Create contact' : 'Save'}
+            </Button>
+          </div>
+        </form>
       </div>
     )
   }
@@ -221,19 +232,21 @@ export function ContactEditForm({ contactId, variant, onClose, onSaved }: Contac
             <CardTitle>Identity</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {nameField}
-              {nicknameField}
-            </div>
-            {notesField}
-            <div className="flex justify-end">
-              <Button
-                disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
-                onClick={() => saveIdentity.mutate()}
-              >
-                Create contact
-              </Button>
-            </div>
+            <form className="space-y-3" onSubmit={submitIdentity}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {nameField}
+                {nicknameField}
+              </div>
+              {notesField}
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
+                >
+                  Create contact
+                </Button>
+              </div>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -243,7 +256,7 @@ export function ContactEditForm({ contactId, variant, onClose, onSaved }: Contac
   // ============ DIALOG: no own title bar (the Dialog supplies it), Save in
   // a footer row. ============
   return (
-    <div className="text-sm">
+    <form className="text-sm" onSubmit={submitIdentity}>
       <div className="max-h-[60vh] min-h-0 space-y-4 overflow-y-auto">
         {errorBlock ? (
           errorBlock
@@ -260,13 +273,10 @@ export function ContactEditForm({ contactId, variant, onClose, onSaved }: Contac
         )}
       </div>
       <div className="mt-4 flex justify-end">
-        <Button
-          disabled={!identityDirty || !name.trim() || saveIdentity.isPending}
-          onClick={() => saveIdentity.mutate()}
-        >
+        <Button type="submit" disabled={!identityDirty || !name.trim() || saveIdentity.isPending}>
           Save
         </Button>
       </div>
-    </div>
+    </form>
   )
 }

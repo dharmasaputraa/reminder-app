@@ -222,13 +222,17 @@ function SettingsPage() {
               const enabled = form.holiday_categories[k.key] ?? false
               return (
                 <div key={k.key} className="space-y-1.5 rounded-lg border p-2.5">
-                  <label className="flex items-center gap-2 text-sm">
+                  {/* A span, not a label: a wrapping <label> forwards a second,
+                      opposite click to the Checkbox's hidden input. The Checkbox
+                      carries its own aria-label instead. */}
+                  <span className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={enabled}
                       onCheckedChange={(c) => set({ holiday_categories: { ...form.holiday_categories, [k.key]: c === true } })}
+                      aria-label={`Toggle ${k.label} holiday reminders`}
                     />
                     {k.label}
-                  </label>
+                  </span>
                   <div className="ps-6">
                     <Field>
                       <FieldLabel htmlFor={`holiday-offsets-${k.key}`} className="text-xs">

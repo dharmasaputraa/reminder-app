@@ -818,6 +818,67 @@ func TestOccasionPrefsEndpoints(t *testing.T) {
 	}
 }
 
+// The custom flag: default GET payload says inherit (custom=false), a legacy
+// PUT without the field lands as custom=true, and PUT custom=false retains
+// the stored offsets/channels instead of wiping them.
+func TestOccasionPrefsCustomFlag(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid,
+		`{"type":"birthday","date":"2025-06-16","recurrence":"yearly"}`)
+
+	prefsReq := func(method, id, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, method, "/api/v1/occasions/"+id+"/prefs", "admin@x.id", body))
+		return w
+	}
+
+	// No row → the inherit default carries custom:false.
+	w := prefsReq("GET", occID, "")
+	if w.Code != 200 {
+		t.Fatalf("rowless prefs GET = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	var d store.OccasionPrefs
+	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Custom {
+		t.Errorf("default payload custom = true, want false: %s", w.Body.String())
+	}
+
+	// Legacy payload (no custom field) → custom=true on the stored row.
+	if w := prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true}`); w.Code != 200 {
+		t.Fatalf("legacy put: %d %s", w.Code, w.Body.String())
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs == nil || !oc.Prefs.Custom {
+		t.Errorf("legacy put must store custom=true, got %+v", oc.Prefs)
+	}
+
+	// PUT custom=false keeps the values (they are retained, not wiped).
+	// Limit: this proves the flag write does not wipe; preservation of values
+	// across omitted fields is full-replace semantics (the store test covers
+	// row survival).
+	w = prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true,"custom":false}`)
+	if w.Code != 200 {
+		t.Fatalf("put custom=false: %d %s", w.Code, w.Body.String())
+	}
+	oc := contactOccasion(t, srv, "admin@x.id", cid, occID)
+	if oc.Prefs == nil || oc.Prefs.Custom {
+		t.Fatalf("custom = %+v, want false with values retained", oc.Prefs)
+	}
+	if !reflect.DeepEqual(oc.Prefs.Offsets[domain.StreamYearly], []int{7}) {
+		t.Errorf("offsets = %v, want [7] retained", oc.Prefs.Offsets[domain.StreamYearly])
+	}
+
+	// Flipping back on reactivates the retained values.
+	if w := prefsReq("PUT", occID, `{"offsets":{"yearly":[7]},"channel_ids":[],"enabled":true,"custom":true}`); w.Code != 200 {
+		t.Fatalf("put custom=true: %d %s", w.Code, w.Body.String())
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs == nil || !oc.Prefs.Custom {
+		t.Errorf("custom = %+v, want true", oc.Prefs)
+	}
+}
+
 // Path ids are canonicalized before they reach the store: SQLite compares ids
 // with the BINARY collation, so an uppercase (pasted) UUID must resolve to the
 // same row as the stored lowercase form instead of 404ing — on contacts and on
@@ -918,6 +979,86 @@ func TestOccasionEndpointsOwnerScoped(t *testing.T) {
 		if t2 == "wedding" {
 			t.Errorf("another owner's custom type leaked into the suggestions: %v", got.Types)
 		}
+	}
+}
+
+// PATCH /occasions/{id} replaces the editable fields, keeps prefs, falls back
+// to the type's default recurrence when the body omits one, rejects bad
+// input with 400, and is owner-scoped like every other occasion endpoint.
+func TestUpdateOccasion(t *testing.T) {
+	srv, _ := newTestServer(t, "admin@x.id")
+	cid := createContact(t, srv, "admin@x.id", `{"name":"Made"}`)
+	occID := addOccasion(t, srv, "admin@x.id", cid, `{"type":"birthday","date":"2000-02-29"}`)
+
+	patch := func(email, body string) int {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, devReq(t, "PATCH", "/api/v1/occasions/"+occID, email, body))
+		return w.Code
+	}
+
+	// Full edit: type, date, recurrence and label all change.
+	if code := patch("admin@x.id", `{"type":"anniversary","date":"1999-06-16","recurrence":"anniversary","label":"Wedding"}`); code != 200 {
+		t.Fatalf("patch: %d", code)
+	}
+	oc := contactOccasion(t, srv, "admin@x.id", cid, occID)
+	if oc.Type != "anniversary" || oc.Label != "Wedding" {
+		t.Errorf("patched occasion = %q/%q, want anniversary/Wedding", oc.Type, oc.Label)
+	}
+	if oc.BaseDate.String() != "1999-06-16" {
+		t.Errorf("patched base_date = %s, want 1999-06-16", oc.BaseDate)
+	}
+	if oc.Recurrence != domain.RecurAnniversary {
+		t.Errorf("patched recurrence = %q, want anniversary", oc.Recurrence)
+	}
+
+	// Omitted recurrence → the new type's default (birthday → yearly).
+	if code := patch("admin@x.id", `{"type":"birthday","date":"2000-02-29"}`); code != 200 {
+		t.Fatalf("patch without recurrence: %d", code)
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Recurrence != domain.RecurYearly {
+		t.Errorf("recurrence = %q, want default yearly", oc.Recurrence)
+	}
+
+	// Bad input → 400, stored row unchanged.
+	for _, tc := range []struct{ name, body string }{
+		{"missing type", `{"date":"2000-01-01"}`},
+		{"type too long", `{"type":"` + strings.Repeat("x", 65) + `","date":"2000-01-01"}`},
+		{"bad recurrence", `{"type":"birthday","date":"2000-01-01","recurrence":"weekly"}`},
+		{"bad date", `{"type":"birthday","date":"not-a-date"}`},
+	} {
+		if code := patch("admin@x.id", tc.body); code != 400 {
+			t.Errorf("%s: code = %d, want 400", tc.name, code)
+		}
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Recurrence != domain.RecurYearly {
+		t.Errorf("failed patches changed the stored row: recurrence = %q", oc.Recurrence)
+	}
+
+	// Prefs set before a patch survive it.
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, devReq(t, "PUT", "/api/v1/occasions/"+occID+"/prefs", "admin@x.id", `{"offsets":{"yearly":[0]}}`))
+	if w.Code != 200 {
+		t.Fatalf("set prefs: %d %s", w.Code, w.Body.String())
+	}
+	if code := patch("admin@x.id", `{"type":"otonan","date":"2000-01-01","recurrence":"otonan"}`); code != 200 {
+		t.Fatalf("patch with prefs: %d", code)
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Prefs == nil || !reflect.DeepEqual(oc.Prefs.Offsets, domain.OffsetMap{"yearly": {0}}) {
+		t.Errorf("patch clobbered prefs: %+v", oc.Prefs)
+	}
+
+	// Another owner gets 404 and writes nothing; unknown id → 404.
+	if code := patch("eve@x.id", `{"type":"birthday","date":"2000-01-01"}`); code != 404 {
+		t.Errorf("another owner's patch = %d, want 404", code)
+	}
+	if oc := contactOccasion(t, srv, "admin@x.id", cid, occID); oc.Type != "otonan" {
+		t.Errorf("another owner's patch leaked: type = %q", oc.Type)
+	}
+	w2 := httptest.NewRecorder()
+	srv.ServeHTTP(w2, devReq(t, "PATCH", "/api/v1/occasions/"+uuid.NewString(), "admin@x.id", `{"type":"birthday","date":"2000-01-01"}`))
+	if w2.Code != 404 {
+		t.Errorf("patch unknown occasion = %d, want 404", w2.Code)
 	}
 }
 

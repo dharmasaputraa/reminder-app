@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   DateSelector,
   formatDateValue,
@@ -43,11 +43,15 @@ export function dateSelectorValueToDate(
 /**
  * Popover date picker, from the reUI `c-date-selector-2` example: the full
  * DateSelector (all period types, ranges, text input) behind a trigger
- * button, with an explicit draft -> Apply/Cancel commit.
+ * button. Default mode keeps the explicit draft -> Apply/Cancel commit; with
+ * `autoApply` a completed pick (calendar click or fully-typed date) commits
+ * immediately and closes — typed years commit on close, since they may still
+ * grow into a full date.
  */
 export function DateSelectorPopover({
   value,
   onApply,
+  autoApply = false,
   placeholder = "Select a date",
   label,
   inputHint: inputHintProp,
@@ -65,6 +69,8 @@ export function DateSelectorPopover({
 }: {
   value: DateSelectorValue | undefined
   onApply: (value: DateSelectorValue | undefined) => void
+  /** Commit as soon as the user completes a pick — no Apply/Cancel footer. */
+  autoApply?: boolean
   placeholder?: string
   label?: string
   inputHint?: string
@@ -106,6 +112,55 @@ export function DateSelectorPopover({
     }
   }, [open, value])
 
+  // True when the two selections differ; undefined-ish empties count as equal.
+  const isSameSelection = (
+    a: DateSelectorValue | undefined,
+    b: DateSelectorValue | undefined
+  ) => {
+    if (a === undefined || b === undefined)
+      return a === undefined && b === undefined
+    return (
+      a.period === b.period &&
+      a.operator === b.operator &&
+      a.year === b.year &&
+      a.month === b.month &&
+      a.quarter === b.quarter &&
+      a.halfYear === b.halfYear &&
+      a.startDate?.getTime() === b.startDate?.getTime() &&
+      a.endDate?.getTime() === b.endDate?.getTime() &&
+      a.rangeStart?.year === b.rangeStart?.year &&
+      a.rangeStart?.value === b.rangeStart?.value &&
+      a.rangeEnd?.year === b.rangeEnd?.year &&
+      a.rangeEnd?.value === b.rangeEnd?.value
+    )
+  }
+
+  // Auto-apply: completed picks commit and close right away. A clear (X)
+  // commits too but keeps the popover open for re-picking. justPicked marks
+  // our own commit-in-flight so the popover's close event (which can race
+  // the draft's onChange sync) never re-applies a stale draft.
+  const justPickedRef = useRef(false)
+  const handlePick = (picked: DateSelectorValue | undefined) => {
+    justPickedRef.current = true
+    onApply(picked)
+    if (picked) setOpen(false)
+  }
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    if (next) justPickedRef.current = false
+    // Closing with an uncommitted draft (e.g. a typed year) applies it; a
+    // clean open/close or an already-committed pick is a no-op.
+    if (
+      !next &&
+      autoApply &&
+      !justPickedRef.current &&
+      !isSameSelection(internalValue, value)
+    ) {
+      onApply(internalValue)
+    }
+  }
+
   const handleApply = () => {
     onApply(internalValue)
     setOpen(false)
@@ -117,7 +172,7 @@ export function DateSelectorPopover({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={
           <Button variant="outline" className={className}>
@@ -131,6 +186,7 @@ export function DateSelectorPopover({
           <DateSelector
             value={internalValue}
             onChange={setInternalValue}
+            onPick={autoApply ? handlePick : undefined}
             allowRange={allowRange}
             periodTypes={periodTypes}
             monthCascadesToDay={monthCascadesToDay}
@@ -143,13 +199,17 @@ export function DateSelectorPopover({
             dayDateFormat={dayDateFormat}
           />
         </div>
-        <Separator className="p-0" />
-        <div className="flex justify-end gap-2 p-3 pt-0">
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleApply}>Apply</Button>
-        </div>
+        {!autoApply && (
+          <>
+            <Separator className="p-0" />
+            <div className="flex justify-end gap-2 p-3 pt-0">
+              <Button variant="outline" onClick={handleCancel}>
+                Cancel
+              </Button>
+              <Button onClick={handleApply}>Apply</Button>
+            </div>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   )
