@@ -149,6 +149,15 @@ async function main() {
       console.log(`captured ${file}`)
     }
 
+    // Element shot of the exact calendar card (toolbar + month grid + badges).
+    await page.goto('/reminder', { waitUntil: 'networkidle' })
+    await sleep(1600)
+    await page
+      .locator('div.min-w-0.flex-1.overflow-hidden.rounded-xl.border.bg-card')
+      .first()
+      .screenshot({ path: path.join(OUT_DIR, 'calendar-hero.png') })
+    console.log('captured calendar-hero.png')
+
     await shot('/reminder', 'calendar.png')
     await shot('/reminder/contacts', 'contacts.png')
     await shot(`/reminder/contacts/${ids[0]}`, 'contact-detail.png')

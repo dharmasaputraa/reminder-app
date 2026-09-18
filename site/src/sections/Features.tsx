@@ -23,7 +23,7 @@ const FEATURES = [
   },
   {
     icon: History,
-    title: "Never miss one",
+    title: "Never miss a reminder",
     body: "Reminders missed while the container was down are caught up and labeled late; deduplication guarantees once per event, date, and offset.",
   },
   {
