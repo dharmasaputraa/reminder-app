@@ -31,7 +31,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
@@ -211,7 +210,6 @@ function ChannelItem({
       />
       {/* min-w-40 + plain labels mirror the occasion row's actions menu. */}
       <DropdownMenuContent align="end" className="min-w-40">
-        <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
           Delete
         </DropdownMenuItem>
