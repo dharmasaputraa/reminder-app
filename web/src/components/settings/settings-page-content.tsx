@@ -74,7 +74,6 @@ export function SettingsPageContent() {
   if (!form)
     return (
       <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
         <Skeleton className="h-[430px] w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
