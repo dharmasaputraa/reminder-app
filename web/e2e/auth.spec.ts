@@ -46,5 +46,5 @@ test('account menu shows the signed-in email and admin role', async ({ session }
   const page = await session.pageAs(ADMIN)
   await page.goto('/reminder')
   await page.getByRole('button', { name: new RegExp(ADMIN) }).click()
-  await expect(page.getByRole('menu')).toContainText('admin')
+  await expect(page.getByRole('menu').getByText('admin', { exact: true })).toBeVisible()
 })

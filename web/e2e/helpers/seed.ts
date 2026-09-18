@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext } from '@playwright/test'
+import type { SettingsPayload } from './time'
 export type { SettingsPayload } from './time'
 
 let counter = 0

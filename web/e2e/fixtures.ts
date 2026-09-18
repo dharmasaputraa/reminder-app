@@ -192,11 +192,15 @@ export const test = base.extend<{ app: App; session: Session }, { app: App }>({
   ],
 
   session: async ({ app, browser }, use) => {
+    // Never close a context mid-test: pageAs(email, opts) and apiAs(email) may
+    // both be live in one test, in either order. Distinct opts get their own
+    // cached context; everything is closed once, at fixture teardown.
     const cache = new Map<string, BrowserContext>()
+    const contexts = new Set<BrowserContext>()
     const ctxFor = async (email: string, opts?: BrowserContextOptions) => {
-      const hit = cache.get(email)
-      if (hit && !opts) return hit
-      if (hit) await hit.close()
+      const key = opts ? `${email}|${JSON.stringify(opts)}` : email
+      const hit = cache.get(key)
+      if (hit) return hit
       const ctx = await browser.newContext({
         ...opts,
         baseURL: app.baseUrl,
@@ -206,14 +210,15 @@ export const test = base.extend<{ app: App; session: Session }, { app: App }>({
         (email: string) => localStorage.setItem('wimember-dev-email', email),
         email,
       )
-      cache.set(email, ctx)
+      cache.set(key, ctx)
+      contexts.add(ctx)
       return ctx
     }
     await use({
       pageAs: async (email = MEMBER_A, opts) => (await ctxFor(email, opts)).newPage(),
       apiAs: async (email = MEMBER_A) => (await ctxFor(email)).request,
     })
-    for (const c of cache.values()) await c.close()
+    for (const c of contexts) await c.close()
   },
 })
 
